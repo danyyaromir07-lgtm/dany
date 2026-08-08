@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Elimina comentarios y anotaciones de PDFs en lote sin aplanarlos." />
+  <title>PDF Comment Remover</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">PDF • procesamiento local</span>
+      <h1>PDF Comment Remover</h1>
+      <p>Elimina comentarios y anotaciones de uno o muchos PDFs sin aplanar el documento.</p>
+    </section>
+
+    <section class="card">
+      <label class="dropzone" id="dropzone" for="fileInput">
+        <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple />
+        <div class="drop-icon">PDF</div>
+        <strong>Arrastra tus PDFs aquí</strong>
+        <span>o haz clic para seleccionarlos</span>
+        <small>El procesamiento se realiza en tu navegador.</small>
+      </label>
+
+      <div class="actions">
+        <button id="processBtn" class="primary" disabled>Eliminar comentarios</button>
+        <button id="clearBtn" class="secondary" disabled>Limpiar</button>
+      </div>
+
+      <div id="status" class="status" aria-live="polite"></div>
+      <div id="summary" class="summary hidden"></div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <section class="note">
+      <strong>Importante:</strong> la herramienta elimina anotaciones del PDF (comentarios, resaltados, subrayados, dibujos, etc.). No imprime ni rasteriza las páginas, por lo que el contenido que ya forma parte del PDF permanece seleccionable.
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
