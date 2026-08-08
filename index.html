@@ -10,22 +10,30 @@
 <body>
   <main class="shell">
     <section class="hero">
-      <span class="eyebrow">PDF • procesamiento local</span>
+      <span class="eyebrow">PDF · procesamiento local</span>
       <h1>PDF Comment Remover</h1>
-      <p>Elimina comentarios y anotaciones de uno o muchos PDFs sin aplanar el documento.</p>
+      <p>Elimina comentarios y anotaciones reales del PDF sin aplanarlo ni convertir sus páginas en imágenes.</p>
     </section>
 
     <section class="card">
+      <div class="mode">
+        <div>
+          <strong>Guardar sobre los archivos originales</strong>
+          <span>En Chrome/Edge de escritorio podemos escribir directamente en los PDFs seleccionados.</span>
+        </div>
+        <button id="openBtn" class="primary small" type="button">Abrir PDFs</button>
+      </div>
+
       <label class="dropzone" id="dropzone" for="fileInput">
         <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple />
         <div class="drop-icon">PDF</div>
         <strong>Arrastra tus PDFs aquí</strong>
         <span>o haz clic para seleccionarlos</span>
-        <small>El procesamiento se realiza en tu navegador.</small>
+        <small>Los documentos se procesan localmente en tu navegador.</small>
       </label>
 
       <div class="actions">
-        <button id="processBtn" class="primary" disabled>Eliminar comentarios</button>
+        <button id="processBtn" class="primary" disabled>Eliminar comentarios y guardar</button>
         <button id="clearBtn" class="secondary" disabled>Limpiar</button>
       </div>
 
@@ -35,7 +43,9 @@
     </section>
 
     <section class="note">
-      <strong>Importante:</strong> la herramienta elimina anotaciones del PDF (comentarios, resaltados, subrayados, dibujos, etc.). No imprime ni rasteriza las páginas, por lo que el contenido que ya forma parte del PDF permanece seleccionable.
+      <strong>Qué se elimina:</strong> anotaciones PDF como comentarios, notas, resaltados, subrayados, tachados, dibujos y otras anotaciones presentes en la estructura del PDF. El contenido normal de las páginas no se rasteriza ni se aplana.
+      <br /><br />
+      <strong>Privacidad:</strong> tus PDFs no se suben a un servidor. Si el navegador no permite sobrescribir archivos, la herramienta ofrecerá una descarga como alternativa.
     </section>
   </main>
 
