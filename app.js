@@ -1,240 +1,26 @@
-import { AnnotationFactory } from 'https://esm.sh/annotpdf@1.0.15';
+import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
 
-const fileInput = document.querySelector('#fileInput');
-const dropzone = document.querySelector('#dropzone');
-const openBtn = document.querySelector('#openBtn');
-const processBtn = document.querySelector('#processBtn');
-const clearBtn = document.querySelector('#clearBtn');
-const status = document.querySelector('#status');
-const summary = document.querySelector('#summary');
-const results = document.querySelector('#results');
-
-let entries = [];
-let outputs = [];
-
-const canWriteOriginals = 'showOpenFilePicker' in window;
-
-function setStatus(message, type = '') {
-  status.textContent = message;
-  status.className = `status ${type}`.trim();
-}
-
-function updateControls() {
-  processBtn.disabled = entries.length === 0;
-  clearBtn.disabled = entries.length === 0 && outputs.length === 0;
-  openBtn.textContent = canWriteOriginals ? 'Abrir PDFs para guardar' : 'Seleccionar PDFs';
-}
-
-function setEntries(nextEntries, mode = 'download') {
-  const byName = new Map(entries.map((entry) => [entry.name, entry]));
-  nextEntries.forEach((entry) => byName.set(entry.name, entry));
-  entries = [...byName.values()];
-  outputs = [];
-  summary.classList.add('hidden');
-  results.innerHTML = '';
-  const suffix = mode === 'direct' ? ' · se podrán guardar sobre los originales' : '';
-  setStatus(`${entries.length} PDF${entries.length === 1 ? '' : 's'} seleccionado${entries.length === 1 ? '' : 's'}${suffix}.`);
-  updateControls();
-}
-
-async function openPdfHandles() {
-  if (!canWriteOriginals) {
-    fileInput.click();
-    return;
-  }
-
-  try {
-    const handles = await window.showOpenFilePicker({
-      multiple: true,
-      excludeAcceptAllOption: true,
-      types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
-    });
-    const next = [];
-    for (const handle of handles) {
-      const file = await handle.getFile();
-      next.push({ name: file.name, file, handle, direct: true });
-    }
-    setEntries(next, 'direct');
-  } catch (error) {
-    if (error?.name !== 'AbortError') {
-      console.error(error);
-      setStatus(`No se pudieron abrir los PDFs: ${error?.message || error}`, 'warning');
-    }
-  }
-}
-
-function addInputFiles(selected) {
-  const next = [...selected]
-    .filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
-    .map((file) => ({ name: file.name, file, direct: false }));
-  setEntries(next, 'download');
-}
-
-function getErrorMessage(error) {
-  if (!error) return 'Error desconocido.';
-  if (typeof error === 'string') return error;
-  return error.message || error.name || String(error);
-}
-
-async function countAnnotations(data) {
-  const factory = new AnnotationFactory(data);
-  return factory.getAnnotations().flat();
-}
-
-async function processPdf(entry) {
-  const original = new Uint8Array(await entry.file.arrayBuffer());
-  const factory = new AnnotationFactory(original);
-  const annotations = factory.getAnnotations().flat().slice();
-  const count = annotations.length;
-
-  if (count === 0) {
-    return { ...entry, bytes: original, count, changed: false, verified: true };
-  }
-
-  for (const annotation of annotations) {
-    factory.deleteAnnotation(annotation);
-  }
-
-  const cleaned = factory.write();
-  const remaining = await countAnnotations(cleaned);
-  if (remaining.length !== 0) {
-    throw new Error(`La verificación encontró ${remaining.length} anotaciones después de la limpieza.`);
-  }
-
-  return { ...entry, bytes: cleaned, count, changed: true, verified: true, original };
-}
-
-async function saveDirectly(item) {
-  const permission = await item.handle.requestPermission({ mode: 'readwrite' });
-  if (permission !== 'granted') {
-    throw new Error('El navegador no concedió permiso de escritura.');
-  }
-
-  if (!item.changed) return;
-
-  const writable = await item.handle.createWritable();
-  try {
-    await writable.write(item.bytes);
-    await writable.close();
-  } catch (error) {
-    try { await writable.abort(); } catch (_) {}
-    throw error;
-  }
-
-  const savedFile = await item.handle.getFile();
-  const savedBytes = new Uint8Array(await savedFile.arrayBuffer());
-  const remaining = await countAnnotations(savedBytes);
-  if (remaining.length !== 0) {
-    const restore = await item.handle.createWritable();
-    await restore.write(item.original);
-    await restore.close();
-    throw new Error(`La verificación del archivo guardado encontró ${remaining.length} anotaciones; se restauró el original.`);
-  }
-}
-
-function renderResult(item) {
-  const row = document.createElement('div');
-  row.className = `result-row ${item.error ? 'error' : ''}`;
-  const countText = item.error
-    ? `Error: ${getErrorMessage(item.error)}`
-    : item.count === 0
-      ? 'Sin anotaciones'
-      : `${item.count} eliminada${item.count === 1 ? '' : 's'}${item.direct ? ' · guardado' : ''}`;
-  row.innerHTML = '<span class="filename"></span><span class="count"></span>';
-  row.querySelector('.filename').textContent = item.name;
-  row.querySelector('.count').textContent = countText;
-  results.appendChild(row);
-}
-
-async function processAll() {
-  processBtn.disabled = true;
-  clearBtn.disabled = true;
-  outputs = [];
-  results.innerHTML = '';
-  summary.classList.add('hidden');
-
-  let totalAnnotations = 0;
-  let changed = 0;
-  let ok = 0;
-  let failed = 0;
-
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    setStatus(`Procesando ${i + 1} de ${entries.length}: ${entry.name}`);
-    try {
-      const item = await processPdf(entry);
-      if (item.direct) await saveDirectly(item);
-      outputs.push(item);
-      totalAnnotations += item.count;
-      if (item.changed) changed++;
-      ok++;
-      renderResult(item);
-    } catch (error) {
-      failed++;
-      renderResult({ name: entry.name, error });
-      console.error(`No se pudo procesar ${entry.name}`, error);
-    }
-  }
-
-  summary.textContent = `${ok} PDF${ok === 1 ? '' : 's'} procesado${ok === 1 ? '' : 's'} · ${totalAnnotations} anotación${totalAnnotations === 1 ? '' : 'es'} eliminada${totalAnnotations === 1 ? '' : 's'} · ${changed} archivo${changed === 1 ? '' : 's'} modificado${changed === 1 ? '' : 's'}${failed ? ` · ${failed} con error` : ''}`;
-  summary.classList.remove('hidden');
-  setStatus(failed ? 'Proceso terminado con algunos errores. El original no se sobrescribió en los archivos que fallaron.' : 'Proceso terminado correctamente.', failed ? 'warning' : 'success');
-  clearBtn.disabled = false;
-  processBtn.disabled = false;
-
-  const downloadOutputs = outputs.filter((item) => !item.direct);
-  if (downloadOutputs.length === 1 && failed === 0) downloadPdf(downloadOutputs[0]);
-  else if (downloadOutputs.length > 1) await downloadZip(downloadOutputs);
-}
-
-function downloadPdf(item) {
-  const blob = new Blob([item.bytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = item.name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function downloadZip(items) {
-  const zip = new JSZip();
-  items.forEach((item) => zip.file(item.name, item.bytes));
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'pdfs-sin-comentarios.zip';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function clearAll() {
-  entries = [];
-  outputs = [];
-  fileInput.value = '';
-  results.innerHTML = '';
-  summary.classList.add('hidden');
-  setStatus('Selecciona uno o varios PDFs para empezar.');
-  updateControls();
-}
-
-openBtn.addEventListener('click', openPdfHandles);
-fileInput.addEventListener('change', (event) => addInputFiles(event.target.files));
-processBtn.addEventListener('click', processAll);
-clearBtn.addEventListener('click', clearAll);
-
-dropzone.addEventListener('dragover', (event) => {
-  event.preventDefault();
-  dropzone.classList.add('dragging');
-});
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging'));
-dropzone.addEventListener('drop', (event) => {
-  event.preventDefault();
-  dropzone.classList.remove('dragging');
-  addInputFiles(event.dataTransfer.files);
-});
-
-setStatus('Selecciona uno o varios PDFs para empezar.');
-updateControls();
+const fileInput=document.querySelector('#fileInput'),dropzone=document.querySelector('#dropzone'),openBtn=document.querySelector('#openBtn'),processBtn=document.querySelector('#processBtn'),clearBtn=document.querySelector('#clearBtn'),status=document.querySelector('#status'),summary=document.querySelector('#summary'),results=document.querySelector('#results');
+let entries=[],outputs=[];const canWriteOriginals='showOpenFilePicker'in window;
+const removableTypes=new Set(['Text','FreeText','Line','Square','Circle','Polygon','PolyLine','Highlight','Underline','Squiggly','StrikeOut','Stamp','Caret','Ink','Popup']);
+function setStatus(m,t=''){status.textContent=m;status.className=`status ${t}`.trim()}
+function updateControls(){processBtn.disabled=!entries.length;clearBtn.disabled=!entries.length&&!outputs.length;openBtn.textContent=canWriteOriginals?'Abrir PDFs para guardar':'Seleccionar PDFs'}
+function setEntries(next,mode='download'){const map=new Map(entries.map(x=>[x.name,x]));next.forEach(x=>map.set(x.name,x));entries=[...map.values()];outputs=[];summary.classList.add('hidden');results.innerHTML='';setStatus(`${entries.length} PDF${entries.length===1?'':'s'} seleccionado${entries.length===1?'':'s'}${mode==='direct'?' · se podrán guardar sobre los originales':''}.`);updateControls()}
+async function openPdfHandles(){if(!canWriteOriginals){fileInput.click();return}try{const hs=await window.showOpenFilePicker({multiple:true,excludeAcceptAllOption:true,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]}),next=[];for(const handle of hs){const file=await handle.getFile();next.push({name:file.name,file,handle,direct:true})}setEntries(next,'direct')}catch(e){if(e?.name!=='AbortError')setStatus('No se pudieron abrir los PDFs.','warning')}}
+function addInputFiles(selected){setEntries([...selected].filter(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf')).map(file=>({name:file.name,file,direct:false})),'download')}
+function resolvePdfObject(doc,obj){if(!obj)return; if(typeof obj.get==='function'||typeof obj.size==='function')return obj;try{return doc.context.lookup(obj)}catch(_){return}}
+function getSubtype(doc,ref){const a=resolvePdfObject(doc,ref);if(!a||typeof a.get!=='function')return'';const subtype=a.get(PDFName.of('Subtype'));return subtype?.toString?.().replace(/^\//,'')||''}
+function getPageAnnotations(doc,page){const ref=page.node.get(PDFName.of('Annots')),annots=resolvePdfObject(doc,ref);if(!annots||typeof annots.size!=='function'||typeof annots.get!=='function')return[];const out=[];for(let i=0;i<annots.size();i++){const ref=annots.get(i);out.push({ref,subtype:getSubtype(doc,ref)})}return out}
+function collectRemovableAnnotations(doc){const out=[];for(const page of doc.getPages())for(const a of getPageAnnotations(doc,page))if(removableTypes.has(a.subtype))out.push({page,...a});return out}
+function removeAnnotationRefs(doc,page,refs){if(!refs.length)return;const annotsRef=page.node.get(PDFName.of('Annots')),annots=resolvePdfObject(doc,annotsRef);if(!annots||typeof annots.size!=='function'||typeof annots.get!=='function')return;const removeSet=new Set(refs.map(r=>r?.toString?.()||r)),keep=[];for(let i=0;i<annots.size();i++){const ref=annots.get(i),key=ref?.toString?.()||ref;if(!removeSet.has(key))keep.push(ref)}if(!keep.length)page.node.delete(PDFName.of('Annots'));else page.node.set(PDFName.of('Annots'),doc.context.obj(keep))}
+async function cleanPdf(data){const doc=await PDFDocument.load(data,{updateMetadata:false,ignoreEncryption:false}),removable=collectRemovableAnnotations(doc),byPage=new Map();for(const item of removable){if(!byPage.has(item.page))byPage.set(item.page,[]);byPage.get(item.page).push(item.ref)}for(const [page,refs] of byPage)removeAnnotationRefs(doc,page,refs);const cleaned=await doc.save({useObjectStreams:true,addDefaultPage:false});return{bytes:cleaned,count:removable.length}}
+async function verifyNoRemovableAnnotations(data){const doc=await PDFDocument.load(data,{updateMetadata:false});return collectRemovableAnnotations(doc).length}
+async function processPdf(entry){const original=new Uint8Array(await entry.file.arrayBuffer()),{bytes:cleaned,count}=await cleanPdf(original);if(!count)return{...entry,bytes:original,count,changed:false,verified:true};const remaining=await verifyNoRemovableAnnotations(cleaned);if(remaining)throw Error(`La verificación encontró ${remaining} anotaciones después de la limpieza.`);return{...entry,bytes:cleaned,count,changed:true,verified:true,original}}
+async function saveDirectly(item){const permission=await item.handle.requestPermission({mode:'readwrite'});if(permission!=='granted')throw Error('El navegador no concedió permiso de escritura.');if(!item.changed)return;const writable=await item.handle.createWritable();try{await writable.write(item.bytes);await writable.close()}catch(e){try{await writable.abort()}catch(_){}throw e}const saved=new Uint8Array(await(await item.handle.getFile()).arrayBuffer()),remaining=await verifyNoRemovableAnnotations(saved);if(remaining){const restore=await item.handle.createWritable();await restore.write(item.original);await restore.close();throw Error(`La verificación del archivo guardado encontró ${remaining} anotaciones; se restauró el original.`)}}
+function renderResult(item){const row=document.createElement('div');row.className=`result-row ${item.error?'error':''}`;row.innerHTML='<span class="filename"></span><span class="count"></span>';row.querySelector('.filename').textContent=item.name;row.querySelector('.count').textContent=item.error?`Error: ${item.errorMessage}`:item.count===0?'Sin comentarios/anotaciones':`${item.count} eliminada${item.count===1?'':'s'}${item.direct?' · guardado':''}`;results.appendChild(row)}
+async function processAll(){processBtn.disabled=true;clearBtn.disabled=true;outputs=[];results.innerHTML='';summary.classList.add('hidden');let total=0,changed=0,ok=0,failed=0;for(let i=0;i<entries.length;i++){const entry=entries[i];setStatus(`Procesando ${i+1} de ${entries.length}: ${entry.name}`);try{const item=await processPdf(entry);if(item.direct)await saveDirectly(item);else outputs.push(item);total+=item.count;if(item.changed)changed++;ok++;renderResult(item);await new Promise(r=>setTimeout(r,0))}catch(error){failed++;renderResult({name:entry.name,error:true,errorMessage:error?.message||String(error)});console.error(`No se pudo procesar ${entry.name}`,error)}}summary.textContent=`${ok} PDF${ok===1?'':'s'} procesado${ok===1?'':'s'} · ${total} anotación${total===1?'':'es'} eliminada${total===1?'':'s'} · ${changed} archivo${changed===1?'':'s'} modificado${changed===1?'':'s'}${failed?` · ${failed} con error`:''}`;summary.classList.remove('hidden');setStatus(failed?'Proceso terminado con algunos errores. El original no se sobrescribió en los archivos que fallaron.':'Proceso terminado correctamente.',failed?'warning':'success');clearBtn.disabled=false;processBtn.disabled=false;const downloads=outputs.filter(x=>!x.direct);if(downloads.length===1&&failed===0)downloadPdf(downloads[0]);else if(downloads.length>1)await downloadZip(downloads)}
+function downloadPdf(item){const u=URL.createObjectURL(new Blob([item.bytes],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=item.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+async function downloadZip(items){const zip=new JSZip();items.forEach(x=>zip.file(x.name,x.bytes));const blob=await zip.generateAsync({type:'blob',compression:'STORE'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='pdfs-sin-comentarios.zip';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+function clearAll(){entries=[];outputs=[];fileInput.value='';results.innerHTML='';summary.classList.add('hidden');setStatus('Selecciona uno o varios PDFs para empezar.');updateControls()}
+openBtn.addEventListener('click',openPdfHandles);fileInput.addEventListener('change',e=>addInputFiles(e.target.files));processBtn.addEventListener('click',processAll);clearBtn.addEventListener('click',clearAll);dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('dragging')});dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('dragging'));dropzone.addEventListener('drop',e=>{e.preventDefault();dropzone.classList.remove('dragging');addInputFiles(e.dataTransfer.files)});setStatus('Selecciona uno o varios PDFs para empezar.');updateControls();
