@@ -40,3 +40,5 @@ Esta herramienta elimina anotaciones que existen como objetos de anotación PDF.
 ## Despliegue
 
 El repositorio incluye un workflow de GitHub Actions para publicar la aplicación mediante GitHub Pages. GitHub Pages debe estar habilitado para el repositorio usando **GitHub Actions** como fuente de publicación.
+
+<!-- deployment-trigger: 2026-08-09 -->
