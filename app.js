@@ -59,7 +59,7 @@ async function openPdfHandles() {
   } catch (error) {
     if (error?.name !== 'AbortError') {
       console.error(error);
-      setStatus('No se pudieron abrir los PDFs.', 'warning');
+      setStatus(`No se pudieron abrir los PDFs: ${error?.message || error}`, 'warning');
     }
   }
 }
@@ -69,6 +69,12 @@ function addInputFiles(selected) {
     .filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
     .map((file) => ({ name: file.name, file, direct: false }));
   setEntries(next, 'download');
+}
+
+function getErrorMessage(error) {
+  if (!error) return 'Error desconocido.';
+  if (typeof error === 'string') return error;
+  return error.message || error.name || String(error);
 }
 
 async function countAnnotations(data) {
@@ -82,7 +88,6 @@ async function processPdf(entry) {
   const annotations = factory.getAnnotations().flat().slice();
   const count = annotations.length;
 
-  // If there are no annotations, do not rewrite the PDF at all.
   if (count === 0) {
     return { ...entry, bytes: original, count, changed: false, verified: true };
   }
@@ -106,9 +111,7 @@ async function saveDirectly(item) {
     throw new Error('El navegador no concedió permiso de escritura.');
   }
 
-  if (!item.changed) {
-    return;
-  }
+  if (!item.changed) return;
 
   const writable = await item.handle.createWritable();
   try {
@@ -119,7 +122,6 @@ async function saveDirectly(item) {
     throw error;
   }
 
-  // Read the saved file again and verify that no annotations remain.
   const savedFile = await item.handle.getFile();
   const savedBytes = new Uint8Array(await savedFile.arrayBuffer());
   const remaining = await countAnnotations(savedBytes);
@@ -135,7 +137,7 @@ function renderResult(item) {
   const row = document.createElement('div');
   row.className = `result-row ${item.error ? 'error' : ''}`;
   const countText = item.error
-    ? 'Error'
+    ? `Error: ${getErrorMessage(item.error)}`
     : item.count === 0
       ? 'Sin anotaciones'
       : `${item.count} eliminada${item.count === 1 ? '' : 's'}${item.direct ? ' · guardado' : ''}`;
@@ -162,9 +164,7 @@ async function processAll() {
     setStatus(`Procesando ${i + 1} de ${entries.length}: ${entry.name}`);
     try {
       const item = await processPdf(entry);
-      if (item.direct) {
-        await saveDirectly(item);
-      }
+      if (item.direct) await saveDirectly(item);
       outputs.push(item);
       totalAnnotations += item.count;
       if (item.changed) changed++;
@@ -172,26 +172,20 @@ async function processAll() {
       renderResult(item);
     } catch (error) {
       failed++;
-      renderResult({ name: entry.name, error: true });
+      renderResult({ name: entry.name, error });
       console.error(`No se pudo procesar ${entry.name}`, error);
     }
   }
 
   summary.textContent = `${ok} PDF${ok === 1 ? '' : 's'} procesado${ok === 1 ? '' : 's'} · ${totalAnnotations} anotación${totalAnnotations === 1 ? '' : 'es'} eliminada${totalAnnotations === 1 ? '' : 's'} · ${changed} archivo${changed === 1 ? '' : 's'} modificado${changed === 1 ? '' : 's'}${failed ? ` · ${failed} con error` : ''}`;
   summary.classList.remove('hidden');
-  setStatus(
-    failed ? 'Proceso terminado con algunos errores.' : 'Proceso terminado correctamente.',
-    failed ? 'warning' : 'success'
-  );
+  setStatus(failed ? 'Proceso terminado con algunos errores. El original no se sobrescribió en los archivos que fallaron.' : 'Proceso terminado correctamente.', failed ? 'warning' : 'success');
   clearBtn.disabled = false;
   processBtn.disabled = false;
 
   const downloadOutputs = outputs.filter((item) => !item.direct);
-  if (downloadOutputs.length === 1 && failed === 0) {
-    downloadPdf(downloadOutputs[0]);
-  } else if (downloadOutputs.length > 1) {
-    await downloadZip(downloadOutputs);
-  }
+  if (downloadOutputs.length === 1 && failed === 0) downloadPdf(downloadOutputs[0]);
+  else if (downloadOutputs.length > 1) await downloadZip(downloadOutputs);
 }
 
 function downloadPdf(item) {
