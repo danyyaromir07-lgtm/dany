@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -16,4 +20,19 @@ jobs:
       - name: Install PyMuPDF
         run: python -m pip install --disable-pip-version-check pymupdf==1.26.7
       - name: Inspect official PDF fixture
-        run: python tests/inspect-pdf-fixture.py
+        run: python tests/inspect-pdf-fixture.py 2>&1 | tee fixture-report.txt
+      - name: Publish fixture report to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '## PDF fixture diagnostic'
+            echo
+            echo "Commit: $GITHUB_SHA"
+            echo
+            echo '```text'
+            cat fixture-report.txt 2>/dev/null || true
+            echo '```'
+          } > issue-body.md
+          gh issue create --title "CI fixture diagnostic $GITHUB_SHA" --body-file issue-body.md || true
