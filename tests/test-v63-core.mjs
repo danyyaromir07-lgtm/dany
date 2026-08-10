@@ -9,18 +9,15 @@ vm.runInNewContext(source + '\nTEST_API={toks,decodeToken,encodeText,editStream}
 const { toks, decodeToken, editStream } = ctx.TEST_API;
 
 const encoded = Uint8Array.from([0x17,0x0e,0x20,0x49,0x14,0x03,0x0a,0x49,0x19,0x17,0x11]);
-const sourceText = Uint8Array.from([
-  ...new TextEncoder().encode('BT\n/R12 7 Tf\n0 0 Tm\n('),
-  ...encoded,
-  ...new TextEncoder().encode(')TJ\nET\n')
-]);
+const sourceText = Uint8Array.from([...new TextEncoder().encode('BT\n/R12 7 Tf\n0 0 Tm\n('), ...encoded, ...new TextEncoder().encode(')TJ\nET\n')]);
 const tokens = toks(sourceText);
 const stringToken = tokens.find(t => t.type === 'string');
-const cmap = { map: new Map([[3,'0'],[10,'3'],[14,'I'],[17,'L'],[19,'P'],[20,'M'],[0x49,'_'],[0x14,'E'],[0x11,'A']]), bytes: 1 };
+const cmap = { map: new Map([[3,'0'],[10,'3'],[14,'I'],[17,'L'],[19,'P'],[20,'M'],[0x49,'_'],[0x14,'E'],[0x11,'A'],[0x0f,'O']]), bytes: 1 };
 const decoded = decodeToken(stringToken, cmap);
 if (decoded !== 'LIM_E03_PLA') throw new Error(`decodeToken mismatch: ${JSON.stringify(decoded)}`);
 
-const stream = { isStream: () => true, readStream: () => new TextEncoder().encode('begincmap 11 beginbfrange <03><03><0030> endbfrange') };
+const cmapText = `begincmap\n11 beginbfrange\n<03><03><0030>\n<0a><0a><0033>\n<0e><0e><0049>\n<0f><0f><004f>\n<11><11><0041>\n<14><14><0045>\n<17><17><004c>\n<19><19><0050>\n<20><20><004d>\n<49><49><005f>\nendbfrange\nendcmap`;
+const stream = { isStream: () => true, readStream: () => new TextEncoder().encode(cmapText) };
 const toUnicodeRef = { resolve: () => stream };
 const font = { get: k => k === 'ToUnicode' ? toUnicodeRef : null };
 const fontRef = { resolve: () => font };
