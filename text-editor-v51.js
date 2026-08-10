@@ -27,39 +27,34 @@ function tokenize(data,start=0,end=data.length){
     if(b===47){i++;while(i<end&&!delim(data[i]))i++;a.push({type:'name',start:s,end:i,raw:data.slice(s,i)});continue}
     while(i<end&&!delim(data[i]))i++;a.push({type:'word',start:s,end:i,raw:data.slice(s,i)})
   }
-  return a
+  return a;
 }
 
 function hexBytes(h){h=h.replace(/\s+/g,'');if(h.length%2)h+='0';return Uint8Array.from(h.match(/../g)?.map(x=>parseInt(x,16))||[])}
 function unicodeFromHex(h){const b=hexBytes(h);if(b.length%2===0&&b.length>=2){let s='';for(let i=0;i<b.length;i+=2)s+=String.fromCharCode((b[i]<<8)|b[i+1]);return s}return String.fromCharCode(...b)}
 
-// Parse the actual CMap syntax used by this PDF family. In particular, the maps
-// are mostly bfrange entries such as <01><01><0047>, not simple bfchar pairs.
+// This PDF family uses bfrange entries such as <01><01><0047>.
 function parseCMap(obj){
   obj=resolve(obj);if(!obj?.isStream?.())return null;
-  const t=ascii(obj.readStream());const map=new Map();
-  const cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/);
-  let codeBytes=1;
+  const t=ascii(obj.readStream()),map=new Map();
+  const cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/);let codeBytes=1;
   if(cs){const m=cs[1].match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)codeBytes=Math.max(1,Math.ceil(m[1].length/2))}
-  const section=(name,end)=>{const m=t.match(new RegExp(`(?:\\d+\\s+)?begin${name}([\\s\\S]*?)end${end||name}`));return m?m[1]:''};
-  const bfchar=section('bfchar');
-  for(const line of bfchar.split(/\r?\n/)){
-    const m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)map.set(parseInt(m[1],16),unicodeFromHex(m[2]));
-  }
-  const bfrange=section('bfrange');
-  for(const line of bfrange.split(/\r?\n/)){
+  const section=(name)=>{const m=t.match(new RegExp(`(?:\\d+\\s+)?begin${name}([\\s\\S]*?)end${name}`));return m?m[1]:''};
+  for(const line of section('bfchar').split(/\r?\n/)){const m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)map.set(parseInt(m[1],16),unicodeFromHex(m[2]))}
+  for(const line of section('bfrange').split(/\r?\n/)){
     let m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);
     if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),u=parseInt(m[3],16);if(b-a<8192)for(let c=a;c<=b;c++)map.set(c,String.fromCodePoint(u+c-a));continue}
     m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/);
-    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),vals=[...m[3].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let c=a;c<=b&&c-a<vals.length;c++)map.set(c,unicodeFromHex(vals[c-a][1]));}
+    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),vals=[...m[3].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let c=a;c<=b&&c-a<vals.length;c++)map.set(c,unicodeFromHex(vals[c-a][1]))}
   }
-  if(!map.size)return null;
-  const reverse=new Map();for(const [k,v] of map)if(!reverse.has(v))reverse.set(v,k);
-  return{map,reverse,codeBytes};
+  if(!map.size)return null;const reverse=new Map();for(const[k,v]of map)if(!reverse.has(v))reverse.set(v,k);return{map,reverse,codeBytes};
 }
 
 function fontMaps(page){
-  const resources=resolve(page.getInheritable?.('Resources')||page.get('Resources'));const fonts=resolve(resources?.get?.('Font'));const out=new Map();
+  // PDFPage's dictionary is obtained through getObject().
+  const pageObj=page?.getObject?.();
+  const resources=resolve(pageObj?.getInheritable?.('Resources')||pageObj?.get?.('Resources'));
+  const fonts=resolve(resources?.get?.('Font'));const out=new Map();
   if(!fonts?.isDictionary?.())return out;
   fonts.forEach((value,key)=>{try{const name=String(key),font=resolve(value);let cmap=font?.get?.('ToUnicode')?parseCMap(font.get('ToUnicode')):null;if(!cmap){const ds=resolve(font?.get?.('DescendantFonts'));if(ds?.isArray?.()&&ds.length)cmap=parseCMap(resolve(ds.get(0))?.get?.('ToUnicode'))}if(cmap)out.set(name,cmap)}catch(_){}});
   return out;
@@ -91,7 +86,7 @@ function editStream(bytes,needle,repl,maps){
     if(j>=ts.length){i++;continue}
     const full=segments.map(x=>x.text).join('');const m=findInText(full,needle);
     if(m){let cursor=0,first=-1,last=-1;for(let k=0;k<segments.length;k++){const z=segments[k],a=cursor,b=cursor+z.text.length;if(m[0]<b&&m[1]>a){if(first<0)first=k;last=k}cursor=b}
-      if(first>=0){const before=segments.slice(0,first).reduce((q,x)=>q+x.text.length,0),after=segments.slice(0,last+1).reduce((q,x)=>q+x.text.length,0);if(first===last){const z=segments[first],off=before;z.tok.replacement=encodeText(z.text.slice(0,m[0]-off)+repl+z.text.slice(m[1]-off),z.c);edits.push(z.tok)}else{const a=segments[first],z=segments[last];a.tok.replacement=encodeText(a.text.slice(0,m[0]-before)+repl,a.c);z.tok.replacement=encodeText(z.text.slice(m[1]-(after-z.text.length)),z.c);for(let k=first+1;k<last;k++)segments[k].tok.replacement='<> ';edits.push(a.tok,z.tok,...segments.slice(first+1,last).map(x=>x.tok))}}
+      if(first>=0){const before=segments.slice(0,first).reduce((q,x)=>q+x.text.length,0),after=segments.slice(0,last+1).reduce((q,x)=>q+x.text.length,0);if(first===last){const z=segments[first];z.tok.replacement=encodeText(z.text.slice(0,m[0]-before)+repl+z.text.slice(m[1]-before),z.c);edits.push(z.tok)}else{const a=segments[first],z=segments[last];a.tok.replacement=encodeText(a.text.slice(0,m[0]-before)+repl,a.c);z.tok.replacement=encodeText(z.text.slice(m[1]-(after-z.text.length)),z.c);for(let k=first+1;k<last;k++)segments[k].tok.replacement='<> ';edits.push(a.tok,z.tok,...segments.slice(first+1,last).map(x=>x.tok))}}
     }
     i=j+1;
   }
@@ -99,7 +94,7 @@ function editStream(bytes,needle,repl,maps){
   const seen=new Set(),parts=[];let pos=0;for(const t of ts){if(t.replacement===undefined||seen.has(t))continue;seen.add(t);parts.push(data.slice(pos,t.start),new TextEncoder().encode(t.replacement));pos=t.end}parts.push(data.slice(pos));const n=parts.reduce((q,x)=>q+x.length,0),out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return{bytes:out,count:seen.size,diagnostics};
 }
 
-function editDoc(doc,needle,repl){let count=0,diag=[];for(let i=0;i<doc.countPages();i++){const page=doc.findPage(i),maps=fontMaps(page),co=page.get('Contents');if(!co||co.isNull?.())continue;const refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];for(const ref of refs){const stream=resolve(ref);if(!stream?.isStream?.())continue;const z=editStream(stream.readStream(),needle,repl,maps);if(z.count){stream.writeStream(z.bytes);count+=z.count}else diag.push(...z.diagnostics)}}return{count,diag}}
+function editDoc(doc,needle,repl){let count=0,diag=[];for(let i=0;i<doc.countPages();i++){const page=doc.loadPage(i),maps=fontMaps(page),pageObj=page.getObject?.();const co=resolve(pageObj?.get?.('Contents'));if(!co||co.isNull?.())continue;const refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];for(const ref of refs){const stream=resolve(ref);if(!stream?.isStream?.())continue;const z=editStream(stream.readStream(),needle,repl,maps);if(z.count){stream.writeStream(z.bytes);count+=z.count}else diag.push(...z.diagnostics)}}return{count,diag}}
 
 function addResult(name,msg,error=false){const row=document.createElement('div');row.className=`result-row${error?' error':''}`;const a=document.createElement('span');a.className='filename';a.textContent=name;const b=document.createElement('span');b.className='count';b.textContent=msg;row.append(a,b);results.appendChild(row)}
 function sync(){processBtn.disabled=!findInput.value.trim()||!fileInput.files.length}
