@@ -16,13 +16,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check v63 JavaScript syntax
         run: node --check text-editor-v63.js
-      - name: Run v63 core test
+      - name: Install MuPDF JS
+        run: npm install --no-save mupdf@1.28.0
+      - name: Run v63 against official PDF
         run: node tests/test-v63-core.mjs | tee v63-test-report.txt
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install PyMuPDF
         run: python -m pip install --disable-pip-version-check pymupdf==1.26.7
+      - name: Validate edited PDF
+        run: python tests/validate-v63-result.py 2>&1 | tee validation-report.txt
       - name: Inspect official PDF fixture
         run: python tests/inspect-pdf-fixture.py 2>&1 | tee fixture-report.txt
       - name: Publish fixture report to issue
@@ -31,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo '## PDF text editor fixture diagnostic'
+            echo '## PDF text editor CI diagnostic'
             echo
             echo "Commit: $GITHUB_SHA"
             echo
@@ -40,7 +44,12 @@ jobs:
             cat v63-test-report.txt 2>/dev/null || true
             echo '```'
             echo
-            echo '### Official PDF fixture'
+            echo '### Edited PDF validation'
+            echo '```text'
+            cat validation-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Fixture inspection'
             echo '```text'
             cat fixture-report.txt 2>/dev/null || true
             echo '```'
