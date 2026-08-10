@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check v63 JavaScript syntax
+        run: node --check text-editor-v63.js
+      - name: Run v63 core test
+        run: node tests/test-v63-core.mjs | tee v63-test-report.txt
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -27,12 +31,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo '## PDF fixture diagnostic'
+            echo '## PDF text editor fixture diagnostic'
             echo
             echo "Commit: $GITHUB_SHA"
             echo
+            echo '### v63 core test'
+            echo '```text'
+            cat v63-test-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Official PDF fixture'
             echo '```text'
             cat fixture-report.txt 2>/dev/null || true
             echo '```'
           } > issue-body.md
-          gh issue create --title "CI fixture diagnostic $GITHUB_SHA" --body-file issue-body.md || true
+          gh issue create --title "PDF editor CI $GITHUB_SHA" --body-file issue-body.md || true
