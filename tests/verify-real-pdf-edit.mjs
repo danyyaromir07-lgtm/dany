@@ -6,8 +6,8 @@ const source = fs.readFileSync('text-editor-v63.js', 'utf8').replace(/^import .*
 const el = () => ({ value: '', files: [], disabled: false, innerHTML: '', textContent: '', classList: { add(){}, remove(){}, toggle(){} }, addEventListener(){}, click(){} });
 const documentStub = { querySelector(){ return el(); }, createElement(){ return el(); } };
 const ctx = { console, document: documentStub, mupdf, TextEncoder, TextDecoder, Uint8Array, String, Set, Map, Math, Error, URL };
-vm.runInNewContext(source + '\nTEST_API={editDoc,resolve,toks,A};', ctx);
-const { editDoc, resolve, toks, A } = ctx.TEST_API;
+vm.runInNewContext(source + '\nTEST_API={editDoc,resolve,toks};', ctx);
+const { editDoc, resolve } = ctx.TEST_API;
 
 const fixture = 'test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034.pdf';
 const needle = 'LIM_E03_PLA';
@@ -18,15 +18,13 @@ const doc = mupdf.PDFDocument.openDocument(input, 'application/pdf');
 const page = doc.loadPage(0);
 const po = page.getObject();
 const co = po.get('Contents');
-console.log(`contents=${String(co)} isStream=${!!co?.isStream?.()} isArray=${!!co?.isArray?.()}`);
 const raw = new Uint8Array(co.readStream());
-console.log(`stream_bytes=${raw.length}`);
-console.log(`has_BT=${A(raw).includes('BT')} has_R12=${A(raw).includes('/R12')} has_TJ=${A(raw).includes('TJ')}`);
-const bt=A(raw).indexOf('BT');
-console.log(`excerpt=${JSON.stringify(A(raw).slice(bt,bt+1600))}`);
-const tokens=toks(raw);
-console.log(`token_count=${tokens.length}`);
-for(let i=0;i<tokens.length;i++){if(tokens[i].type==='word'&&A(tokens[i].raw)==='Tf') console.log(`TF_${i}=${A(tokens[i-2]?.raw||new Uint8Array())} ${A(tokens[i-1]?.raw||new Uint8Array())} Tf`);if(tokens[i].type==='word'&&A(tokens[i].raw)==='TJ')console.log(`TJ_${i}=prev_${tokens[i-1]?.type} ${JSON.stringify(A(tokens[i-1]?.raw||new Uint8Array()).slice(0,200))}`)}
+const textDecoder = new TextDecoder();
+const rawText = textDecoder.decode(raw);
+console.log(`contents=${String(co)} isStream=${!!co?.isStream?.()} bytes=${raw.length}`);
+console.log(`has_BT=${rawText.includes('BT')} has_R12=${rawText.includes('/R12')} has_TJ=${rawText.includes('TJ')}`);
+const bt=rawText.indexOf('BT');
+console.log(`excerpt=${JSON.stringify(rawText.slice(bt,bt+1600))}`);
 console.log(`text_before=${page.toStructuredText().asText().includes('UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034')}`);
 const edits = editDoc(doc, needle, replacement);
 console.log(`edits=${edits}`);
