@@ -16,10 +16,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check v63 JavaScript syntax
         run: node --check text-editor-v63.js
-      - name: Install MuPDF JS
-        run: npm install --no-save mupdf@1.28.0
-      - name: Run v63 against official PDF
-        run: node tests/test-v63-core.mjs | tee v63-test-report.txt
+      - name: Run v63 core regression test
+        run: node tests/test-v63-core.mjs | tee v63-core-report.txt
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      - name: Run v63 in Chromium against official PDF
+        run: node tests/browser-test-v63.mjs | tee v63-browser-report.txt
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -39,9 +41,14 @@ jobs:
             echo
             echo "Commit: $GITHUB_SHA"
             echo
-            echo '### v63 core test'
+            echo '### v63 core regression'
             echo '```text'
-            cat v63-test-report.txt 2>/dev/null || true
+            cat v63-core-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### v63 Chromium test'
+            echo '```text'
+            cat v63-browser-report.txt 2>/dev/null || true
             echo '```'
             echo
             echo '### Edited PDF validation'
