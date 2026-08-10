@@ -1,4 +1,5 @@
 import fitz
+import re
 from pathlib import Path
 
 PDF = Path('test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034.pdf')
@@ -6,7 +7,6 @@ NEEDLE = 'LIM_E03_PLA'
 
 doc = fitz.open(PDF)
 print(f'pages={doc.page_count}')
-print(f'metadata={doc.metadata}')
 
 found = False
 for pno, page in enumerate(doc):
@@ -16,44 +16,37 @@ for pno, page in enumerate(doc):
         found = True
         print('EXTRACTED_MATCH=', text[text.index(NEEDLE)-30:text.index(NEEDLE)+len(NEEDLE)+30].replace('\n', '\\n'))
 
-    xref = page.xref
-    contents = page.get_contents()
-    print(f'page={pno+1} page_xref={xref} content_xrefs={contents}')
+    print(f'page={pno+1} page_xref={page.xref} content_xrefs={page.get_contents()}')
 
-    fonts = page.get_fonts(full=True)
-    for f in fonts:
-        # (xref, ext, type, basefont, name, encoding, referencer, ...)
-        fx = f[0]
-        print(f'  FONT xref={fx} type={f[2]} basefont={f[3]!r} name={f[4]!r}')
-        try:
-            print('  FONT_OBJECT=', doc.xref_object(fx, compressed=False)[:1200].replace('\n', '\\n'))
-        except Exception as e:
-            print('  FONT_OBJECT_ERROR=', repr(e))
-        try:
-            print('  TOUNICODE_KEY=', doc.xref_get_key(fx, 'ToUnicode'))
-            tu = doc.xref_get_key(fx, 'ToUnicode')[1]
-            if isinstance(tu, str) and tu.startswith('xref'):
-                tx = int(tu.split()[1])
-                cmap = doc.xref_stream(tx)
-                print(f'  TOUNICODE_XREF={tx} bytes={len(cmap) if cmap else 0}')
-                if cmap:
-                    cs = cmap.decode('latin1', errors='replace')
-                    print('  TOUNICODE_STREAM=', repr(cs[:5000]))
-        except Exception as e:
-            print('  TOUNICODE_ERROR=', repr(e))
-
-    for cx in contents:
-        stream = doc.xref_stream(cx)
-        if stream is None:
-            print(f'  content={cx} stream=None')
+    for f in page.get_fonts(full=True):
+        fx, ext, ftype, basefont, name = f[:5]
+        if name != 'R12':
             continue
+        print(f'R12_FONT xref={fx} type={ftype} basefont={basefont!r} name={name!r}')
+        print('R12_OBJECT=', doc.xref_object(fx, compressed=False)[:1500].replace('\n', '\\n'))
+        kind, value = doc.xref_get_key(fx, 'ToUnicode')
+        print(f'R12_ToUnicode_key_kind={kind} value={value!r}')
+        m = re.search(r'(\d+)\s+0\s+R', value or '')
+        if not m:
+            raise SystemExit('R12 has no indirect ToUnicode reference')
+        tx = int(m.group(1))
+        cmap = doc.xref_stream(tx)
+        print(f'R12_ToUnicode_xref={tx} bytes={len(cmap) if cmap else 0}')
+        if not cmap:
+            raise SystemExit('R12 ToUnicode stream is empty')
+        cs = cmap.decode('latin1', errors='replace')
+        print('R12_ToUnicode_stream=', repr(cs[:12000]))
+        print('R12_HAS_L=', '<01> <004c>' in cs or '<01><004c>' in cs)
+        print('R12_HAS_I=', '<02> <0049>' in cs or '<02><0049>' in cs)
+        print('R12_HAS_M=', '<03> <004d>' in cs or '<03><004d>' in cs)
+        print('R12_HAS_UNDERSCORE=', '<04> <005f>' in cs or '<04><005f>' in cs)
+
+    for cx in page.get_contents():
+        stream = doc.xref_stream(cx)
         s = stream.decode('latin1', errors='replace')
-        print(f'  content={cx} stream_bytes={len(stream)} BT={s.count("BT")} ET={s.count("ET")} Tf={s.count(" Tf")} Tj={s.count(" Tj")} TJ={s.count(" TJ")}')
-        for marker in ('/R12 7.50192 Tf', 'LIM_E03_PLA', 'TJ'):
-            pos = s.find(marker)
-            if pos >= 0:
-                print(f'  {marker}_WINDOW=', repr(s[max(0,pos-350):pos+700]))
-                break
+        if '/R12 7.50192 Tf' in s:
+            pos = s.find('/R12 7.50192 Tf')
+            print('R12_CONTENT_WINDOW=', repr(s[max(0,pos-350):pos+900]))
 
 if not found:
     raise SystemExit('Fixture does not expose the expected needle through text extraction')
