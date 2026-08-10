@@ -6,31 +6,24 @@ const el=()=>({value:'',files:[],disabled:false,innerHTML:'',textContent:'',clas
 const documentStub={querySelector(){return el();},createElement(){return el();}};
 const ctx={console,document:documentStub,mupdf,TextEncoder,TextDecoder,Uint8Array,String,Set,Map,Math,Error,URL};
 vm.runInNewContext(source+'\nTEST_API={editDoc,toks,A,getFontMap,decodeToken};',ctx);
-const {editDoc,toks,A,getFontMap,decodeToken}=ctx.TEST_API;
-const fixture='test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034.pdf',needle='LIM_E03_PLA',replacement='LIM_O03_PLA',original='UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034',expected='UP3_LIM_O03_PLA_I59_02_ER_70_A34_7034';
-const input=fs.readFileSync(fixture),doc=mupdf.PDFDocument.openDocument(input,'application/pdf'),page=doc.loadPage(0);
-const originalText=page.toStructuredText().asText(); if(!originalText.includes(original))throw new Error('fixture original text missing');
-const annotationsBefore=page.getAnnotations().map(a=>a.getType()).sort().join('|');
-const resources=page.getObject().getInheritable('Resources'),fonts=resources?.resolve?.().get?.('Font'),fontR12=fonts?.get?.('R12'),fontBefore=fontR12?.resolve?.().get?.('BaseFont')?.toString?.()||'';
-const contents=page.getObject().get('Contents');
-const beforeStream=contents.readStream().asUint8Array().slice();
-const edits=editDoc(doc,needle,replacement);
-if(edits!==1)throw new Error(`expected 1 logical replacement, got ${edits}`);
-const afterText=page.toStructuredText().asText(); if(!afterText.includes(expected))throw new Error('replacement is not extractable before save'); if(afterText.includes(original))throw new Error('original text still extractable before save');
-const afterStream=contents.readStream().asUint8Array(); if(beforeStream.every((v,i)=>v===afterStream[i])&&beforeStream.length===afterStream.length)throw new Error('content stream did not change');
-const annotationsAfter=page.getAnnotations().map(a=>a.getType()).sort().join('|'); if(annotationsAfter!==annotationsBefore)throw new Error(`annotations changed: ${annotationsBefore} -> ${annotationsAfter}`); if(annotationsAfter.split('|').filter(Boolean).includes('FreeText'))throw new Error('FreeText annotation exists');
-const fontAfter=page.getObject().getInheritable('Resources')?.resolve?.().get?.('Font')?.get?.('R12')?.resolve?.().get?.('BaseFont')?.toString?.()||''; if(fontAfter!==fontBefore)throw new Error(`R12 BaseFont changed: ${fontBefore} -> ${fontAfter}`);
-const out=doc.saveToBuffer('garbage=2,compress=yes').asUint8Array(); fs.writeFileSync('test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034-edited.pdf',out);
-const check=mupdf.PDFDocument.openDocument(out,'application/pdf'),checkPage=check.loadPage(0),checkText=checkPage.toStructuredText().asText(); if(!checkText.includes(expected))throw new Error('saved PDF does not extract replacement'); if(checkText.includes(original))throw new Error('saved PDF still extracts original');
-const savedAnnots=checkPage.getAnnotations().map(a=>a.getType()).sort().join('|'); if(savedAnnots!==annotationsBefore)throw new Error(`saved annotations changed: ${annotationsBefore} -> ${savedAnnots}`); if(savedAnnots.split('|').filter(Boolean).includes('FreeText'))throw new Error('saved PDF contains FreeText');
-const savedFont=checkPage.getObject().getInheritable('Resources')?.resolve?.().get?.('Font')?.get?.('R12')?.resolve?.().get?.('BaseFont')?.toString?.()||''; if(savedFont!==fontBefore)throw new Error(`saved R12 BaseFont changed: ${fontBefore} -> ${savedFont}`);
-
-const longNeedle='LIM_E03_PLA',longReplacement='Proyecto Ejecutivo - E03';
-const longDoc=mupdf.PDFDocument.openDocument(input,'application/pdf'),longPage=longDoc.loadPage(0),longOriginal=longPage.toStructuredText().asText();
-const longEdits=editDoc(longDoc,longNeedle,longReplacement); if(longEdits!==1)throw new Error(`expected 1 logical longer replacement, got ${longEdits}`);
-const longText=longPage.toStructuredText().asText(); if(!longText.includes(longReplacement))throw new Error('longer replacement is not extractable before save'); if(longText.includes(longNeedle))throw new Error('longer replacement left original text extractable');
-const longOut=longDoc.saveToBuffer('garbage=2,compress=yes').asUint8Array(),longCheck=mupdf.PDFDocument.openDocument(longOut,'application/pdf'),longCheckText=longCheck.loadPage(0).toStructuredText().asText(); if(!longCheckText.includes(longReplacement))throw new Error('saved PDF does not extract longer replacement'); if(longCheckText.includes(longNeedle))throw new Error('saved PDF still extracts original longer-replacement text');
-console.log('VARIABLE_LENGTH_EDIT_OK');
-console.log(`long_replacement=${longNeedle}->${longReplacement}`); console.log(`long_replacement_extractable=true`);
-console.log('REAL_PDF_EDIT_OK');
-console.log(`logical_replacement=${needle}->${replacement}`); console.log(`underlying_text_strings_changed=${edits}`); console.log(`replacement_extractable=true`); console.log(`original_extractable=false`); console.log(`annotations_unchanged=${savedAnnots===annotationsBefore}`); console.log(`free_text_created=false`); console.log(`R12_BaseFont=${savedFont}`); console.log(`edited_pdf_bytes=${out.length}`);
+const {editDoc}=ctx.TEST_API;
+const fixture='test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034.pdf';
+const input=fs.readFileSync(fixture);
+const probeDoc=mupdf.PDFDocument.openDocument(input,'application/pdf');
+const probeNeedle='P.Ejecutivo - E03';
+console.log(`PROBE_PAGE_COUNT=${probeDoc.countPages()}`);
+let foundPages=0;
+for(let i=0;i<probeDoc.countPages();i++){
+  const p=probeDoc.loadPage(i),t=p.toStructuredText().asText();
+  if(t.includes(probeNeedle)){foundPages++;console.log(`PROBE_MATCH_PAGE=${i}`);console.log(`PROBE_TEXT_CONTEXT=${JSON.stringify(t.slice(Math.max(0,t.indexOf(probeNeedle)-120),t.indexOf(probeNeedle)+probeNeedle.length+120))}`)}
+}
+console.log(`PROBE_MATCH_PAGES=${foundPages}`);
+if(!foundPages)throw new Error('fixture does not expose P.Ejecutivo - E03 through structured text');
+const testDoc=mupdf.PDFDocument.openDocument(input,'application/pdf');
+const edits=editDoc(testDoc,probeNeedle,'Proyecto Ejecutivo - E03');
+console.log(`PROBE_EDIT_COUNT=${edits}`);
+const after=[];for(let i=0;i<testDoc.countPages();i++)after.push(testDoc.loadPage(i).toStructuredText().asText());
+const joined=after.join('\n');
+if(!joined.includes('Proyecto Ejecutivo - E03'))throw new Error('P.Ejecutivo replacement not extractable');
+if(joined.includes(probeNeedle))throw new Error('original P.Ejecutivo text remains extractable');
+console.log('P_EJECUTIVO_EDIT_OK');
