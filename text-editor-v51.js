@@ -30,132 +30,80 @@ function tokenize(data,start=0,end=data.length){
   return a
 }
 
+function hexBytes(h){h=h.replace(/\s+/g,'');if(h.length%2)h+='0';return Uint8Array.from(h.match(/../g)?.map(x=>parseInt(x,16))||[])}
+function unicodeFromHex(h){const b=hexBytes(h);if(b.length%2===0&&b.length>=2){let s='';for(let i=0;i<b.length;i+=2)s+=String.fromCharCode((b[i]<<8)|b[i+1]);return s}return String.fromCharCode(...b)}
+
+// Parse the actual CMap syntax used by this PDF family. In particular, the maps
+// are mostly bfrange entries such as <01><01><0047>, not simple bfchar pairs.
 function parseCMap(obj){
-  obj=resolve(obj); if(!obj?.isStream?.())return null;
-  const t=ascii(obj.readStream()); const map=new Map();
-  for(const m of t.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g))map.set(parseInt(m[1],16),String.fromCodePoint(parseInt(m[2],16)));
-  if(!map.size)return null;
-  let codeBytes=2; const cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/);
+  obj=resolve(obj);if(!obj?.isStream?.())return null;
+  const t=ascii(obj.readStream());const map=new Map();
+  const cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/);
+  let codeBytes=1;
   if(cs){const m=cs[1].match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)codeBytes=Math.max(1,Math.ceil(m[1].length/2))}
-  return {map,reverse:new Map([...map].map(([k,v])=>[v,k])),codeBytes};
+  const section=(name,end)=>{const m=t.match(new RegExp(`(?:\\d+\\s+)?begin${name}([\\s\\S]*?)end${end||name}`));return m?m[1]:''};
+  const bfchar=section('bfchar');
+  for(const line of bfchar.split(/\r?\n/)){
+    const m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)map.set(parseInt(m[1],16),unicodeFromHex(m[2]));
+  }
+  const bfrange=section('bfrange');
+  for(const line of bfrange.split(/\r?\n/)){
+    let m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);
+    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),u=parseInt(m[3],16);if(b-a<8192)for(let c=a;c<=b;c++)map.set(c,String.fromCodePoint(u+c-a));continue}
+    m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/);
+    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),vals=[...m[3].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let c=a;c<=b&&c-a<vals.length;c++)map.set(c,unicodeFromHex(vals[c-a][1]));}
+  }
+  if(!map.size)return null;
+  const reverse=new Map();for(const [k,v] of map)if(!reverse.has(v))reverse.set(v,k);
+  return{map,reverse,codeBytes};
 }
 
 function fontMaps(page){
-  const resources=resolve(page.getInheritable?.('Resources')||page.get('Resources'));
-  const fonts=resolve(resources?.get?.('Font'));
-  const out=new Map();
+  const resources=resolve(page.getInheritable?.('Resources')||page.get('Resources'));const fonts=resolve(resources?.get?.('Font'));const out=new Map();
   if(!fonts?.isDictionary?.())return out;
-  fonts.forEach((value,key)=>{
-    try{
-      const name=String(key),font=resolve(value);
-      let cmap=font?.get?.('ToUnicode')?parseCMap(font.get('ToUnicode')):null;
-      if(!cmap){
-        const ds=resolve(font?.get?.('DescendantFonts'));
-        if(ds?.isArray?.()&&ds.length)cmap=parseCMap(resolve(ds.get(0))?.get?.('ToUnicode'));
-      }
-      if(cmap)out.set(name,cmap);
-    }catch(_){ }
-  });
+  fonts.forEach((value,key)=>{try{const name=String(key),font=resolve(value);let cmap=font?.get?.('ToUnicode')?parseCMap(font.get('ToUnicode')):null;if(!cmap){const ds=resolve(font?.get?.('DescendantFonts'));if(ds?.isArray?.()&&ds.length)cmap=parseCMap(resolve(ds.get(0))?.get?.('ToUnicode'))}if(cmap)out.set(name,cmap)}catch(_){}});
   return out;
 }
 
 function decodeString(tok,c){
   let bytes;
-  if(tok.kind==='hex'){
-    let h=ascii(tok.raw.slice(1,-1)).replace(/\s+/g,''); if(h.length%2)h+='0';
-    bytes=Uint8Array.from(h.match(/../g)?.map(x=>parseInt(x,16))||[]);
-  }else{
-    const a=[];
-    for(let i=1;i<tok.raw.length-1;i++){
-      let b=tok.raw.charCodeAt(i); if(b!==92){a.push(b);continue}
-      i++;const x=tok.raw.charCodeAt(i);
-      if(x===110)a.push(10);else if(x===114)a.push(13);else if(x===116)a.push(9);else if(x===98)a.push(8);else if(x===102)a.push(12);else if(x===40||x===41||x===92)a.push(x);
-      else if(x>=48&&x<=55){let v=x-48;for(let k=0;k<2&&i+1<tok.raw.length-1&&tok.raw.charCodeAt(i+1)>=48&&tok.raw.charCodeAt(i+1)<=55;k++){i++;v=v*8+tok.raw.charCodeAt(i)-48}a.push(v)}else a.push(x);
-    }
-    bytes=Uint8Array.from(a);
-  }
-  const chars=[];
-  for(let i=0;i+c.codeBytes<=bytes.length;i+=c.codeBytes){let v=0;for(let j=0;j<c.codeBytes;j++)v=(v<<8)|bytes[i+j];chars.push(c.map.get(v)||'�')}
-  return chars.join('');
+  if(tok.kind==='hex')bytes=hexBytes(ascii(tok.raw.slice(1,-1)));
+  else{const a=[];for(let i=1;i<tok.raw.length-1;i++){let b=tok.raw.charCodeAt(i);if(b!==92){a.push(b);continue}i++;const x=tok.raw.charCodeAt(i);if(x===110)a.push(10);else if(x===114)a.push(13);else if(x===116)a.push(9);else if(x===98)a.push(8);else if(x===102)a.push(12);else if(x===40||x===41||x===92)a.push(x);else if(x>=48&&x<=55){let v=x-48;for(let k=0;k<2&&i+1<tok.raw.length-1&&tok.raw.charCodeAt(i+1)>=48&&tok.raw.charCodeAt(i+1)<=55;k++){i++;v=v*8+tok.raw.charCodeAt(i)-48}a.push(v)}else a.push(x)}bytes=Uint8Array.from(a)}
+  const chars=[];for(let i=0;i+c.codeBytes<=bytes.length;i+=c.codeBytes){let v=0;for(let j=0;j<c.codeBytes;j++)v=(v<<8)|bytes[i+j];chars.push(c.map.get(v)||'�')}return chars.join('');
 }
-function encodeText(text,c){
-  const a=[];
-  for(const ch of text){const v=c.reverse.get(ch);if(v==null)throw Error(`El carácter «${ch}» no existe en la codificación de la fuente original.`);for(let s=c.codeBytes-1;s>=0;s--)a.push((v>>(8*s))&255)}
-  return `<${a.map(x=>x.toString(16).padStart(2,'0')).join('')}>`;
-}
-function findInText(text,needle){
-  let i=text.indexOf(needle); if(i>=0)return [i,i+needle.length];
-  const norm=text.replace(/\s+/g,' '), n=needle.replace(/\s+/g,' '), j=norm.indexOf(n); if(j<0)return null;
-  let p=0,s=-1,e=-1;for(let k=0;k<text.length;k++){if(/\s/.test(text[k]))continue;if(p===j&&s<0)s=k;if(p===j+n.length){e=k;break}p++}
-  return [s<0?0:s,e<0?text.length:e];
-}
+function encodeText(text,c){const a=[];for(const ch of text){const v=c.reverse.get(ch);if(v==null)throw Error(`El carácter «${ch}» no existe en la codificación de la fuente original.`);for(let s=c.codeBytes-1;s>=0;s--)a.push((v>>(8*s))&255)}return `<${a.map(x=>x.toString(16).padStart(2,'0')).join('')}>`}
+function findInText(text,needle){let i=text.indexOf(needle);if(i>=0)return[i,i+needle.length];const norm=text.replace(/\s+/g,' '),n=needle.replace(/\s+/g,' '),j=norm.indexOf(n);if(j<0)return null;let p=0,s=-1,e=-1;for(let k=0;k<text.length;k++){if(/\s/.test(text[k]))continue;if(p===j&&s<0)s=k;if(p===j+n.length){e=k;break}p++}return[s<0?0:s,e<0?text.length:e]}
 
 function editStream(bytes,needle,repl,maps){
-  const data=new Uint8Array(bytes),ts=tokenize(data),edits=[],diagnostics=[];let font=null;
-  const allMaps=[...maps.entries()];
-  // Work inside each BT/ET text object so a visual string split over several Tj/TJ operators can be matched.
+  const data=new Uint8Array(bytes),ts=tokenize(data),edits=[],diagnostics=[];
   for(let i=0;i<ts.length;){
     if(ts[i].type!=='word'||ascii(ts[i].raw)!=='BT'){i++;continue}
-    const begin=i;let j=i+1,localFont=font,segments=[];
+    let j=i+1,localFont=null,segments=[];
     for(;j<ts.length;j++){
       const t=ts[j],w=t.type==='word'?ascii(t.raw):'';
       if(w==='ET')break;
       if(w==='Tf'){const n=ts[j-2];if(n?.type==='name')localFont=ascii(n.raw).slice(1);continue}
       if(w!=='Tj'&&w!=='TJ')continue;
-      const cmap=maps.get(localFont);
-      if(w==='Tj'){
-        const s=ts[j-1];if(!s||s.type!=='string')continue;
-        let c=cmap,txt=c?decodeString(s,c):'';
-        if(c&&txt.includes(needle))segments.push({tok:s,c,text:txt});
-        else if(c)segments.push({tok:s,c,text:txt});
-        else diagnostics.push(`BT sin ToUnicode para ${localFont||'?'} `);
-      }else{
-        const arr=ts[j-1];if(!arr||arr.type!=='array')continue;
-        const strings=arr.items.filter(x=>x.type==='string');
-        let c=cmap;
-        if(c)for(const s of strings)segments.push({tok:s,c,text:decodeString(s,c)});
-        else diagnostics.push(`TJ sin ToUnicode para ${localFont||'?'} `);
-      }
+      const c=maps.get(localFont);if(!c){diagnostics.push(`BT sin ToUnicode para ${localFont||'?'} `);continue}
+      if(w==='Tj'){const s=ts[j-1];if(s?.type==='string')segments.push({tok:s,c,text:decodeString(s,c)})}
+      else{const arr=ts[j-1];if(!arr||arr.type!=='array')continue;for(const s of arr.items.filter(x=>x.type==='string'))segments.push({tok:s,c,text:decodeString(s,c)})}
     }
     if(j>=ts.length){i++;continue}
-    const full=segments.map(x=>x.text).join('');
-    const m=findInText(full,needle);
-    if(m){
-      let cursor=0, first=-1,last=-1;
-      for(let k=0;k<segments.length;k++){const z=segments[k],a=cursor,b=cursor+z.text.length;if(m[0]<b&&m[1]>a){if(first<0)first=k;last=k}cursor=b}
-      if(first>=0){
-        if(first===last){const z=segments[first];z.tok.replacement=encodeText(z.text.slice(0,m[0]-segments.slice(0,first).reduce((q,x)=>q+x.text.length,0))+repl+z.text.slice(m[1]-segments.slice(0,first).reduce((q,x)=>q+x.text.length,0)),z.c);edits.push(z.tok)}
-        else{
-          let before=segments.slice(0,first).reduce((q,x)=>q+x.text.length,0),after=segments.slice(0,last+1).reduce((q,x)=>q+x.text.length,0);
-          const a=segments[first],z=segments[last];a.tok.replacement=encodeText(a.text.slice(0,m[0]-before)+repl,a.c);z.tok.replacement=encodeText(z.text.slice(m[1]- (after-z.text.length)),z.c);for(let k=first+1;k<last;k++)segments[k].tok.replacement='<> ';edits.push(a.tok,z.tok,...segments.slice(first+1,last).map(x=>x.tok));
-        }
-      }
+    const full=segments.map(x=>x.text).join('');const m=findInText(full,needle);
+    if(m){let cursor=0,first=-1,last=-1;for(let k=0;k<segments.length;k++){const z=segments[k],a=cursor,b=cursor+z.text.length;if(m[0]<b&&m[1]>a){if(first<0)first=k;last=k}cursor=b}
+      if(first>=0){const before=segments.slice(0,first).reduce((q,x)=>q+x.text.length,0),after=segments.slice(0,last+1).reduce((q,x)=>q+x.text.length,0);if(first===last){const z=segments[first],off=before;z.tok.replacement=encodeText(z.text.slice(0,m[0]-off)+repl+z.text.slice(m[1]-off),z.c);edits.push(z.tok)}else{const a=segments[first],z=segments[last];a.tok.replacement=encodeText(a.text.slice(0,m[0]-before)+repl,a.c);z.tok.replacement=encodeText(z.text.slice(m[1]-(after-z.text.length)),z.c);for(let k=first+1;k<last;k++)segments[k].tok.replacement='<> ';edits.push(a.tok,z.tok,...segments.slice(first+1,last).map(x=>x.tok))}}
     }
     i=j+1;
   }
-  if(!edits.length)return {bytes:data,count:0,diagnostics};
-  const seen=new Set(),parts=[];let pos=0;
-  for(const t of ts){if(t.replacement===undefined||seen.has(t))continue;seen.add(t);parts.push(data.slice(pos,t.start),new TextEncoder().encode(t.replacement));pos=t.end}
-  parts.push(data.slice(pos));const n=parts.reduce((q,x)=>q+x.length,0),out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}
-  return {bytes:out,count:seen.size,diagnostics};
+  if(!edits.length)return{bytes:data,count:0,diagnostics};
+  const seen=new Set(),parts=[];let pos=0;for(const t of ts){if(t.replacement===undefined||seen.has(t))continue;seen.add(t);parts.push(data.slice(pos,t.start),new TextEncoder().encode(t.replacement));pos=t.end}parts.push(data.slice(pos));const n=parts.reduce((q,x)=>q+x.length,0),out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return{bytes:out,count:seen.size,diagnostics};
 }
 
-function editDoc(doc,needle,repl){
-  let count=0,diag=[];
-  for(let i=0;i<doc.countPages();i++){
-    const page=doc.findPage(i),maps=fontMaps(page),co=resolve(page.get('Contents'));if(!co||co.isNull?.())continue;
-    const refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];
-    for(let r of refs){r=resolve(r);if(!r?.isStream?.())continue;const z=editStream(r.readStream(),needle,repl,maps);if(z.count){r.writeStream(z.bytes);count+=z.count}else diag.push(...z.diagnostics)}
-  }
-  return {count,diag};
-}
+function editDoc(doc,needle,repl){let count=0,diag=[];for(let i=0;i<doc.countPages();i++){const page=doc.findPage(i),maps=fontMaps(page),co=page.get('Contents');if(!co||co.isNull?.())continue;const refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];for(const ref of refs){const stream=resolve(ref);if(!stream?.isStream?.())continue;const z=editStream(stream.readStream(),needle,repl,maps);if(z.count){stream.writeStream(z.bytes);count+=z.count}else diag.push(...z.diagnostics)}}return{count,diag}}
 
 function addResult(name,msg,error=false){const row=document.createElement('div');row.className=`result-row${error?' error':''}`;const a=document.createElement('span');a.className='filename';a.textContent=name;const b=document.createElement('span');b.className='count';b.textContent=msg;row.append(a,b);results.appendChild(row)}
 function sync(){processBtn.disabled=!findInput.value.trim()||!fileInput.files.length}
-openBtn.addEventListener('click',()=>fileInput.click());
-findInput.addEventListener('input',sync);replaceInput.addEventListener('input',sync);fileInput.addEventListener('change',sync);sync();
+openBtn.addEventListener('click',()=>fileInput.click());findInput.addEventListener('input',sync);replaceInput.addEventListener('input',sync);fileInput.addEventListener('change',sync);sync();
 
-async function run(){
-  const needle=findInput.value,repl=replaceInput.value,files=[...fileInput.files];if(!needle.trim()||!files.length)return;processBtn.disabled=true;results.innerHTML='';summary.classList.add('hidden');let total=0,modified=0,failed=0;
-  for(const file of files){try{status.textContent=`Analizando ${file.name}…`;const bytes=new Uint8Array(await file.arrayBuffer()),doc=mupdf.PDFDocument.openDocument(bytes,'application/pdf');try{const r=editDoc(doc,needle,repl);if(!r.count){const extra=r.diag.length?` · ${r.diag[0]}`:'';addResult(file.name,`Texto no editable en el stream original${extra}`);continue}const out=doc.saveToBuffer('garbage=2,compress=yes').asUint8Array(),u=URL.createObjectURL(new Blob([out],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);total+=r.count;modified++;addResult(file.name,`${r.count} edición${r.count===1?'':'es'} aplicada · PDF descargado`)}finally{doc.destroy()}}catch(e){failed++;addResult(file.name,`Error: ${e?.message||e}`,true)}}summary.textContent=`${files.length-failed} PDF${files.length-failed===1?'':'s'} procesado${files.length-failed===1?'':'s'} · ${total} edición${total===1?'':'es'} aplicadas · ${modified} archivos modificados${failed?` · ${failed} con error`:''}`;summary.classList.remove('hidden');status.textContent=failed?`Proceso terminado con ${failed} error${failed===1?'':'es'}.`:'Proceso terminado correctamente.';sync();clearBtn.disabled=false}
+async function run(){const needle=findInput.value,repl=replaceInput.value,files=[...fileInput.files];if(!needle.trim()||!files.length)return;processBtn.disabled=true;results.innerHTML='';summary.classList.add('hidden');let total=0,modified=0,failed=0;for(const file of files){try{status.textContent=`Analizando ${file.name}…`;const bytes=new Uint8Array(await file.arrayBuffer()),doc=mupdf.PDFDocument.openDocument(bytes,'application/pdf');try{const r=editDoc(doc,needle,repl);if(!r.count){addResult(file.name,r.diag.length?`Sin coincidencias · ${r.diag[0]}`:'Sin coincidencias');continue}const out=doc.saveToBuffer('garbage=2,compress=yes').asUint8Array(),u=URL.createObjectURL(new Blob([out],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);total+=r.count;modified++;addResult(file.name,`${r.count} edición${r.count===1?'':'es'} aplicada · PDF descargado`)}finally{doc.destroy()}}catch(e){failed++;addResult(file.name,`Error: ${e?.message||e}`,true)}}summary.textContent=`${files.length-failed} PDF${files.length-failed===1?'':'s'} procesado${files.length-failed===1?'':'s'} · ${total} edición${total===1?'':'es'} aplicadas · ${modified} archivos modificados${failed?` · ${failed} con error`:''}`;summary.classList.remove('hidden');status.textContent=failed?`Proceso terminado con ${failed} error${failed===1?'':'es'}.`:'Proceso terminado correctamente.';sync();clearBtn.disabled=false}
 processBtn.addEventListener('click',run);clearBtn.addEventListener('click',()=>{findInput.value='';replaceInput.value='';fileInput.value='';results.innerHTML='';summary.classList.add('hidden');status.textContent='';sync();clearBtn.disabled=true});
