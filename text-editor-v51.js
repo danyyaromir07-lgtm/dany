@@ -1,104 +1,18 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
-
-const findInput=document.querySelector('#findText');
-const replaceInput=document.querySelector('#replaceText');
-const fileInput=document.querySelector('#textFileInput');
-const processBtn=document.querySelector('#textProcessBtn');
-const clearBtn=document.querySelector('#textClearBtn');
-const status=document.querySelector('#textStatus');
-const summary=document.querySelector('#textSummary');
-const results=document.querySelector('#textResults');
-const openBtn=document.querySelector('#textOpenBtn');
-
+const $=s=>document.querySelector(s),findInput=$('#findText'),replaceInput=$('#replaceText'),fileInput=$('#textFileInput'),processBtn=$('#textProcessBtn'),clearBtn=$('#textClearBtn'),status=$('#textStatus'),summary=$('#textSummary'),results=$('#textResults'),openBtn=$('#textOpenBtn');
+const A=b=>String.fromCharCode(...b),ws=x=>x===0||x===9||x===10||x===12||x===13||x===32,del=x=>ws(x)||[40,41,60,62,91,93,123,125,47,37].includes(x);
 function resolve(o){try{return o?.resolve?.()||o}catch(_){return o}}
-function ascii(b){let s='';for(const x of b)s+=String.fromCharCode(x);return s}
-function ws(x){return x===0||x===9||x===10||x===12||x===13||x===32}
-function delim(x){return ws(x)||x===40||x===41||x===60||x===62||x===91||x===93||x===123||x===125||x===47||x===37}
-
-function tokenize(data,start=0,end=data.length){
-  const a=[];let i=start;
-  while(i<end){
-    while(i<end&&ws(data[i]))i++; if(i>=end)break;
-    if(data[i]===37){while(i<end&&data[i]!==10&&data[i]!==13)i++;continue}
-    const s=i,b=data[i];
-    if(b===40){i++;let d=1;while(i<end&&d){if(data[i]===92)i+=2;else{if(data[i]===40)d++;else if(data[i]===41)d--;i++}}a.push({type:'string',start:s,end:i,raw:data.slice(s,i),kind:'literal'});continue}
-    if(b===60&&data[i+1]!==60){i++;while(i<end&&data[i]!==62)i++;if(i<end)i++;a.push({type:'string',start:s,end:i,raw:data.slice(s,i),kind:'hex'});continue}
-    if(b===91){i++;const q=i;let d=1;while(i<end&&d){if(data[i]===91)d++;else if(data[i]===93)d--;i++}a.push({type:'array',start:s,end:i,raw:data.slice(s,i),items:tokenize(data,q,i-1)});continue}
-    if(b===47){i++;while(i<end&&!delim(data[i]))i++;a.push({type:'name',start:s,end:i,raw:data.slice(s,i)});continue}
-    while(i<end&&!delim(data[i]))i++;a.push({type:'word',start:s,end:i,raw:data.slice(s,i)})
-  }
-  return a;
-}
-
-function hexBytes(h){h=h.replace(/\s+/g,'');if(h.length%2)h+='0';return Uint8Array.from(h.match(/../g)?.map(x=>parseInt(x,16))||[])}
-function unicodeFromHex(h){const b=hexBytes(h);if(b.length%2===0&&b.length>=2){let s='';for(let i=0;i<b.length;i+=2)s+=String.fromCharCode((b[i]<<8)|b[i+1]);return s}return String.fromCharCode(...b)}
-
-// This PDF family uses bfrange entries such as <01><01><0047>.
-function parseCMap(obj){
-  obj=resolve(obj);if(!obj?.isStream?.())return null;
-  const t=ascii(obj.readStream()),map=new Map();
-  const cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/);let codeBytes=1;
-  if(cs){const m=cs[1].match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)codeBytes=Math.max(1,Math.ceil(m[1].length/2))}
-  const section=(name)=>{const m=t.match(new RegExp(`(?:\\d+\\s+)?begin${name}([\\s\\S]*?)end${name}`));return m?m[1]:''};
-  for(const line of section('bfchar').split(/\r?\n/)){const m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);if(m)map.set(parseInt(m[1],16),unicodeFromHex(m[2]))}
-  for(const line of section('bfrange').split(/\r?\n/)){
-    let m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/);
-    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),u=parseInt(m[3],16);if(b-a<8192)for(let c=a;c<=b;c++)map.set(c,String.fromCodePoint(u+c-a));continue}
-    m=line.match(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/);
-    if(m){const a=parseInt(m[1],16),b=parseInt(m[2],16),vals=[...m[3].matchAll(/<([0-9A-Fa-f]+)>/g)];for(let c=a;c<=b&&c-a<vals.length;c++)map.set(c,unicodeFromHex(vals[c-a][1]))}
-  }
-  if(!map.size)return null;const reverse=new Map();for(const[k,v]of map)if(!reverse.has(v))reverse.set(v,k);return{map,reverse,codeBytes};
-}
-
-function fontMaps(page){
-  // PDFPage's dictionary is obtained through getObject().
-  const pageObj=page?.getObject?.();
-  const resources=resolve(pageObj?.getInheritable?.('Resources')||pageObj?.get?.('Resources'));
-  const fonts=resolve(resources?.get?.('Font'));const out=new Map();
-  if(!fonts?.isDictionary?.())return out;
-  fonts.forEach((value,key)=>{try{const name=String(key),font=resolve(value);let cmap=font?.get?.('ToUnicode')?parseCMap(font.get('ToUnicode')):null;if(!cmap){const ds=resolve(font?.get?.('DescendantFonts'));if(ds?.isArray?.()&&ds.length)cmap=parseCMap(resolve(ds.get(0))?.get?.('ToUnicode'))}if(cmap)out.set(name,cmap)}catch(_){}});
-  return out;
-}
-
-function decodeString(tok,c){
-  let bytes;
-  if(tok.kind==='hex')bytes=hexBytes(ascii(tok.raw.slice(1,-1)));
-  else{const a=[];for(let i=1;i<tok.raw.length-1;i++){let b=tok.raw.charCodeAt(i);if(b!==92){a.push(b);continue}i++;const x=tok.raw.charCodeAt(i);if(x===110)a.push(10);else if(x===114)a.push(13);else if(x===116)a.push(9);else if(x===98)a.push(8);else if(x===102)a.push(12);else if(x===40||x===41||x===92)a.push(x);else if(x>=48&&x<=55){let v=x-48;for(let k=0;k<2&&i+1<tok.raw.length-1&&tok.raw.charCodeAt(i+1)>=48&&tok.raw.charCodeAt(i+1)<=55;k++){i++;v=v*8+tok.raw.charCodeAt(i)-48}a.push(v)}else a.push(x)}bytes=Uint8Array.from(a)}
-  const chars=[];for(let i=0;i+c.codeBytes<=bytes.length;i+=c.codeBytes){let v=0;for(let j=0;j<c.codeBytes;j++)v=(v<<8)|bytes[i+j];chars.push(c.map.get(v)||'�')}return chars.join('');
-}
-function encodeText(text,c){const a=[];for(const ch of text){const v=c.reverse.get(ch);if(v==null)throw Error(`El carácter «${ch}» no existe en la codificación de la fuente original.`);for(let s=c.codeBytes-1;s>=0;s--)a.push((v>>(8*s))&255)}return `<${a.map(x=>x.toString(16).padStart(2,'0')).join('')}>`}
-function findInText(text,needle){let i=text.indexOf(needle);if(i>=0)return[i,i+needle.length];const norm=text.replace(/\s+/g,' '),n=needle.replace(/\s+/g,' '),j=norm.indexOf(n);if(j<0)return null;let p=0,s=-1,e=-1;for(let k=0;k<text.length;k++){if(/\s/.test(text[k]))continue;if(p===j&&s<0)s=k;if(p===j+n.length){e=k;break}p++}return[s<0?0:s,e<0?text.length:e]}
-
-function editStream(bytes,needle,repl,maps){
-  const data=new Uint8Array(bytes),ts=tokenize(data),edits=[],diagnostics=[];
-  for(let i=0;i<ts.length;){
-    if(ts[i].type!=='word'||ascii(ts[i].raw)!=='BT'){i++;continue}
-    let j=i+1,localFont=null,segments=[];
-    for(;j<ts.length;j++){
-      const t=ts[j],w=t.type==='word'?ascii(t.raw):'';
-      if(w==='ET')break;
-      if(w==='Tf'){const n=ts[j-2];if(n?.type==='name')localFont=ascii(n.raw).slice(1);continue}
-      if(w!=='Tj'&&w!=='TJ')continue;
-      const c=maps.get(localFont);if(!c){diagnostics.push(`BT sin ToUnicode para ${localFont||'?'} `);continue}
-      if(w==='Tj'){const s=ts[j-1];if(s?.type==='string')segments.push({tok:s,c,text:decodeString(s,c)})}
-      else{const arr=ts[j-1];if(!arr||arr.type!=='array')continue;for(const s of arr.items.filter(x=>x.type==='string'))segments.push({tok:s,c,text:decodeString(s,c)})}
-    }
-    if(j>=ts.length){i++;continue}
-    const full=segments.map(x=>x.text).join('');const m=findInText(full,needle);
-    if(m){let cursor=0,first=-1,last=-1;for(let k=0;k<segments.length;k++){const z=segments[k],a=cursor,b=cursor+z.text.length;if(m[0]<b&&m[1]>a){if(first<0)first=k;last=k}cursor=b}
-      if(first>=0){const before=segments.slice(0,first).reduce((q,x)=>q+x.text.length,0),after=segments.slice(0,last+1).reduce((q,x)=>q+x.text.length,0);if(first===last){const z=segments[first];z.tok.replacement=encodeText(z.text.slice(0,m[0]-before)+repl+z.text.slice(m[1]-before),z.c);edits.push(z.tok)}else{const a=segments[first],z=segments[last];a.tok.replacement=encodeText(a.text.slice(0,m[0]-before)+repl,a.c);z.tok.replacement=encodeText(z.text.slice(m[1]-(after-z.text.length)),z.c);for(let k=first+1;k<last;k++)segments[k].tok.replacement='<> ';edits.push(a.tok,z.tok,...segments.slice(first+1,last).map(x=>x.tok))}}
-    }
-    i=j+1;
-  }
-  if(!edits.length)return{bytes:data,count:0,diagnostics};
-  const seen=new Set(),parts=[];let pos=0;for(const t of ts){if(t.replacement===undefined||seen.has(t))continue;seen.add(t);parts.push(data.slice(pos,t.start),new TextEncoder().encode(t.replacement));pos=t.end}parts.push(data.slice(pos));const n=parts.reduce((q,x)=>q+x.length,0),out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return{bytes:out,count:seen.size,diagnostics};
-}
-
-function editDoc(doc,needle,repl){let count=0,diag=[];for(let i=0;i<doc.countPages();i++){const page=doc.loadPage(i),maps=fontMaps(page),pageObj=page.getObject?.();const co=resolve(pageObj?.get?.('Contents'));if(!co||co.isNull?.())continue;const refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];for(const ref of refs){const stream=resolve(ref);if(!stream?.isStream?.())continue;const z=editStream(stream.readStream(),needle,repl,maps);if(z.count){stream.writeStream(z.bytes);count+=z.count}else diag.push(...z.diagnostics)}}return{count,diag}}
-
-function addResult(name,msg,error=false){const row=document.createElement('div');row.className=`result-row${error?' error':''}`;const a=document.createElement('span');a.className='filename';a.textContent=name;const b=document.createElement('span');b.className='count';b.textContent=msg;row.append(a,b);results.appendChild(row)}
-function sync(){processBtn.disabled=!findInput.value.trim()||!fileInput.files.length}
-openBtn.addEventListener('click',()=>fileInput.click());findInput.addEventListener('input',sync);replaceInput.addEventListener('input',sync);fileInput.addEventListener('change',sync);sync();
-
-async function run(){const needle=findInput.value,repl=replaceInput.value,files=[...fileInput.files];if(!needle.trim()||!files.length)return;processBtn.disabled=true;results.innerHTML='';summary.classList.add('hidden');let total=0,modified=0,failed=0;for(const file of files){try{status.textContent=`Analizando ${file.name}…`;const bytes=new Uint8Array(await file.arrayBuffer()),doc=mupdf.PDFDocument.openDocument(bytes,'application/pdf');try{const r=editDoc(doc,needle,repl);if(!r.count){addResult(file.name,r.diag.length?`Sin coincidencias · ${r.diag[0]}`:'Sin coincidencias');continue}const out=doc.saveToBuffer('garbage=2,compress=yes').asUint8Array(),u=URL.createObjectURL(new Blob([out],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);total+=r.count;modified++;addResult(file.name,`${r.count} edición${r.count===1?'':'es'} aplicada · PDF descargado`)}finally{doc.destroy()}}catch(e){failed++;addResult(file.name,`Error: ${e?.message||e}`,true)}}summary.textContent=`${files.length-failed} PDF${files.length-failed===1?'':'s'} procesado${files.length-failed===1?'':'s'} · ${total} edición${total===1?'':'es'} aplicadas · ${modified} archivos modificados${failed?` · ${failed} con error`:''}`;summary.classList.remove('hidden');status.textContent=failed?`Proceso terminado con ${failed} error${failed===1?'':'es'}.`:'Proceso terminado correctamente.';sync();clearBtn.disabled=false}
-processBtn.addEventListener('click',run);clearBtn.addEventListener('click',()=>{findInput.value='';replaceInput.value='';fileInput.value='';results.innerHTML='';summary.classList.add('hidden');status.textContent='';sync();clearBtn.disabled=true});
+function toks(d,s=0,e=d.length){let a=[],i=s;while(i<e){while(i<e&&ws(d[i]))i++;if(i>=e)break;if(d[i]===37){while(i<e&&d[i]!==10&&d[i]!==13)i++;continue}let st=i,b=d[i];if(b===40){i++;let q=1;while(i<e&&q){if(d[i]===92)i+=2;else{if(d[i]===40)q++;else if(d[i]===41)q--;i++}}a.push({type:'string',start:st,end:i,raw:d.slice(st,i),kind:'literal'});continue}if(b===60&&d[i+1]!==60){i++;while(i<e&&d[i]!==62)i++;if(i<e)i++;a.push({type:'string',start:st,end:i,raw:d.slice(st,i),kind:'hex'});continue}if(b===91){i++;let q=i,dep=1;while(i<e&&dep){if(d[i]===91)dep++;else if(d[i]===93)dep--;i++}a.push({type:'array',start:st,end:i,raw:d.slice(st,i),items:toks(d,q,i-1)});continue}if(b===47){i++;while(i<e&&!del(d[i]))i++;a.push({type:'name',start:st,end:i,raw:d.slice(st,i)});continue}while(i<e&&!del(d[i]))i++;a.push({type:'word',start:st,end:i,raw:d.slice(st,i)})}return a}
+function hex(h){h=h.replace(/\s+/g,'');if(h.length%2)h+='0';return Uint8Array.from(h.match(/../g)?.map(x=>parseInt(x,16))||[])}
+function uhex(h){let b=hex(h);if(b.length%2===0&&b.length){let s='';for(let i=0;i<b.length;i+=2)s+=String.fromCharCode((b[i]<<8)|b[i+1]);return s}return String.fromCharCode(...b)}
+function cmap(obj){obj=resolve(obj);if(!obj?.isStream?.())return null;let t=A(obj.readStream()),m=new Map(),cs=t.match(/begincodespacerange([\s\S]*?)endcodespacerange/),bytes=1;if(cs){let x=cs[1].match(/<([0-9a-f]+)>\s*<([0-9a-f]+)>/i);if(x)bytes=Math.max(1,Math.ceil(x[1].length/2))}function sec(n){let x=t.match(new RegExp('(?:\\d+\\s+)?begin'+n+'([\\s\\S]*?)end'+n));return x?x[1]:''}for(let l of sec('bfchar').split(/\r?\n/)){let x=l.match(/<([0-9a-f]+)>\s*<([0-9a-f]+)>/i);if(x)m.set(parseInt(x[1],16),uhex(x[2]))}for(let l of sec('bfrange').split(/\r?\n/)){let x=l.match(/<([0-9a-f]+)>\s*<([0-9a-f]+)>\s*<([0-9a-f]+)>/i);if(x){let a=parseInt(x[1],16),b=parseInt(x[2],16),u=parseInt(x[3],16);if(b-a<65536)for(let c=a;c<=b;c++)m.set(c,String.fromCodePoint(u+c-a));continue}x=l.match(/<([0-9a-f]+)>\s*<([0-9a-f]+)>\s*\[([^\]]+)\]/i);if(x){let a=parseInt(x[1],16),b=parseInt(x[2],16),v=[...x[3].matchAll(/<([0-9a-f]+)>/gi)];for(let c=a;c<=b&&c-a<v.length;c++)m.set(c,uhex(v[c-a][1]))}}if(!m.size)return null;let rev=new Map();for(let [k,v] of m)if(!rev.has(v))rev.set(v,k);return{map:m,rev,bytes}}
+function fontMaps(page){let po=page?.getObject?.(),res=resolve(po?.getInheritable?.('Resources')||po?.get?.('Resources')),fonts=resolve(res?.get?.('Font')),out=new Map();if(!fonts?.isDictionary?.())return out;fonts.forEach((v,k)=>{try{let name=String(k),f=resolve(v),c=f?.get?.('ToUnicode')?cmap(f.get('ToUnicode')):null;if(!c){let ds=resolve(f?.get?.('DescendantFonts'));if(ds?.isArray?.()&&ds.length)c=cmap(resolve(ds.get(0))?.get?.('ToUnicode'))}if(c)out.set(name,c)}catch(_){}});return out}
+function decode(t,c){let b;if(t.kind==='hex')b=hex(A(t.raw.slice(1,-1)));else{let a=[];for(let i=1;i<t.raw.length-1;i++){let x=t.raw.charCodeAt(i);if(x!==92){a.push(x);continue}i++;x=t.raw.charCodeAt(i);if(x===110)a.push(10);else if(x===114)a.push(13);else if(x===116)a.push(9);else if(x===98)a.push(8);else if(x===102)a.push(12);else if(x===40||x===41||x===92)a.push(x);else a.push(x)}b=Uint8Array.from(a)}let s='';for(let i=0;i+c.bytes<=b.length;i+=c.bytes){let v=0;for(let j=0;j<c.bytes;j++)v=(v<<8)|b[i+j];s+=c.map.get(v)||'�'}return s}
+function encode(s,c){let a=[];for(let ch of s){let v=c.rev.get(ch);if(v==null)throw Error(`El carácter «${ch}» no existe en la codificación de la fuente original.`);for(let j=c.bytes-1;j>=0;j--)a.push(v>>(8*j)&255)}return '<'+a.map(x=>x.toString(16).padStart(2,'0')).join('')+'>'}
+function locate(s,n){let i=s.indexOf(n);if(i>=0)return[i,i+n.length];let nn=n.replace(/\s+/g,' '),ss=s.replace(/\s+/g,' '),j=ss.indexOf(nn);if(j<0)return null;let p=0,a=-1,b=-1;for(let k=0;k<s.length;k++){if(/\s/.test(s[k]))continue;if(p===j&&a<0)a=k;if(p===j+nn.length){b=k;break}p++}return[a<0?0:a,b<0?s.length:b]}
+function editStream(bytes,needle,repl,maps){let d=new Uint8Array(bytes),ts=toks(d),ed=[],diag=[];for(let i=0;i<ts.length;i++){if(ts[i].type!=='word'||A(ts[i].raw)!=='BT')continue;let j=i+1,font=null,segs=[];for(;j<ts.length;j++){let t=ts[j],w=t.type==='word'?A(t.raw):'';if(w==='ET')break;if(w==='Tf'){let n=ts[j-1];if(n?.type==='name')font=A(n.raw).slice(1);continue}if(w!=='Tj'&&w!=='TJ')continue;let c=maps.get(font);if(!c){diag.push(`Sin ToUnicode utilizable para ${font||'?'} `);continue}if(w==='Tj'){let s=ts[j-1];if(s?.type==='string')segs.push({tok:s,c,text:decode(s,c)})}else{let ar=ts[j-1];if(ar?.type==='array')for(let s of ar.items)if(s.type==='string')segs.push({tok:s,c,text:decode(s,c)})}}if(j>=ts.length)continue;let full=segs.map(x=>x.text).join(''),m=locate(full,needle);if(!m)continue;let cur=0,first=-1,last=-1;for(let k=0;k<segs.length;k++){let z=segs[k],a=cur,b=cur+z.text.length;if(m[0]<b&&m[1]>a){if(first<0)first=k;last=k}cur=b}if(first<0)continue;let before=segs.slice(0,first).reduce((q,x)=>q+x.text.length,0);if(first===last){let z=segs[first],local0=m[0]-before,local1=m[1]-before;z.tok.replacement=encode(z.text.slice(0,local0)+repl+z.text.slice(local1),z.c);ed.push(z.tok)}else{diag.push('La coincidencia cruza varios strings TJ; se omite para no alterar la geometría.')}}if(!ed.length)return{bytes:d,count:0,diag};let seen=new Set(),parts=[],pos=0;for(let t of ts){if(t.replacement===undefined||seen.has(t))continue;seen.add(t);parts.push(d.slice(pos,t.start),new TextEncoder().encode(t.replacement));pos=t.end}parts.push(d.slice(pos));let n=parts.reduce((q,x)=>q+x.length,0),o=new Uint8Array(n),p=0;for(let x of parts){o.set(x,p);p+=x.length}return{bytes:o,count:seen.size,diag}}
+function editDoc(doc,n,r){let count=0,diag=[];for(let i=0;i<doc.countPages();i++){let page=doc.loadPage(i),maps=fontMaps(page),po=page.getObject?.(),co=po?.get?.('Contents');if(!co||co.isNull?.())continue;let refs=co.isArray?.()?Array.from({length:co.length},(_,k)=>co.get(k)):[co];for(let ref of refs){let st=resolve(ref);if(!st?.isStream?.())continue;let z=editStream(st.readStream(),n,r,maps);if(z.count){st.writeStream(z.bytes);count+=z.count}else diag.push(...z.diag)}}return{count,diag}}
+function result(name,msg,error=false){let row=document.createElement('div');row.className='result-row'+(error?' error':'');let a=document.createElement('span');a.className='filename';a.textContent=name;let b=document.createElement('span');b.className='count';b.textContent=msg;row.append(a,b);results.appendChild(row)}
+function sync(){processBtn.disabled=!findInput.value.trim()||!fileInput.files.length}openBtn.addEventListener('click',()=>fileInput.click());findInput.addEventListener('input',sync);replaceInput.addEventListener('input',sync);fileInput.addEventListener('change',sync);sync();
+async function run(){let n=findInput.value,r=replaceInput.value,files=[...fileInput.files];if(!n.trim()||!files.length)return;processBtn.disabled=true;results.innerHTML='';summary.classList.add('hidden');let total=0,mod=0,fail=0;for(let f of files)try{status.textContent=`Analizando ${f.name}…`;let doc=mupdf.PDFDocument.openDocument(new Uint8Array(await f.arrayBuffer()),'application/pdf');try{let z=editDoc(doc,n,r);if(!z.count){result(f.name,z.diag.length?`Sin coincidencias · ${z.diag[0]}`:'Sin coincidencias');continue}let out=doc.saveToBuffer('garbage=2,compress=yes').asUint8Array(),u=URL.createObjectURL(new Blob([out],{type:'application/pdf'})),a=document.createElement('a');a.href=u;a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);total+=z.count;mod++;result(f.name,`${z.count} edición${z.count===1?'':'es'} aplicada · PDF descargado`)}finally{doc.destroy()}}catch(e){fail++;result(f.name,`Error: ${e?.message||e}`,true)}summary.textContent=`${files.length-fail} PDF${files.length-fail===1?'':'s'} procesado${files.length-fail===1?'':'s'} · ${total} edición${total===1?'':'es'} aplicadas · ${mod} archivos modificados${fail?` · ${fail} con error`:''}`;summary.classList.remove('hidden');status.textContent=fail?`Proceso terminado con ${fail} error${fail===1?'':'es'}.`:'Proceso terminado correctamente.';sync()}
+processBtn.addEventListener('click',run);clearBtn.addEventListener('click',()=>{findInput.value='';replaceInput.value='';fileInput.value='';results.innerHTML='';summary.classList.add('hidden');status.textContent='';sync()});
