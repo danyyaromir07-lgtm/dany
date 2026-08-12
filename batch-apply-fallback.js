@@ -1,2 +1,2 @@
-export async function runFallback(){const mod=await import('./batch-apply-fallback-v2.js?v=20260812-305');return mod.runFallback()}
+export async function runFallback(){const mod=await import('./batch-apply-fallback-v4.js?v=20260812-1');return mod.runFallback()}
 window.__runBatchFallback=runFallback;
