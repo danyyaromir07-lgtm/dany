@@ -1,7 +1,7 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
 import { inspectPage, normalize } from './adaptive-engine-v1.js';
-import { runRecognition } from './vector-ocr-v1.js';
+import { runRecognition } from './vector-ocr-v2.js?v=20260812-309';
 const $=s=>document.querySelector(s), filesEl=$('#batchFiles'), rows=$('#batchRows'), add=$('#batchAdd'), analyze=$('#batchAnalyze'), clear=$('#batchClear'), status=$('#batchStatus'), summary=$('#batchSummary'), table=$('#batchTable'), preview=$('#batchPreview'), previewTitle=$('#batchPreviewTitle'), previewImg=$('#batchPreviewImg'), previewMinus=$('#previewMinus'), preview100=$('#preview100'), previewPlus=$('#previewPlus'), previewFit=$('#previewFit'), viewport=$('#previewViewport'), apply=$('#batchApply'), progress=$('#batchProgress'), progressBar=$('#batchProgressBar'), progressText=$('#batchProgressText'), fileCount=$('#batchFileCount'), fileNames=$('#batchFileNames');
 let files=[],rules=[],analysis=[],previewUrl='',previewZoom=1.5;
 const ruleKey=s=>normalize(String(s||'')).replace(/[‐‑‒–—−]/g,'-').replace(/\s*[-]\s*/g,'-').replace(/\s+/g,' ').trim().toLowerCase();
