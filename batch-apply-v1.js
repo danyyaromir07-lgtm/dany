@@ -1,19 +1,62 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
-import JSZip from 'https://esm.sh/jszip@3.10.1';
 import { editDoc } from './text-editor-v64.js';
-import { editFreeTextDetailed } from './adaptive-engine-v1.js';
-import { applyVectorOCR } from './vector-apply-v1.js';
+
 const applyBtn=document.querySelector('#batchApply'),commentsBox=document.querySelector('#batchRemoveComments'),status=document.querySelector('#batchStatus'),summary=document.querySelector('#batchSummary'),progress=document.querySelector('#batchProgress'),progressBar=document.querySelector('#batchProgressBar'),progressText=document.querySelector('#batchProgressText');
 const removableTypes=new Set(['Text','FreeText','Line','Square','Circle','Polygon','PolyLine','Highlight','Underline','Squiggly','StrikeOut','Stamp','Caret','Ink','Popup']);
 function annotationType(a){try{return a.getType()||''}catch(_){return''}}
 function cleanupAnnotations(doc,preserve=new Set()){let removed=0;for(const page of doc.getPages()){for(const a of page.getAnnotations?.()||[]){const type=annotationType(a);if(!removableTypes.has(type)||preserve.has(a))continue;try{page.deleteAnnotation(a);removed++}catch(_){} }try{page.update()}catch(_){}}return removed}
 function countRemovableAnnotations(doc){let n=0;for(const page of doc.getPages())for(const a of page.getAnnotations?.()||[])if(removableTypes.has(annotationType(a)))n++;return n}
-async function applyOne(a){let data=a.data,edits=0,annotationEdits=0,vectorEdits=0,removedComments=0,vectorSkipped=[];const doc=mupdf.PDFDocument.openDocument(data,'application/pdf');try{const editedFreeTexts=new Set();for(const r of a.counts.filter(x=>x.find.trim())){let guard=0;while(guard<r.count){const n=editDoc(doc,r.find,r.replace);if(!n)break;edits+=n;guard++}if(r.annotationCount){const z=editFreeTextDetailed(doc,r.find,r.replace);annotationEdits+=z.count;for(const x of z.preserved)editedFreeTexts.add(x)}}const vz=applyVectorOCR(doc,a);vectorEdits+=vz.count;vectorSkipped.push(...vz.skipped);for(const x of vz.preserved)editedFreeTexts.add(x);if(vectorSkipped.length)console.warn('Vector/OCR',a.name,vectorSkipped);if(commentsBox?.checked){removedComments=cleanupAnnotations(doc,editedFreeTexts)}if(edits||annotationEdits||vectorEdits||removedComments)data=doc.saveToBuffer('garbage=2,compress=yes,appearance=yes').asUint8Array();const verify=mupdf.PDFDocument.openDocument(data,'application/pdf');try{const remaining=countRemovableAnnotations(verify);if(remaining>0&&commentsBox?.checked)console.warn(`La verificación dejó ${remaining} anotaciones en ${a.name}.`)}finally{verify.destroy()}}finally{doc.destroy()}return{bytes:data,edits:edits+annotationEdits+vectorEdits,realTextEdits:edits,freeTextEdits:annotationEdits,vectorEdits,vectorSkipped,comments:removedComments}}
-async function downloadZip(items){const zip=JSZip();items.forEach(x=>zip.file(x.name.replace(/\.pdf$/i,'')+'_procesado.pdf',x.bytes));return zip.generateAsync({type:'blob',compression:'STORE'})}
 function setProgress(done,total,label=''){const pct=total?Math.round(done/total*100):0;if(progress){progress.classList.remove('hidden');progressBar.style.width=`${pct}%`;progressText.textContent=`${pct}% · ${done} / ${total}${label?` · ${label}`:''}`}}
 function updateStats(files,edits,comments,zip='—'){const f=document.querySelector('#statFiles'),e=document.querySelector('#statEdits'),c=document.querySelector('#statComments'),z=document.querySelector('#statZip');if(f)f.textContent=files;if(e)e.textContent=edits;if(c)c.textContent=comments;if(z)z.textContent=zip)}
-async function run(){if(!window.__batchAnalysis?.length){if(status)status.textContent='Primero analiza al menos un PDF.';return}applyBtn.disabled=true;const list=window.__batchAnalysis,outputs=[],failed=[];let totalEdits=0,totalComments=0,done=0,totalReal=0,totalFreeText=0,totalVector=0;updateStats(0,0,0,'—');setProgress(0,list.length,'Iniciando aplicación');const concurrency=Math.min(2,Math.max(1,list.length));let next=0;
-async function worker(){while(true){const i=next++;if(i>=list.length)return;const a=list[i];status.textContent=`Aplicando ${i+1} de ${list.length}: ${a.name}`;try{const out=await applyOne(a);outputs.push({...a,...out});totalEdits+=out.edits;totalReal+=out.realTextEdits;totalFreeText+=out.freeTextEdits;totalVector+=out.vectorEdits;totalComments+=out.comments;done++;updateStats(done,totalEdits,totalComments,'Preparando ZIP');if(out.vectorSkipped?.length)status.textContent=`${a.name}: ${out.vectorSkipped.join(' · ')}`}catch(e){failed.push({name:a.name,error:e?.message||String(e)});done++;status.textContent=`Error en ${a.name}: ${e?.message||String(e)}`;console.error(e)}setProgress(done,list.length,a.name);await new Promise(r=>setTimeout(r,0))}}
-await Promise.all(Array.from({length:concurrency},()=>worker()));
-if(outputs.length){setProgress(list.length-.1,list.length,'Generando ZIP');try{const blob=await downloadZip(outputs),u=URL.createObjectURL(blob),link=document.createElement('a');link.href=u;link.download='PDF_tools_procesados.zip';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);updateStats(outputs.length,totalEdits,totalComments,'✓ Descargado');setProgress(list.length,list.length,'ZIP listo')}catch(e){failed.push({name:'ZIP',error:e?.message||String(e)});status.textContent=`No se pudo generar el ZIP: ${e?.message||String(e)}`}}else updateStats(0,0,0,'Sin salida');summary.textContent=`${outputs.length} PDF${outputs.length===1?'':'s'} procesado${outputs.length===1?'':'s'} · ${totalReal} edición${totalReal===1?'':'es'} de texto PDF · ${totalFreeText} edición${totalFreeText===1?'':'es'} FreeText · ${totalVector} edición${totalVector===1?'':'es'} vector/OCR · ${totalComments} comentario${totalComments===1?'':'s'} eliminado${totalComments===1?'':'s'}${failed.length?` · ${failed.length} con error`:''} · ${outputs.length?'ZIP descargado':'sin salida'}`;summary.classList.remove('hidden');status.textContent=failed.length?`Aplicación terminada con ${failed.length} error${failed.length===1?'':'es'}. Revisa el detalle del estado.`:'Aplicación terminada correctamente.';applyBtn.disabled=false;setTimeout(()=>progress?.classList.add('hidden'),1500)}
-applyBtn?.addEventListener('click',run);window.__batchApplyReady=true;
+
+async function applyOne(a,applyVectorOCR){
+  let data=a.data,edits=0,annotationEdits=0,vectorEdits=0,removedComments=0,vectorSkipped=[];
+  const doc=mupdf.PDFDocument.openDocument(data,'application/pdf');
+  try{
+    const editedFreeTexts=new Set();
+    for(const r of (a.counts||[]).filter(x=>x.find?.trim())){
+      let guard=0;
+      while(guard<r.count){const n=editDoc(doc,r.find,r.replace);if(!n)break;edits+=n;guard++}
+      if(r.annotationCount){
+        const {editFreeTextDetailed}=await import('./adaptive-engine-v1.js');
+        const z=editFreeTextDetailed(doc,r.find,r.replace);annotationEdits+=z.count;for(const x of z.preserved)editedFreeTexts.add(x);
+      }
+    }
+    const vz=applyVectorOCR?applyVectorOCR(doc,a):{count:0,preserved:new Set(),skipped:['Motor vector/OCR no disponible']};
+    vectorEdits=vz.count;vectorSkipped.push(...(vz.skipped||[]));
+    for(const x of (vz.preserved||[]))editedFreeTexts.add(x);
+    if(vectorSkipped.length)console.warn('Vector/OCR',a.name,vectorSkipped);
+    if(commentsBox?.checked)removedComments=cleanupAnnotations(doc,editedFreeTexts);
+    if(edits||annotationEdits||vectorEdits||removedComments)data=doc.saveToBuffer('garbage=2,compress=yes,appearance=yes').asUint8Array();
+    const verify=mupdf.PDFDocument.openDocument(data,'application/pdf');
+    try{const remaining=countRemovableAnnotations(verify);if(remaining>0&&commentsBox?.checked)console.warn(`La verificación dejó ${remaining} anotaciones en ${a.name}.`)}finally{verify.destroy()}
+  }finally{doc.destroy()}
+  return{bytes:data,edits:edits+annotationEdits+vectorEdits,realTextEdits:edits,freeTextEdits:annotationEdits,vectorEdits,vectorSkipped,comments:removedComments}
+}
+
+async function downloadZip(items){
+  const {default:JSZip}=await import('https://esm.sh/jszip@3.10.1');
+  const zip=JSZip();items.forEach(x=>zip.file(x.name.replace(/\.pdf$/i,'')+'_procesado.pdf',x.bytes));
+  return zip.generateAsync({type:'blob',compression:'STORE'});
+}
+
+async function run(){
+  try{
+    if(!window.__batchAnalysis?.length){if(status)status.textContent='Primero analiza al menos un PDF.';return}
+    applyBtn.disabled=true;
+    status.textContent='Iniciando aplicación…';
+    const {applyVectorOCR}=await import('./vector-apply-v1.js?v=103');
+    const list=window.__batchAnalysis,outputs=[],failed=[];
+    let totalEdits=0,totalComments=0,done=0,totalReal=0,totalFreeText=0,totalVector=0;
+    updateStats(0,0,0,'—');setProgress(0,list.length,'Iniciando aplicación');
+    const concurrency=Math.min(2,Math.max(1,list.length));let next=0;
+    async function worker(){while(true){const i=next++;if(i>=list.length)return;const a=list[i];status.textContent=`Aplicando ${i+1} de ${list.length}: ${a.name}`;try{const out=await applyOne(a,applyVectorOCR);outputs.push({...a,...out});totalEdits+=out.edits;totalReal+=out.realTextEdits;totalFreeText+=out.freeTextEdits;totalVector+=out.vectorEdits;totalComments+=out.comments;done++;updateStats(done,totalEdits,totalComments,'Preparando ZIP');if(out.vectorSkipped?.length)status.textContent=`${a.name}: ${out.vectorSkipped.join(' · ')}`}catch(e){failed.push({name:a.name,error:e?.message||String(e)});done++;status.textContent=`Error en ${a.name}: ${e?.message||String(e)}`;console.error(e)}setProgress(done,list.length,a.name);await new Promise(r=>setTimeout(r,0))}}
+    await Promise.all(Array.from({length:concurrency},()=>worker()));
+    if(outputs.length){setProgress(Math.max(0,list.length-.1),list.length,'Generando ZIP');try{const blob=await downloadZip(outputs),u=URL.createObjectURL(blob),link=document.createElement('a');link.href=u;link.download='PDF_tools_procesados.zip';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);updateStats(outputs.length,totalEdits,totalComments,'✓ Descargado');setProgress(list.length,list.length,'ZIP listo')}catch(e){failed.push({name:'ZIP',error:e?.message||String(e)});status.textContent=`No se pudo generar el ZIP: ${e?.message||String(e)}`}}else updateStats(0,0,0,'Sin salida');
+    summary.textContent=`${outputs.length} PDF${outputs.length===1?'':'s'} procesado${outputs.length===1?'':'s'} · ${totalReal} edición${totalReal===1?'':'es'} de texto PDF · ${totalFreeText} edición${totalFreeText===1?'':'es'} FreeText · ${totalVector} edición${totalVector===1?'':'es'} vector/OCR · ${totalComments} comentario${totalComments===1?'':'s'} eliminado${totalComments===1?'':'s'}${failed.length?` · ${failed.length} con error`:''} · ${outputs.length?'ZIP descargado':'sin salida'}`;
+    summary.classList.remove('hidden');status.textContent=failed.length?`Aplicación terminada con ${failed.length} error${failed.length===1?'':'es'}. Revisa el detalle del estado.`:'Aplicación terminada correctamente.';applyBtn.disabled=false;setTimeout(()=>progress?.classList.add('hidden'),1500)
+  }catch(e){console.error(e);if(status)status.textContent=`No se pudo iniciar la aplicación: ${e?.message||String(e)}`;applyBtn.disabled=false;summary?.classList.remove('hidden');if(summary)summary.textContent='Error al iniciar la aplicación. No se ha modificado ningún PDF.'}
+}
+
+if(applyBtn){applyBtn.disabled=false;applyBtn.addEventListener('click',run)}
+window.__batchApplyReady=true;
