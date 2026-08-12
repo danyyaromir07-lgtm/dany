@@ -1,2 +1,2 @@
-// Compatibility shim: OCR/vector recognition v2.
-export { runRecognition } from './vector-ocr-v2.js?v=20260812-ocr7';
+// Compatibility shim: OCR/vector recognition v3.
+export { runRecognition } from './vector-ocr-v3.js?v=20260812-ocr8';
