@@ -1,110 +1,11 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 const normalize = s => String(s || '').replace(/\s+/g, ' ').trim();
-
-function countPageContent(page) {
-  const out = { textObjects: 0, pathObjects: 0, imageObjects: 0, fillText: 0, fillPath: 0, strokePath: 0, fillImage: 0 };
-  try {
-    const dev = new mupdf.Device({
-      fillText() { out.fillText++; },
-      fillPath() { out.fillPath++; out.pathObjects++; },
-      strokePath() { out.strokePath++; out.pathObjects++; },
-      fillImage() { out.fillImage++; out.imageObjects++; },
-      fillImageMask() { out.imageObjects++; }
-    });
-    page.runPageContents(dev, mupdf.Matrix.identity);
-    dev.close();
-  } catch (_) {}
-  out.textObjects = out.fillText;
-  return out;
-}
-
-function getAnnotations(page) {
-  try { return page.getAnnotations ? page.getAnnotations() : []; } catch (_) { return []; }
-}
-
-export function inspectPage(page, options = {}) {
-  const graphics = options.graphics !== false;
-  const content = graphics ? countPageContent(page) : { textObjects: 0, pathObjects: 0, imageObjects: 0, fillText: 0, fillPath: 0, strokePath: 0, fillImage: 0 };
-  let structured = null;
-  let text = '';
-  try {
-    structured = page.toStructuredText('preserve-spans');
-    text = structured.asText();
-  } catch (_) {}
-  const annotations = getAnnotations(page);
-  const ann = annotations.map(a => {
-    let type = '';
-    let contents = '';
-    try { type = a.getType(); } catch (_) {}
-    try { contents = a.getContents(); } catch (_) {}
-    return { annotation: a, type, contents };
-  });
-  const freeTexts = ann.filter(a => a.type === 'FreeText');
-  const imageBlock = structured && (() => { try { return JSON.parse(structured.asJSON()).blocks.some(b => b.type === 'image'); } catch (_) { return false; } })();
-  const images = content.imageObjects > 0 || !!imageBlock;
-  return {
-    text,
-    hasRealText: !!normalize(text),
-    annotations: ann.length,
-    freeTexts,
-    hasFreeText: freeTexts.length > 0,
-    hasImages: images,
-    hasVectorGraphics: content.pathObjects > 0,
-    content,
-    kinds: {
-      text: !!normalize(text),
-      annotation: freeTexts.length > 0,
-      vector: content.pathObjects > 0,
-      image: images
-    }
-  };
-}
-
-export function findFreeTextMatches(page, needle) {
-  const target = normalize(needle);
-  if (!target) return [];
-  const info = inspectPage(page, { graphics: false });
-  return info.freeTexts.filter(x => normalize(x.contents).includes(target));
-}
-
-export function editFreeText(doc, needle, replacement) {
-  const target = normalize(needle);
-  if (!target) return 0;
-  let count = 0;
-  for (const page of doc.getPages()) {
-    const annotations = getAnnotations(page);
-    let changed = false;
-    for (const a of annotations) {
-      let type = '';
-      let contents = '';
-      try { type = a.getType(); } catch (_) {}
-      if (type !== 'FreeText') continue;
-      try { contents = a.getContents(); } catch (_) { continue; }
-      const normalized = normalize(contents);
-      if (!normalized.includes(target)) continue;
-      const next = contents.replace(target, replacement);
-      try {
-        a.setContents(next);
-        a.update();
-        changed = true;
-        count++;
-      } catch (_) {}
-    }
-    if (changed) {
-      try { page.update(); } catch (_) {}
-    }
-  }
-  return count;
-}
-
-export function describeKinds(info) {
-  const labels = [];
-  if (info.kinds.text) labels.push('🟢 texto PDF');
-  if (info.kinds.annotation) labels.push('🟠 FreeText');
-  if (info.kinds.vector) labels.push('🟠 vectorial');
-  if (info.kinds.image) labels.push('🔴 imagen');
-  return labels.length ? labels.join(' · ') : 'Sin contenido clasificable';
-}
-
-export { normalize };
+function countPageContent(page){const out={textObjects:0,pathObjects:0,imageObjects:0,fillText:0,fillPath:0,strokePath:0,fillImage:0};try{const dev=new mupdf.Device({fillText(){out.fillText++},fillPath(){out.fillPath++;out.pathObjects++},strokePath(){out.strokePath++;out.pathObjects++},fillImage(){out.fillImage++;out.imageObjects++},fillImageMask(){out.imageObjects++}});page.runPageContents(dev,mupdf.Matrix.identity);dev.close()}catch(_){}out.textObjects=out.fillText;return out}
+function getAnnotations(page){try{return page.getAnnotations?page.getAnnotations():[]}catch(_){return[]}}
+export function inspectPage(page,options={}){const graphics=options.graphics!==false,content=graphics?countPageContent(page):{textObjects:0,pathObjects:0,imageObjects:0,fillText:0,fillPath:0,strokePath:0,fillImage:0};let structured=null,text='';try{structured=page.toStructuredText('preserve-spans');text=structured.asText()}catch(_){}const annotations=getAnnotations(page),ann=annotations.map(a=>{let type='',contents='';try{type=a.getType()}catch(_){}try{contents=a.getContents()}catch(_){}return{annotation:a,type,contents}}),freeTexts=ann.filter(a=>a.type==='FreeText'),imageBlock=structured&&(()=>{try{return JSON.parse(structured.asJSON()).blocks.some(b=>b.type==='image')}catch(_){return false}})(),images=content.imageObjects>0||!!imageBlock;return{text,hasRealText:!!normalize(text),annotations:ann.length,freeTexts,hasFreeText:freeTexts.length>0,hasImages:images,hasVectorGraphics:content.pathObjects>0,content,kinds:{text:!!normalize(text),annotation:freeTexts.length>0,vector:content.pathObjects>0,image:images}}}
+export function findFreeTextMatches(page,needle){const target=normalize(needle);if(!target)return[];const info=inspectPage(page,{graphics:false});return info.freeTexts.filter(x=>normalize(x.contents).includes(target))}
+export function editFreeTextDetailed(doc,needle,replacement){const target=normalize(needle);if(!target)return{count:0,preserved:new Set()};let count=0;const preserved=new Set();for(const page of doc.getPages()){const annotations=getAnnotations(page);let changed=false;for(const a of annotations){let type='',contents='';try{type=a.getType()}catch(_){}if(type!=='FreeText')continue;try{contents=a.getContents()}catch(_){continue}if(!normalize(contents).includes(target))continue;const next=contents.replace(target,replacement);try{a.setContents(next);a.update();changed=true;count++;preserved.add(a)}catch(_){} }if(changed)try{page.update()}catch(_){} }return{count,preserved}}
+export function editFreeText(doc,needle,replacement){return editFreeTextDetailed(doc,needle,replacement).count}
+export function describeKinds(info){const labels=[];if(info.kinds.text)labels.push('🟢 texto PDF');if(info.kinds.annotation)labels.push('🟠 FreeText');if(info.kinds.vector)labels.push('🟠 vectorial');if(info.kinds.image)labels.push('🔴 imagen');return labels.length?labels.join(' · '):'Sin contenido clasificable'}
+export {normalize};
