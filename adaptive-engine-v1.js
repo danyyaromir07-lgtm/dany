@@ -23,8 +23,9 @@ function getAnnotations(page) {
   try { return page.getAnnotations ? page.getAnnotations() : []; } catch (_) { return []; }
 }
 
-export function inspectPage(page) {
-  const content = countPageContent(page);
+export function inspectPage(page, options = {}) {
+  const graphics = options.graphics !== false;
+  const content = graphics ? countPageContent(page) : { textObjects: 0, pathObjects: 0, imageObjects: 0, fillText: 0, fillPath: 0, strokePath: 0, fillImage: 0 };
   let structured = null;
   let text = '';
   try {
@@ -40,7 +41,8 @@ export function inspectPage(page) {
     return { annotation: a, type, contents };
   });
   const freeTexts = ann.filter(a => a.type === 'FreeText');
-  const images = content.imageObjects > 0 || (structured && (() => { try { return JSON.parse(structured.asJSON()).blocks.some(b => b.type === 'image'); } catch (_) { return false; } })());
+  const imageBlock = structured && (() => { try { return JSON.parse(structured.asJSON()).blocks.some(b => b.type === 'image'); } catch (_) { return false; } })();
+  const images = content.imageObjects > 0 || !!imageBlock;
   return {
     text,
     hasRealText: !!normalize(text),
@@ -62,7 +64,7 @@ export function inspectPage(page) {
 export function findFreeTextMatches(page, needle) {
   const target = normalize(needle);
   if (!target) return [];
-  const info = inspectPage(page);
+  const info = inspectPage(page, { graphics: false });
   return info.freeTexts.filter(x => normalize(x.contents).includes(target));
 }
 
@@ -81,8 +83,6 @@ export function editFreeText(doc, needle, replacement) {
       try { contents = a.getContents(); } catch (_) { continue; }
       const normalized = normalize(contents);
       if (!normalized.includes(target)) continue;
-      // Preserve the annotation itself, its rectangle and its existing appearance settings.
-      // Only change its Contents and ask MuPDF to regenerate its appearance.
       const next = contents.replace(target, replacement);
       try {
         a.setContents(next);
