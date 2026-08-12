@@ -1,2 +1,2 @@
 // Compatibility shim: keep the historical batch import stable.
-export { runRecognition } from './vector-ocr-v8.js?v=20260813-ocr-fast8';
+export { runRecognition } from './vector-ocr-v9.js?v=20260813-ocr-fast9';
