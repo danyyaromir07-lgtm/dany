@@ -31,13 +31,13 @@ function removeComments(doc, preserved) {
   return removed;
 }
 
-async function runFallback() {
+export async function runFallback() {
   try {
     say('Iniciando aplicación…');
     const list = window.__batchAnalysis || [];
     if (!list.length) { say('Primero analiza al menos un PDF.'); return; }
     progressSet(0, list.length, 'Cargando motor vector/OCR');
-    const vectorModule = await import('./vector-apply-v1.js?v=109');
+    const vectorModule = await import('./vector-apply-v1.js?v=110');
     const applyVectorOCR = vectorModule.applyVectorOCR;
     if (typeof applyVectorOCR !== 'function') throw new Error('No se pudo cargar el motor vector/OCR.');
     const outputs = [];
