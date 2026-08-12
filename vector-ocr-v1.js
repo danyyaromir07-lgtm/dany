@@ -1,2 +1,3 @@
-// Compatibility shim: OCR/vector recognition v3.
-export { runRecognition } from './vector-ocr-v3.js?v=20260812-ocr8';
+// Stable public entry point for batch analysis.
+// OCR engine is centralized in vector-ocr-v12.js to avoid stale version routing.
+export { runRecognition } from './vector-ocr-v12.js?v=20260813-ocr12';
