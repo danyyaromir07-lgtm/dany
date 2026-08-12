@@ -1,0 +1,84 @@
+import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
+import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
+import { editFreeTextDetailed } from './adaptive-engine-v1.js';
+import { editDoc } from './text-editor-v64.js';
+const $=s=>document.querySelector(s),status=$('#batchStatus'),progress=$('#batchProgress'),progressBar=$('#batchProgressBar'),progressText=$('#batchProgressText'),summary=$('#batchSummary'),commentsBox=$('#batchRemoveComments');
+const removableTypes=new Set(['Text','FreeText','Line','Square','Circle','Polygon','PolyLine','Highlight','Underline','Squiggly','StrikeOut','Stamp','Caret','Ink','Popup']);
+function say(t){if(status)status.textContent=t}
+function progressSet(d,t,l){const p=t?Math.round(d/t*100):0;progress?.classList.remove('hidden');if(progressBar)progressBar.style.width=p+'%';if(progressText)progressText.textContent=p+'% · '+d+' / '+t+(l?' · '+l:'')}
+function asBytes(data){if(data instanceof Uint8Array)return new Uint8Array(data);if(data instanceof ArrayBuffer)return new Uint8Array(data.slice(0));if(ArrayBuffer.isView(data))return new Uint8Array(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength));throw new Error('Los datos del PDF no tienen un formato binario válido.')}
+function resolvePdfObject(doc,obj){if(!obj)return null;try{return doc.context.lookup(obj)||obj}catch(_){return obj}}
+function annotationContents(doc,ref){const o=resolvePdfObject(doc,ref);if(!o?.get)return '';const c=o.get(PDFName.of('Contents'));try{return c?.decodeText?.()||''}catch(_){return String(c||'').replace(/^\(|\)$/g,'')}}
+function isPreservedFreeText(doc,ref,rules){const o=resolvePdfObject(doc,ref);if(!o?.get)return false;const st=o.get(PDFName.of('Subtype'))?.toString?.().replace(/^\//,'')||'';if(st!=='FreeText')return false;const text=annotationContents(doc,ref).replace(/\s+/g,' ').trim().toLowerCase();return rules.some(r=>{const n=String(r.find||'').replace(/\s+/g,' ').trim().toLowerCase();return n&&text.includes(n)})}
+function getPageCount(doc){if(typeof doc.getPageCount==='function')return doc.getPageCount();if(typeof doc.getPages==='function'){const p=doc.getPages();return Array.isArray(p)?p.length:(typeof p?.length==='number'?p.length:0)}return 0}
+function getPage(doc,i){if(typeof doc.getPage==='function')return doc.getPage(i);const pages=doc.getPages?.();return pages?.[i]||null}
+async function cleanComments(data,rules){
+  const doc=await PDFDocument.load(data,{updateMetadata:false,ignoreEncryption:false});
+  let count=0; const pageCount=getPageCount(doc);
+  if(!pageCount) return {bytes:new Uint8Array(data),count:0};
+  for(let pi=0;pi<pageCount;pi++){
+    const page=getPage(doc,pi); if(!page) continue;
+    const annRef=page.node.get(PDFName.of('Annots')); const annots=resolvePdfObject(doc,annRef);
+    if(!annots||typeof annots.size!=='function') continue;
+    const keep=[];
+    for(let i=0;i<annots.size();i++){
+      const ref=annots.get(i),o=resolvePdfObject(doc,ref),st=o?.get?.(PDFName.of('Subtype'))?.toString?.().replace(/^\//,'')||'';
+      if(!removableTypes.has(st)||isPreservedFreeText(doc,ref,rules))keep.push(ref);else count++;
+    }
+    if(keep.length)page.node.set(PDFName.of('Annots'),doc.context.obj(keep));else page.node.delete(PDFName.of('Annots'));
+  }
+  const bytes=count?await doc.save({useObjectStreams:true,addDefaultPage:false}):new Uint8Array(data);
+  const verify=await PDFDocument.load(bytes,{updateMetadata:false,ignoreEncryption:false});
+  let remaining=0; const verifyPages=getPageCount(verify);
+  for(let pi=0;pi<verifyPages;pi++){
+    const page=getPage(verify,pi); if(!page)continue;
+    const annots=resolvePdfObject(verify,page.node.get(PDFName.of('Annots'))); if(!annots||typeof annots.size!=='function')continue;
+    for(let i=0;i<annots.size();i++){
+      const ref=annots.get(i),o=resolvePdfObject(verify,ref),st=o?.get?.(PDFName.of('Subtype'))?.toString?.().replace(/^\//,'')||'';
+      if(removableTypes.has(st)&&!isPreservedFreeText(verify,ref,rules))remaining++;
+    }
+  }
+  if(remaining)throw new Error(`La verificación de comentarios falló: ${remaining} anotaciones removibles siguen presentes.`);
+  return {bytes,count};
+}
+function savePdf(doc){const b=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');return b?.asUint8Array?new Uint8Array(b.asUint8Array()):new Uint8Array(b)}
+export async function runFallback(){
+ try{
+  say('Iniciando aplicación…'); const list=window.__batchAnalysis||[];
+  if(!list.length){say('Primero analiza al menos un PDF.');return}
+  progressSet(0,list.length,'Cargando motores');
+  const vm=await import('./vector-apply-v2.js?v=20260812-307'); const applyVectorOCR=vm.applyVectorOCR;
+  if(typeof applyVectorOCR!=='function')throw new Error('No se pudo cargar el motor vector/OCR.');
+  const outputs=[],diagnostics=[]; let totalEdits=0,totalVector=0,totalComments=0,failures=0;
+  for(let i=0;i<list.length;i++){
+   const item=list[i]; progressSet(i,list.length,'Procesando '+(item.name||'PDF'));
+   if(item.error){failures++;diagnostics.push(item.name+': '+item.error);continue}
+   say('Aplicando '+(i+1)+' de '+list.length+': '+item.name);
+   const source=asBytes(item.data); let work=source,doc=null,edits=0,vectorEdits=0,comments=0;
+   try{
+    const rules=(item.counts||[]).filter(r=>String(r.find||'').trim()&&String(r.replace??'')!=='');
+    if(commentsBox?.checked){const cleaned=await cleanComments(source,rules);work=cleaned.bytes;comments=cleaned.count}
+    doc=mupdf.PDFDocument.openDocument(new Uint8Array(work),'application/pdf');
+    for(const r of rules){
+      const expected=Math.max(0,Number(r.count||0));
+      if(expected>0){let guard=0;while(guard<expected){const n=editDoc(doc,r.find,r.replace);if(!n)break;edits+=n;guard++}}
+      const ft=editFreeTextDetailed(doc,r.find,r.replace)||{};edits+=Number(ft.count||0);
+    }
+    const result=applyVectorOCR(doc,item)||{}; vectorEdits=Number(result.count||0);
+    if(result.skipped?.length)diagnostics.push(item.name+': '+result.skipped.join(' · '));
+    if(edits||vectorEdits||comments)work=savePdf(doc);else work=new Uint8Array(work);
+    outputs.push({name:item.name,bytes:work}); totalEdits+=edits;totalVector+=vectorEdits;totalComments+=comments;
+   }catch(e){failures++;diagnostics.push(item.name+': '+(e?.message||String(e)));outputs.push({name:item.name,bytes:source})}
+   finally{try{doc?.destroy()}catch(_){}}
+   progressSet(i+1,list.length,item.name);await new Promise(r=>setTimeout(r,0));
+  }
+  if(!outputs.length)throw new Error('No hay PDFs de salida.');
+  say('Generando ZIP…'); const {default:JSZip}=await import('https://esm.sh/jszip@3.10.1'); const zip=new JSZip();
+  for(const x of outputs)zip.file(x.name.replace(/\.pdf$/i,'')+'_procesado.pdf',x.bytes);
+  const blob=await zip.generateAsync({type:'blob',compression:'STORE'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='PDF_tools_procesados.zip';document.body.appendChild(link);link.click();setTimeout(()=>{link.remove();URL.revokeObjectURL(url)},3000);
+  if($('#statFiles'))$('#statFiles').textContent=outputs.length;if($('#statEdits'))$('#statEdits').textContent=totalEdits+totalVector;if($('#statComments'))$('#statComments').textContent=totalComments;if($('#statZip'))$('#statZip').textContent='✓ Descargado';
+  if(summary){summary.textContent=`${outputs.length} PDF${outputs.length===1?'':'s'} procesado${outputs.length===1?'':'s'} · ${totalEdits} edición${totalEdits===1?'':'es'} de texto/FreeText · ${totalVector} edición${totalVector===1?'':'es'} vector/OCR · ${totalComments} comentarios eliminados${failures?' · '+failures+' error'+(failures===1?'':'es'):''}${diagnostics.length?' · revisa el diagnóstico':''} · ZIP descargado`;summary.classList.remove('hidden')}
+  progressSet(list.length,list.length,'ZIP listo');say(diagnostics.length?'Aplicación terminada con avisos: '+diagnostics.join(' | ').slice(0,3500):'Aplicación terminada correctamente.');
+ }catch(e){console.error(e);say('ERROR AL APLICAR: '+(e?.message||String(e)));if(summary){summary.textContent='Error al aplicar. '+(e?.message||String(e));summary.classList.remove('hidden')}}
+}
+window.__runBatchFallback=runFallback;
