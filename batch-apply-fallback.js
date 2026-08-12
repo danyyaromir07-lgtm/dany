@@ -37,38 +37,50 @@ export async function runFallback() {
     const list = window.__batchAnalysis || [];
     if (!list.length) { say('Primero analiza al menos un PDF.'); return; }
     progressSet(0, list.length, 'Cargando motor vector/OCR');
-    const vectorModule = await import('./vector-apply-v1.js?v=110');
+    const vectorModule = await import('./vector-apply-v1.js?v=111');
     const applyVectorOCR = vectorModule.applyVectorOCR;
     if (typeof applyVectorOCR !== 'function') throw new Error('No se pudo cargar el motor vector/OCR.');
     const outputs = [];
     let totalVector = 0;
     let totalComments = 0;
     let failures = 0;
+    const diagnostics = [];
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
       progressSet(i, list.length, 'Procesando ' + item.name);
-      if (item.error) { failures++; continue; }
+      if (item.error) { failures++; diagnostics.push(item.name + ': ' + item.error); continue; }
       say('Aplicando ' + (i + 1) + ' de ' + list.length + ': ' + item.name);
+      let doc = null;
       try {
-        const doc = mupdf.PDFDocument.openDocument(item.data, 'application/pdf');
+        doc = mupdf.PDFDocument.openDocument(item.data, 'application/pdf');
         let vectorEdits = 0;
         const preserved = new Set();
-        try {
-          const result = applyVectorOCR(doc, item) || {};
-          vectorEdits = result.count || 0;
-          for (const a of (result.preserved || [])) preserved.add(a);
-          if (result.skipped && result.skipped.length) say(result.skipped.join(' · '));
-          const comments = commentsBox && commentsBox.checked ? removeComments(doc, preserved) : 0;
-          totalComments += comments;
-          const bytes = (vectorEdits || comments) ? doc.saveToBuffer('garbage=2,compress=yes,appearance=yes').asUint8Array() : item.data;
-          outputs.push({ name: item.name, bytes: bytes });
-          totalVector += vectorEdits;
-        } finally { doc.destroy(); }
-      } catch (err) { failures++; say('Error en ' + item.name + ': ' + (err && err.message ? err.message : String(err))); }
+        const result = applyVectorOCR(doc, item) || {};
+        vectorEdits = Number(result.count || 0);
+        for (const a of (result.preserved || [])) preserved.add(a);
+        if (result.skipped && result.skipped.length) diagnostics.push(item.name + ': ' + result.skipped.join(' · '));
+        const comments = commentsBox && commentsBox.checked ? removeComments(doc, preserved) : 0;
+        totalComments += comments;
+        // Always produce an output PDF for a successfully opened input. This prevents
+        // a failed vector attempt from being reported as "no PDF generated" and lets
+        // the user inspect the result. If vectorEdits/comments are zero, the original
+        // bytes are preserved exactly.
+        let bytes = item.data;
+        if (vectorEdits || comments) {
+          bytes = doc.saveToBuffer('garbage=2,compress=yes,appearance=yes').asUint8Array();
+        }
+        outputs.push({ name: item.name, bytes });
+        totalVector += vectorEdits;
+      } catch (err) {
+        failures++;
+        diagnostics.push('Error en ' + item.name + ': ' + (err && err.message ? err.message : String(err)));
+      } finally {
+        try { doc?.destroy(); } catch (_) {}
+      }
       progressSet(i + 1, list.length, item.name);
       await new Promise(function(resolve) { setTimeout(resolve, 0); });
     }
-    if (!outputs.length) throw new Error('No se pudo generar ningún PDF.');
+    if (!outputs.length) throw new Error('No se pudo abrir ningún PDF para procesar.');
     say('Generando ZIP…');
     const JSZipModule = await import('https://esm.sh/jszip@3.10.1');
     const JSZip = JSZipModule.default;
@@ -91,11 +103,15 @@ export async function runFallback() {
     if (statComments) statComments.textContent = totalComments;
     if (statZip) statZip.textContent = '✓ Descargado';
     if (summary) {
-      summary.textContent = outputs.length + ' PDF' + (outputs.length === 1 ? '' : 's') + ' procesado' + (outputs.length === 1 ? '' : 's') + ' · ' + totalVector + ' edición' + (totalVector === 1 ? '' : 'es') + ' vector/OCR · ' + totalComments + ' comentarios eliminados' + (failures ? ' · ' + failures + ' con error' : '') + ' · ZIP descargado';
+      let text = outputs.length + ' PDF' + (outputs.length === 1 ? '' : 's') + ' procesado' + (outputs.length === 1 ? '' : 's') + ' · ' + totalVector + ' edición' + (totalVector === 1 ? '' : 'es') + ' vector/OCR · ' + totalComments + ' comentarios eliminados';
+      if (failures) text += ' · ' + failures + ' error' + (failures === 1 ? '' : 'es');
+      if (diagnostics.length) text += ' · revisa el diagnóstico del estado';
+      summary.textContent = text + ' · ZIP descargado';
       summary.classList.remove('hidden');
     }
     progressSet(list.length, list.length, 'ZIP listo');
-    say(failures ? 'Aplicación terminada con ' + failures + ' error' + (failures === 1 ? '' : 'es') + '.' : 'Aplicación terminada correctamente.');
+    if (diagnostics.length) say('Aplicación terminada con avisos: ' + diagnostics.join(' | ').slice(0, 3500));
+    else say('Aplicación terminada correctamente.');
   } catch (err) {
     console.error(err);
     say('ERROR AL APLICAR: ' + (err && err.message ? err.message : String(err)));
