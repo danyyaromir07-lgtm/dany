@@ -11,13 +11,50 @@ async function recognize(canvas,mode){const w=await worker();await w.setParamete
 function words(data){return (data?.words||[]).filter(w=>w?.text?.trim()&&w.bbox).sort((a,b)=>{const ay=(a.bbox.y0+a.bbox.y1)/2,by=(b.bbox.y0+b.bbox.y1)/2;const h=Math.max(1,(a.bbox.y1-a.bbox.y0+(b.bbox.y1-b.bbox.y0))/2);return Math.abs(ay-by)<Math.max(5,h*.8)?a.bbox.x0-b.bbox.x0:ay-by})}
 function union(ws){let b=null;for(const w of ws){const q=w?.bbox;if(!q)continue;b=b?[Math.min(b[0],q.x0),Math.min(b[1],q.y0),Math.max(b[2],q.x1),Math.max(b[3],q.y1)]:[q.x0,q.y0,q.x1,q.y1]}return b}
 function result(box,conf,text,target,scale,ox,oy){const b=box.map((v,i)=>(v+(i<2?(i===0?ox:oy):i===2?ox:oy))/scale);const k=key(text),t=key(target);return {bbox:b,confidence:Number(conf)||50,similarity:sim(k,t),ocrText:text,exact:k===t}}
-function findLine(data,target,scale,ox,oy){const t=key(target),out=[];for(const line of data?.lines||[]){const txt=String(line.text||'').trim();if(!txt)continue;const k=key(txt),ratio=Math.min(k.length,t.length)/Math.max(k.length,t.length),exact=k===t,ok=exact||(ratio>=.72&&sim(k,t)>=.82);if(ok&&line.bbox){out.push(result([line.bbox.x0,line.bbox.y0,line.bbox.x1,line.bbox.y1],line.confidence,txt,target,scale,ox,oy))}}return out}
+function findLine(data,target,scale,ox,oy){const t=key(target),out=[];for(const line of data?.lines||[]){const txt=String(line.text||'').trim();if(!txt)continue;const k=key(txt),ratio=Math.min(k.length,t.length)/Math.max(k.length,t.length),exact=k===t,ok=exact||(ratio>=.72&&sim(k,t)>=.82);if(ok&&line.bbox)out.push(result([line.bbox.x0,line.bbox.y0,line.bbox.x1,line.bbox.y1],line.confidence,txt,target,scale,ox,oy))}return out}
 function findWords(data,target,scale,ox,oy){const t=key(target),ws=words(data),out=[];for(let i=0;i<ws.length;i++){let s='',pick=[];for(let j=i;j<Math.min(ws.length,i+50);j++){s+=(s?' ':'')+ws[j].text;pick.push(ws[j]);const k=key(s),ratio=Math.min(k.length,t.length)/Math.max(k.length,t.length),exact=k===t,ok=exact||(ratio>=.72&&sim(k,t)>=.84);if(ok){const conf=Math.min(...pick.map(x=>Number(x.confidence)||50));if(exact||conf>=35){const b=union(pick);if(b)out.push(result(b,conf,s,target,scale,ox,oy));break}}if(k.length>t.length+55)break}}return out}
-function find(data,target,scale=1,ox=0,oy=0){const a=[...findLine(data,target,scale,ox,oy),...findWords(data,target,scale,ox,oy)];const out=[];for(const m of a){const same=out.find(x=>iou(x.bbox,m.bbox)>.55);if(same){if(m.exact&&!same.exact||m.confidence>same.confidence)Object.assign(same,m)}else out.push(m)}return out}
+function find(data,target,scale=1,ox=0,oy=0){const a=[...findLine(data,target,scale,ox,oy),...findWords(data,target,scale,ox,oy)],out=[];for(const m of a){const same=out.find(x=>iou(x.bbox,m.bbox)>.55);if(same){if(m.exact&&!same.exact||m.confidence>same.confidence)Object.assign(same,m)}else out.push(m)}return out}
 function anchors(target){return [...new Set(String(target).split(/[_\-\s./:]+/).map(x=>x.trim()).filter(x=>x.length>=3).map(key))].sort((a,b)=>b.length-a.length).slice(0,5)}
 function anchorWords(data,target){const ws=words(data),as=anchors(target),out=[];for(const a of as){let best=null;for(const w of ws){const k=key(w.text),s=sim(k,a);if(k===a||s>=.82){if(!best||s>best.score)best={word:w,score:s}}}if(best)out.push(best)}return out}
 function crop(bitmap,b,padX,padY){const x=Math.max(0,Math.floor(b.x0-padX)),y=Math.max(0,Math.floor(b.y0-padY)),x2=Math.min(bitmap.width,Math.ceil(b.x1+padX)),y2=Math.min(bitmap.height,Math.ceil(b.y1+padY));const c=document.createElement('canvas');c.width=Math.max(1,x2-x);c.height=Math.max(1,y2-y);c.getContext('2d').drawImage(bitmap,x,y,c.width,c.height,0,0,c.width,c.height);return {c,x,y}}
-async function anchorPass(bitmap,target,baseData){const hits=[];for(const a of anchorWords(baseData,target)){const b=a.word.bbox,padX=Math.max(300,(b.x1-b.x0)*14),padY=Math.max(120,(b.y1-b.y0)*7),q=crop(bitmap,b,padX,padY);for(const mode of [6,11]){const d=await recognize(q.c,mode);hits.push(...find(d,target,3,q.x,q.y));if(hits.some(x=>x.exact))return hits}}return hits}
+async function anchorPass(bitmap,target,baseData){const hits=[];for(const a of anchorWords(baseData,target)){const b=a.word.bbox,padX=Math.max(260,(b.x1-b.x0)*12),padY=Math.max(100,(b.y1-b.y0)*6),q=crop(bitmap,b,padX,padY);for(const mode of [6,11]){const d=await recognize(q.c,mode);hits.push(...find(d,target,2,q.x,q.y));if(hits.some(x=>x.exact))return hits}}return hits}
 function gray(bitmap){const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(bitmap,0,0);const im=x.getImageData(0,0,c.width,c.height),d=im.data;for(let i=0;i<d.length;i+=4){const y=Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2]);const v=Math.max(0,Math.min(255,Math.round((y-128)*1.35+128)));d[i]=d[i+1]=d[i+2]=v}x.putImageData(im,0,0);return c}
-async function pageOCR(page,target){const scale=3,pix=page.toPixmap(mupdf.Matrix.scale(scale,scale),mupdf.ColorSpace.DeviceRGB,false,false),bitmap=await createImageBitmap(new Blob([pix.asPNG()],{type:'image/png'}));try{for(const mode of [11,6]){const data=await recognize(bitmap,mode);let hits=find(data,target,scale,0,0);if(hits.length)return hits;const ah=await anchorPass(bitmap,target,data);if(ah.length)return ah}const g=gray(bitmap);for(const mode of [11,6]){const data=await recognize(g,mode);const hits=find(data,target,scale,0,0);if(hits.length)return hits}const cols=2,rows=2,tw=Math.ceil(bitmap.width/cols),th=Math.ceil(bitmap.height/rows),all=[];for(let ry=0;ry<rows;ry++)for(let cx=0;cx<cols;cx++){const x=Math.max(0,Math.floor(cx*tw-tw*.18)),y=Math.max(0,Math.floor(ry*th-th*.18)),x2=Math.min(bitmap.width,Math.ceil((cx+1)*tw+tw*.18)),y2=Math.min(bitmap.height,Math.ceil((ry+1)*th+th*.18)),c=document.createElement('canvas');c.width=x2-x;c.height=y2-y;c.getContext('2d').drawImage(bitmap,x,y,c.width,c.height,0,0,c.width,c.height);for(const mode of [11,6]){const d=await recognize(c,mode);const hits=find(d,target,scale,x,y);all.push(...hits);if(hits.some(h=>h.exact))return hits}}return all}finally{bitmap.close?.()}}
+async function pageOCR(page,target){
+  // Escalonado: una pasada rápida primero; OCR reforzado solo si realmente hace falta.
+  const hard=key(target).length>=16 || String(target).split(/[_\-\s./:]+/).filter(x=>x.length>=2).length>=4;
+  const scale=hard?3:2;
+  const pix=page.toPixmap(mupdf.Matrix.scale(scale,scale),mupdf.ColorSpace.DeviceRGB,false,false);
+  const bitmap=await createImageBitmap(new Blob([pix.asPNG()],{type:'image/png'}));
+  try{
+    // Nivel 1: una sola pasada rápida. Para textos sencillos esto es todo lo que se ejecuta.
+    let data=await recognize(bitmap,11);
+    let hits=find(data,target,scale,0,0);
+    if(hits.length)return hits;
+
+    // Nivel 2: solo si falló la pasada rápida.
+    if(hard){
+      data=await recognize(bitmap,6);
+      hits=find(data,target,scale,0,0);
+      if(hits.length)return hits;
+
+      // Nivel 3: anclas solo para cadenas difíciles.
+      const ah=await anchorPass(bitmap,target,data);
+      if(ah.length)return ah;
+
+      // Nivel 4: imagen en gris, todavía solo para cadenas difíciles.
+      const g=gray(bitmap);
+      for(const mode of [11,6]){const gd=await recognize(g,mode);const gh=find(gd,target,scale,0,0);if(gh.length)return gh}
+
+      // Nivel 5: cuadrantes, último recurso.
+      const cols=2,rows=2,tw=Math.ceil(bitmap.width/cols),th=Math.ceil(bitmap.height/rows),all=[];
+      for(let ry=0;ry<rows;ry++)for(let cx=0;cx<cols;cx++){
+        const x=Math.max(0,Math.floor(cx*tw-tw*.18)),y=Math.max(0,Math.floor(ry*th-th*.18)),x2=Math.min(bitmap.width,Math.ceil((cx+1)*tw+tw*.18)),y2=Math.min(bitmap.height,Math.ceil((ry+1)*th+th*.18));
+        const c=document.createElement('canvas');c.width=x2-x;c.height=y2-y;c.getContext('2d').drawImage(bitmap,x,y,c.width,c.height,0,0,c.width,c.height);
+        const d=await recognize(c,6);const q=find(d,target,scale,x,y);all.push(...q);if(q.some(h=>h.exact))return q;
+      }
+      return all;
+    }
+    return [];
+  }finally{bitmap.close?.()}
+}
 export async function runRecognition(){const batch=window.__batchAnalysis;if(!Array.isArray(batch)||!batch.length)return{total:0};const status=document.querySelector('#batchStatus'),summary=document.querySelector('#batchSummary');let total=0;for(let ai=0;ai<batch.length;ai++){const a=batch[ai];if(!a||a.error||!a.data)continue;const doc=mupdf.PDFDocument.openDocument(a.data,'application/pdf');try{for(let pi=0;pi<doc.countPages();pi++){if(status)status.textContent=`Reconociendo vector/OCR · ${ai+1}/${batch.length} · página ${pi+1} · ${a.name}`;if(a.kinds?.vector!==true)continue;const page=doc.loadPage(pi);for(const c of a.counts||[]){if(!c.find?.trim()||c.count>0||c.annotationCount>0)continue;const matches=await pageOCR(page,c.find);if(!matches.length)continue;c.ocrCount=(c.ocrCount||0)+matches.length;c.ocrMatches=(c.ocrMatches||[]).concat(matches.map(m=>({...m,page:pi+1})));c.pages=c.pages||[];if(!c.pages.includes(pi+1))c.pages.push(pi+1);total+=matches.length}}}finally{doc.destroy()}}if(summary){summary.textContent=summary.textContent.replace(/ · \d+ coincidencias? vectorial(?:es)?\/OCR · ningún archivo modificado/,'')+` · ${total} coincidencia${total===1?'':'s'} vectorial/OCR · ningún archivo modificado`;summary.classList.remove('hidden')}if(status)status.textContent=total?`Reconocimiento terminado: ${total} coincidencia${total===1?'':'s'} vectorial/OCR detectada${total===1?'':'s'}. No se ha modificado ningún PDF.`:'Sin coincidencias vectoriales/OCR.';return{total}}
