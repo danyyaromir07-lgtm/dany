@@ -1,0 +1,25 @@
+name: Revision cloud real PDF verification
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install MuPDF JS
+        run: npm install --no-save mupdf@1.28.0
+      - name: Verify detected cloud is removed safely
+        run: node tests/verify-revision-cloud.mjs
+      - name: Upload cloud-removed fixture
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: revision-cloud-removed-fixture
+          path: test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034-cloud-removed.pdf
