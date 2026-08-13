@@ -140,40 +140,25 @@ async function analyzeClouds() {
   report(total, errors, `archivos ${filesChecked}`);
 }
 
-function getRotation(page) {
-  try {
-    const obj = page.getObject?.();
-    const v = obj?.get?.('Rotate');
-    const n = v?.asNumber?.();
-    if (Number.isFinite(n)) return ((n % 360) + 360) % 360;
-  } catch (_) {}
-  return 0;
+function isRedStroke(color, alpha) {
+  return Number(alpha) > 0 && color && color.length >= 3 && Number(color[0]) >= 0.65 && Number(color[0]) >= Number(color[1]) + 0.25 && Number(color[0]) >= Number(color[2]) + 0.25;
 }
 
-function pdfRectToPixmap(rect, page, scale) {
+function pathRectToPixmap(pathRect, page, scale) {
   const b = page.getBounds();
-  const displayW = b[2] - b[0], displayH = b[3] - b[1];
-  const rot = getRotation(page);
-  const unrotW = rot === 90 || rot === 270 ? displayH : displayW;
-  const x0 = rect[0], y0 = rect[1], x1 = rect[2], y1 = rect[3];
-  let xa, xb, ya, yb;
-  if (rot === 90) {
-    xa = (unrotW - y1) * scale; xb = (unrotW - y0) * scale; ya = x0 * scale; yb = x1 * scale;
-  } else if (rot === 180) {
-    xa = (unrotW - x1) * scale; xb = (unrotW - x0) * scale; ya = (displayH - y1) * scale; yb = (displayH - y0) * scale;
-  } else if (rot === 270) {
-    xa = y0 * scale; xb = y1 * scale; ya = (unrotW - x1) * scale; yb = (unrotW - x0) * scale;
-  } else {
-    xa = x0 * scale; xb = x1 * scale; ya = y0 * scale; yb = y1 * scale;
-  }
-  return [Math.min(xa, xb), Math.min(ya, yb), Math.max(xa, xb), Math.max(ya, yb)];
+  return [
+    (pathRect[0] - b[0]) * scale,
+    (pathRect[1] - b[1]) * scale,
+    (pathRect[2] - b[0]) * scale,
+    (pathRect[3] - b[1]) * scale
+  ];
 }
 
 function pathTouchesCloud(pathRect, page, cloud) {
-  const [x0, y0, x1, y1] = pdfRectToPixmap(pathRect, page, cloud.scale || 0.18);
+  const [x0, y0, x1, y1] = pathRectToPixmap(pathRect, page, cloud.scale || 0.18);
   const cx0 = cloud.minX, cy0 = cloud.minY, cx1 = cloud.minX + cloud.cropW, cy1 = cloud.minY + cloud.cropH;
-  const ix0 = Math.max(cx0, Math.floor(x0) - 2), iy0 = Math.max(cy0, Math.floor(y0) - 2);
-  const ix1 = Math.min(cx1, Math.ceil(x1) + 2), iy1 = Math.min(cy1, Math.ceil(y1) + 2);
+  const ix0 = Math.max(cx0, Math.floor(Math.min(x0, x1)) - 2), iy0 = Math.max(cy0, Math.floor(Math.min(y0, y1)) - 2);
+  const ix1 = Math.min(cx1, Math.ceil(Math.max(x0, x1)) + 2), iy1 = Math.min(cy1, Math.ceil(Math.max(y0, y1)) + 2);
   if (ix1 <= ix0 || iy1 <= iy0) return false;
   for (let y = iy0; y < iy1; y++) for (let x = ix0; x < ix1; x++) {
     if (cloud.crop[(y - cy0) * cloud.cropW + (x - cx0)]) return true;
@@ -185,11 +170,11 @@ function redPaths(mupdf, page, cloud) {
   const hits = [];
   const device = new mupdf.Device({
     strokePath(path, stroke, ctm, colorSpace, color, alpha) {
-      if (Number(alpha) <= 0 || !color || color.length < 3 || Number(color[0]) < 0.65 || Number(color[0]) < Number(color[1]) + 0.25 || Number(color[0]) < Number(color[2]) + 0.25) return;
+      if (!isRedStroke(color, alpha)) return;
       try {
         const r = path.getBounds(stroke, ctm);
         const rect = [Number(r[0]), Number(r[1]), Number(r[2]), Number(r[3])];
-        if (pathTouchesCloud(rect, page, cloud)) hits.push(rect);
+        if (rect.every(Number.isFinite) && pathTouchesCloud(rect, page, cloud)) hits.push(rect);
       } catch (_) {}
     },
     fillPath() {}, clipPath() {}, clipStrokePath() {}, fillText() {}, clipText() {}, strokeText() {}, clipStrokeText() {}, ignoreText() {},
@@ -199,20 +184,50 @@ function redPaths(mupdf, page, cloud) {
   return hits;
 }
 
+function pointInsideAnyPathPixel(x, y, pathPixels) {
+  for (const r of pathPixels) if (x >= r[0] - 2 && x <= r[2] + 2 && y >= r[1] - 2 && y <= r[3] + 2) return true;
+  return false;
+}
+
+function createMaskRedactions(mupdf, page, cloud, paths) {
+  const scale = cloud.scale || 0.18;
+  const b = page.getBounds();
+  const pathPixels = paths.map(r => pathRectToPixmap(r, page, scale));
+  let created = 0;
+  for (let localY = 0; localY < cloud.cropH; localY++) {
+    let runStart = -1;
+    for (let localX = 0; localX <= cloud.cropW; localX++) {
+      const gx = cloud.minX + localX, gy = cloud.minY + localY;
+      const maskHit = localX < cloud.cropW && !!cloud.crop[localY * cloud.cropW + localX];
+      const pathHit = maskHit && pointInsideAnyPathPixel(gx, gy, pathPixels);
+      if (pathHit && runStart < 0) runStart = localX;
+      if ((!pathHit || localX === cloud.cropW) && runStart >= 0) {
+        const x0 = b[0] + (cloud.minX + runStart - 1) / scale;
+        const y0 = b[1] + (cloud.minY + localY - 1) / scale;
+        const x1 = b[0] + (cloud.minX + localX + 1) / scale;
+        const y1 = b[1] + (cloud.minY + localY + 2) / scale;
+        if (x1 > x0 && y1 > y0) {
+          const a = page.createAnnotation('Redact');
+          a.setRect([x0, y0, x1, y1]);
+          created++;
+        }
+        runStart = -1;
+      }
+    }
+  }
+  return created;
+}
+
 async function eraseCloud(mupdf, page, cloud) {
   const paths = redPaths(mupdf, page, cloud);
-  if (!paths.length) return 0;
+  if (!paths.length) return { paths: 0, redactions: 0 };
+  const created = createMaskRedactions(mupdf, page, cloud, paths);
+  if (!created) return { paths: paths.length, redactions: 0 };
   const imageNone = mupdf.PDFPage?.REDACT_IMAGE_NONE ?? 0;
   const lineRemoveTouched = mupdf.PDFPage?.REDACT_LINE_ART_REMOVE_IF_TOUCHED ?? 2;
-  const textNone = mupdf.PDFPage?.REDACT_TEXT_NONE ?? 0;
-  let created = 0;
-  for (const r of paths) {
-    const a = page.createAnnotation('Redact');
-    a.setRect([r[0] - 1.5, r[1] - 1.5, r[2] + 1.5, r[3] + 1.5]);
-    created++;
-  }
-  if (created) page.applyRedactions(false, imageNone, lineRemoveTouched, textNone);
-  return created;
+  const textNone = mupdf.PDFPage?.REDACT_TEXT_NONE ?? 1;
+  page.applyRedactions(false, imageNone, lineRemoveTouched, textNone);
+  return { paths: paths.length, redactions: created };
 }
 
 async function applyClouds() {
@@ -231,8 +246,14 @@ async function applyClouds() {
       for (const p of item.revisionClouds) {
         const page = doc.loadPage(p.page - 1);
         for (const cloud of p.clouds) {
-          try { itemRemoved += (await eraseCloud(mupdf, page, cloud)) > 0 ? 1 : 0; }
-          catch (err) { errors++; diagnostics.push(`${item.name}: página ${p.page}: ${err?.message || String(err)}`); }
+          try {
+            const result = await eraseCloud(mupdf, page, cloud);
+            diagnostics.push(`${item.name}: página ${p.page}: paths=${result.paths}, redactions=${result.redactions}`);
+            if (result.redactions > 0) itemRemoved++;
+          } catch (err) {
+            errors++;
+            diagnostics.push(`${item.name}: página ${p.page}: ${err?.message || String(err)}`);
+          }
         }
       }
       if (!errors && itemRemoved) {
@@ -246,7 +267,8 @@ async function applyClouds() {
   window.__revisionCloudApplyDebug = { removed, errors, diagnostics };
   if (errors) throw new Error(`Nubes: ${diagnostics.join(' | ')}`.slice(0, 2500));
   if (!removed) throw new Error('La nube fue detectada pero no se localizaron sus trazos vectoriales rojos para eliminarla.');
-  const status = q(STATUS); if (status) status.textContent = `☁️ ${removed} nube${removed === 1 ? '' : 's'} de revisión eliminada${removed === 1 ? '' : 's'}.`;
+  const status = q(STATUS);
+  if (status) status.textContent = `☁️ ${removed} nube${removed === 1 ? '' : 's'} de revisión eliminada${removed === 1 ? '' : 's'}.`;
 }
 
 function wrapApply() {
