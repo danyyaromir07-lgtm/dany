@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import * as mupdf from 'mupdf';
+process.on('uncaughtException', (err) => { console.error(`::error title=Revision cloud test::${String(err?.message || err).replace(/%/g,'%25').replace(/\r/g,'%0D').replace(/\n/g,'%0A')}`); });
 
 const fixture = 'test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034.pdf';
 const outPath = 'test-pdfs/UP3_LIM_E03_PLA_I59_02_ER_70_A34_7034-cloud-removed.pdf';
