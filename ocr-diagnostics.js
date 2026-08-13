@@ -25,3 +25,4 @@ window.__ocrDiagnostic=(e)=>{events.push({...e,file:e.file||window.__ocrCurrentF
 window.__ocrDiagnosticsReset=()=>{events.length=0;render()};
 document.querySelector('#ocrDiagCopy')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(logEl?.textContent||'');}catch(_){}});
 document.querySelector('#ocrDiagClear')?.addEventListener('click',()=>window.__ocrDiagnosticsReset());
+import './batch-preview-v1.js?v=20260813-preview1';
