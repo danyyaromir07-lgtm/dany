@@ -1,7 +1,6 @@
 const CHECKBOX = '#batchRemoveRevisionClouds';
 const ANALYZE = '#batchAnalyze';
-const DIAG_LOG = '#ocrDiagLog';
-const DIAG_SUMMARY = '#ocrDiagSummary';
+const STATUS = '#batchStatus';
 
 const q = (s) => document.querySelector(s);
 let timer = null;
@@ -12,23 +11,59 @@ function cloudRows() {
   const rows = [];
   for (const item of batch) {
     if (!item || item.error) continue;
-    const count = Number(item.revisionCloudCount || 0);
-    if (!count) continue;
     const pages = Array.isArray(item.revisionClouds)
       ? item.revisionClouds
           .filter(p => Array.isArray(p?.clouds) && p.clouds.length)
-          .map(p => `pág. ${p.page}: ${p.clouds.length}`)
-          .join(', ')
-      : '';
+          .map(p => ({ page: Number(p.page), count: p.clouds.length }))
+      : [];
+    const count = pages.reduce((n, p) => n + p.count, 0);
+    if (!count) continue;
     rows.push({ name: item.name || '(sin nombre)', count, pages });
   }
   return rows;
 }
 
-function stripCloudSection(text) {
-  const marker = '\n\n☁️ NUBES DE REVISIÓN\n';
-  const i = text.indexOf(marker);
-  return i >= 0 ? text.slice(0, i) : text;
+function ensureBox() {
+  let box = q('#revisionCloudLocationBox');
+  if (box) return box;
+  const status = q(STATUS);
+  if (!status?.parentElement) return null;
+  box = document.createElement('div');
+  box.id = 'revisionCloudLocationBox';
+  box.className = 'text-warning hidden';
+  box.style.marginTop = '10px';
+  status.insertAdjacentElement('afterend', box);
+  return box;
+}
+
+function renderRows(rows) {
+  const box = ensureBox();
+  if (!box) return;
+  if (!rows.length) {
+    box.classList.add('hidden');
+    box.textContent = '';
+    return;
+  }
+
+  box.replaceChildren();
+  const title = document.createElement('strong');
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  title.textContent = `☁️ Ubicación de ${total} nube${total === 1 ? '' : 's'} de revisión`;
+  box.appendChild(title);
+
+  for (const row of rows) {
+    const file = document.createElement('div');
+    file.style.marginTop = '7px';
+    file.textContent = `📄 ${row.name}`;
+    box.appendChild(file);
+    for (const p of row.pages) {
+      const page = document.createElement('div');
+      page.style.marginLeft = '18px';
+      page.textContent = `↳ Página ${p.page}: ${p.count} nube${p.count === 1 ? '' : 's'}`;
+      box.appendChild(page);
+    }
+  }
+  box.classList.remove('hidden');
 }
 
 function render() {
@@ -42,30 +77,13 @@ function render() {
   const signature = JSON.stringify(rows);
   if (signature === lastSignature) return;
   lastSignature = signature;
-
-  const log = q(DIAG_LOG);
-  if (log) {
-    const base = stripCloudSection(log.textContent || '');
-    const lines = rows.length
-      ? rows.map(r => `• ${r.name} — ${r.count} nube${r.count === 1 ? '' : 's'}${r.pages ? ` (${r.pages})` : ''}`)
-      : ['• Ningún archivo con nubes de revisión detectadas.'];
-    log.textContent = `${base}\n\n☁️ NUBES DE REVISIÓN\n${lines.join('\n')}`.trim();
-  }
-
-  const summary = q(DIAG_SUMMARY);
-  if (summary) {
-    const total = rows.reduce((n, r) => n + r.count, 0);
-    const fileCount = rows.length;
-    const cloudText = total
-      ? `☁️ ${total} nube${total === 1 ? '' : 's'} en ${fileCount} archivo${fileCount === 1 ? '' : 's'}.`
-      : '☁️ Sin nubes de revisión detectadas.';
-    const clean = (summary.textContent || '').replace(/\s*·?\s*☁️[^.]*\./g, '').trim();
-    summary.textContent = clean && clean !== 'Sin actividad OCR.' ? `${clean} · ${cloudText}` : cloudText;
-  }
+  renderRows(rows);
 }
 
 function startWatch() {
   lastSignature = '';
+  const box = ensureBox();
+  if (box) { box.classList.add('hidden'); box.textContent = ''; }
   if (timer) clearInterval(timer);
   let ticks = 0;
   timer = setInterval(() => {
@@ -79,11 +97,17 @@ function startWatch() {
 }
 
 function wire() {
+  ensureBox();
   q(ANALYZE)?.addEventListener('click', () => {
     if (q(CHECKBOX)?.checked) startWatch();
   });
   document.addEventListener('change', e => {
-    if (e.target?.matches?.(CHECKBOX) && e.target.checked) startWatch();
+    if (!e.target?.matches?.(CHECKBOX)) return;
+    if (e.target.checked) startWatch();
+    else {
+      const box = ensureBox();
+      if (box) { box.classList.add('hidden'); box.textContent = ''; }
+    }
   });
 }
 
