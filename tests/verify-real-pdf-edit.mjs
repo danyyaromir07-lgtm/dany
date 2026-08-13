@@ -34,4 +34,3 @@ console.log('VARIABLE_LENGTH_EDIT_OK');
 console.log(`long_replacement=${longNeedle}->${longReplacement}`); console.log(`long_replacement_extractable=true`);
 console.log('REAL_PDF_EDIT_OK');
 console.log(`logical_replacement=${needle}->${replacement}`); console.log(`underlying_text_strings_changed=${edits}`); console.log(`replacement_extractable=true`); console.log(`original_extractable=false`); console.log(`annotations_unchanged=${savedAnnots===annotationsBefore}`); console.log(`free_text_created=false`); console.log(`R12_BaseFont=${savedFont}`); console.log(`edited_pdf_bytes=${out.length}`);
-await import('./verify-revision-cloud.mjs');
