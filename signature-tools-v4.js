@@ -1,3 +1,4 @@
+import './revision-clouds-v1.js?v=20260813-cloud1';
 import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
 
 const COMMENTS = '#batchRemoveComments';
