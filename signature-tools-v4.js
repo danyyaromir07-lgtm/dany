@@ -1,4 +1,3 @@
-import './revision-clouds-v2.js?v=20260813-cloud2';
 import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
 
 const COMMENTS = '#batchRemoveComments';
@@ -48,5 +47,9 @@ async function afterAnalysis() {
 }
 async function prepareForApply() { const removeComments = !!q(COMMENTS)?.checked; const removeSignatures = !!q(SIG)?.checked; const removeLinks = !!q(LINKS)?.checked; if (!removeComments && !removeSignatures && !removeLinks) return; const batch = window.__batchAnalysis || []; for (const a of batch) { if (a?.error || !a.data) continue; const rules = (a.counts || []).filter((r) => String(r.find || '').trim() && String(r.replace ?? '') !== ''); a.data = await prepare(a.data, rules, removeComments, removeSignatures, removeLinks); } }
 window.__prepareBatchAnnotationOperations = prepareForApply;
-function wire() { injectOptions(); q(ANALYZE)?.addEventListener('click', () => { afterAnalysis().catch((e) => console.error('[annotations]', e)); }); }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire;
+function wire() {
+  injectOptions();
+  import('./revision-clouds-v2.js?v=20260813-cloud3').catch(e => console.error('[revision-clouds]', e));
+  q(ANALYZE)?.addEventListener('click', () => { afterAnalysis().catch((e) => console.error('[annotations]', e)); });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
