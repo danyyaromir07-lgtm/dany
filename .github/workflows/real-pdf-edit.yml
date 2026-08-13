@@ -15,6 +15,8 @@ jobs:
           node-version: 22
       - name: Install MuPDF JS
         run: npm install --no-save mupdf@1.28.0
+      - name: Verify revision cloud deletion on real fixture
+        run: node tests/verify-revision-cloud.mjs
       - name: Run official fixture edit
         run: node tests/verify-real-pdf-edit.mjs
       - name: Upload edited PDF
