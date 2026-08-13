@@ -1,3 +1,5 @@
+import './flex-text-analysis-v1.js?v=20260813-flextext1';
+
 const CHECKBOX = '#batchRemoveRevisionClouds';
 const ANALYZE = '#batchAnalyze';
 const STATUS = '#batchStatus';

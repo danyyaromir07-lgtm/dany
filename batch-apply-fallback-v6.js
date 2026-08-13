@@ -1,7 +1,7 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
-import { editDoc } from './text-editor-v64.js';
+import { editDoc } from './text-editor-v65.js';
 import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
 
 const $ = (s) => document.querySelector(s);
