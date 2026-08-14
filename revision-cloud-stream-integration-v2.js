@@ -1,3 +1,4 @@
+import './revision-cloud-diagnostics-v2.js?v=20260814-clouddiag2';
 import './revision-cloud-vector-fallback-v1.js?v=20260814-vectorcloud1';
 import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v2.js?v=20260814-cloudstream4';
 
