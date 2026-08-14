@@ -1,7 +1,7 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 const ANALYZE='#batchAnalyze', OCR='#batchEnableOCR', STATUS='#batchStatus';
-const SCALE=2.6, RIGHT_FRACTION=.22, BOTTOM_FRACTION=.12;
+const SCALE=1.4, RIGHT_FRACTION=.22, BOTTOM_FRACTION=.12;
 let workerPromise=null, runToken=0;
 
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[‐‑‒–—−]/g,'-').replace(/\s+/g,' ').trim().toLowerCase();
