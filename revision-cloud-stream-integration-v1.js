@@ -38,7 +38,8 @@ async function applyExactFamilyCloudRemoval(){
 
 function install(){
   const base=window.__prepareBatchAnnotationOperations;
-  if(typeof base!=='function'||base.__exactCloudStreamWrap) return false;
+  // Only replace the cloud-v6 wrapper. Never wrap the signature/comments/links preparer directly.
+  if(typeof base!=='function'||!base.__cloudSafeWrap||base.__exactCloudStreamWrap) return false;
   const wrapped=async function(){
     const box=document.querySelector(CHECKBOX);
     const wanted=!!box?.checked;
@@ -52,6 +53,7 @@ function install(){
     }
     if(wanted) await applyExactFamilyCloudRemoval();
   };
+  wrapped.__cloudSafeWrap=true;
   wrapped.__exactCloudStreamWrap=true;
   window.__prepareBatchAnnotationOperations=wrapped;
   return true;
