@@ -1,5 +1,6 @@
 import './batch-search-variants-v1.js?v=20260814-searchvariants1';
 import './signature-analysis-sync-v1.js?v=20260814-signaturesync1';
+import './signature-result-badge-v1.js?v=20260814-signaturebadge1';
 
 const TABLE = '#batchTable';
 const STYLE_ID = 'batch-result-lines-style';
