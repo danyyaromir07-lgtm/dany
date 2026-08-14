@@ -1,4 +1,4 @@
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v1.js?v=20260814-cloudstream2';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v1.js?v=20260814-cloudstream3';
 
 const CHECKBOX='#batchRemoveRevisionClouds';
 const STATUS='#batchStatus';
@@ -42,9 +42,8 @@ function install(){
   const wrapped=async function(){
     const box=document.querySelector(CHECKBOX);
     const wanted=!!box?.checked;
-    // revision-clouds-v6 remains loaded for its proven detector/UI. Temporarily disable
-    // only its experimental micro-redaction APPLY path while preserving every other
-    // annotation/signature/link preparation wrapped underneath it.
+    // Keep v6 for its proven detector/UI, but disable only its experimental micro-redaction
+    // apply path while all other annotation/signature/link preparation continues underneath.
     if(box&&wanted) box.checked=false;
     try{
       await base();
