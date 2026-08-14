@@ -21,10 +21,6 @@ function exactRGBKey(cs, color) {
   if (!/DeviceRGB|RGB/i.test(name) || !Array.isArray(color) || color.length < 3) return null;
   return [Number(color[0]), Number(color[1]), Number(color[2])].map(v => Number.isFinite(v) ? v.toPrecision(12) : '').join('|');
 }
-function isExactSameRGB(a, b) {
-  if (!a || !b || a.length < 3 || b.length < 3) return false;
-  return sameNumber(a[0], b[0]) && sameNumber(a[1], b[1]) && sameNumber(a[2], b[2]);
-}
 function isRedRGB(rgb) {
   if (!rgb || rgb.length < 3) return false;
   const [r,g,b] = rgb.map(Number);
@@ -33,7 +29,6 @@ function isRedRGB(rgb) {
 
 function collectStrokeFamilies(mupdf, page, cloudBBox) {
   const families = new Map();
-  const all = [];
   const device = new mupdf.Device({
     strokePath(path, stroke, ctm, colorSpace, color, alpha) {
       const key = exactRGBKey(colorSpace, color);
@@ -49,18 +44,17 @@ function collectStrokeFamilies(mupdf, page, cloudBBox) {
         alpha: Number(alpha ?? 1),
         inCloud: rectIntersects(bbox, cloudBBox)
       };
-      all.push(rec);
       if (!families.has(key)) families.set(key, []);
       families.get(key).push(rec);
     }
   });
   page.runPageContents(device, mupdf.Matrix.identity);
   device.close?.();
-  return { families, all };
+  return families;
 }
 
 export function chooseExactCloudFamily(mupdf, page, cloudBBox) {
-  const { families } = collectStrokeFamilies(mupdf, page, cloudBBox);
+  const families = collectStrokeFamilies(mupdf, page, cloudBBox);
   const candidates = [];
   for (const [key, strokes] of families) {
     const inside = strokes.filter(s => s.inCloud);
@@ -98,36 +92,36 @@ function latin1ToBytes(s) {
   for (let i=0;i<s.length;i++) out[i]=s.charCodeAt(i)&255;
   return out;
 }
-function escapeRE(s) { return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
 
-// Find a marked-content OCG block whose immediately preceding graphics-state setup contains
-// the exact RGB stroke color. We deliberately require a single unambiguous block.
 function findExactColorOCBlocks(streamText, rgb) {
-  const num = v => String(Number(v));
-  const vals = rgb.map(num);
-  const rgbRE = new RegExp(`(?:^|[\\r\\n\\s])${vals.map(escapeRE).join('\\s+')}\\s+RG(?:\\s|$)`, 'g');
+  // Parse every numeric DeviceRGB stroke operator and compare its three values numerically.
+  // This is still an exact-color guard: only formatting differences such as 0.05882 vs the
+  // equivalent float representation are ignored.
+  const rg=/(^|[\s\r\n])([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+RG(?=\s|$)/gm;
   const matches=[];
   let m;
-  while ((m=rgbRE.exec(streamText))) {
-    const colorAt=m.index;
-    const scanEnd=Math.min(streamText.length, rgbRE.lastIndex+500);
-    const tail=streamText.slice(rgbRE.lastIndex,scanEnd);
+  while((m=rg.exec(streamText))){
+    const parsed=[Number(m[2]),Number(m[3]),Number(m[4])];
+    if(!sameNumber(parsed[0],rgb[0])||!sameNumber(parsed[1],rgb[1])||!sameNumber(parsed[2],rgb[2])) continue;
+    const colorAt=m.index+(m[1]?.length||0);
+    const afterRG=rg.lastIndex;
+    const scanEnd=Math.min(streamText.length,afterRG+500);
+    const tail=streamText.slice(afterRG,scanEnd);
     const bdc=/\/OC\s+\/([A-Za-z0-9_.-]+)\s+BDC/.exec(tail);
     if(!bdc) continue;
-    const bdcStart=rgbRE.lastIndex+bdc.index;
+    const bdcStart=afterRG+bdc.index;
     const bodyStart=bdcStart+bdc[0].length;
-    let pos=bodyStart, depth=1, end=-1;
-    const tok=/(?:\/[^\s<>()[\]{}%/]+|BDC\b|BMC\b|EMC\b)/g;
+    let depth=1,end=-1;
+    const tok=/\b(?:BDC|BMC|EMC)\b/g;
     tok.lastIndex=bodyStart;
     let t;
     while((t=tok.exec(streamText))){
       if(t[0]==='BDC'||t[0]==='BMC') depth++;
       else if(t[0]==='EMC') { depth--; if(depth===0){end=tok.lastIndex;break;} }
-      pos=tok.lastIndex;
     }
     if(end<0) continue;
     matches.push({colorAt,bdcStart,bodyStart,end,oc:bdc[1]});
-    rgbRE.lastIndex=end;
+    rg.lastIndex=end;
   }
   return matches;
 }
@@ -156,8 +150,6 @@ export function removeExactCloudFamilyFromPage(mupdf, page, cloudBBox) {
   }
   if(hits.length!==1) return {removed:false,reason:`bloques OCG exactos=${hits.length}`,family:selected.family};
   const hit=hits[0];
-  // Remove the OCG block only. Keep color setup outside the block untouched so surrounding
-  // graphics state remains byte-for-byte equivalent apart from the cloud content itself.
   const next=hit.text.slice(0,hit.block.bdcStart)+hit.text.slice(hit.block.end);
   hit.ref.writeStream(latin1ToBytes(next));
   return {removed:true,oc:hit.block.oc,family:selected.family};
