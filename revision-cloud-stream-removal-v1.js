@@ -26,23 +26,45 @@ function isRedRGB(rgb) {
   const [r,g,b] = rgb.map(Number);
   return r >= 0.50 && r >= g + 0.12 && r >= b + 0.12;
 }
+function pageRotation(page) {
+  try {
+    const v=page.getObject()?.getInheritable?.('Rotate');
+    const n=((Number(v?.valueOf?.() ?? v ?? 0)%360)+360)%360;
+    return [0,90,180,270].includes(n)?n:0;
+  } catch (_) { return 0; }
+}
+function rotatedRect(page, r) {
+  const rot=pageRotation(page);
+  if(!rot) return r.slice();
+  const b=Array.from(page.getBounds());
+  const dw=b[2]-b[0], dh=b[3]-b[1];
+  // For quarter turns, displayed width/height are swapped relative to unrotated page space.
+  const uw=(rot===90||rot===270)?dh:dw;
+  const uh=(rot===90||rot===270)?dw:dh;
+  const x0=r[0]-b[0], y0=r[1]-b[1], x1=r[2]-b[0], y1=r[3]-b[1];
+  let out;
+  if(rot===90) out=[uh-y1,x0,uh-y0,x1];
+  else if(rot===180) out=[uw-x1,uh-y1,uw-x0,uh-y0];
+  else out=[y0,uw-x1,y1,uw-x0]; // 270
+  return [out[0]+b[0],out[1]+b[1],out[2]+b[0],out[3]+b[1]];
+}
 
-function collectStrokeFamilies(mupdf, page, cloudBBox) {
+function collectStrokeFamilies(mupdf, page) {
   const families = new Map();
   const device = new mupdf.Device({
     strokePath(path, stroke, ctm, colorSpace, color, alpha) {
       const key = exactRGBKey(colorSpace, color);
       if (!key || !isRedRGB(color)) return;
       let bbox;
-      try { bbox = path.getBounds(stroke, ctm); } catch (_) { return; }
+      try { bbox = Array.from(path.getBounds(stroke, ctm)); } catch (_) { return; }
       if (!bbox || bbox.length < 4) return;
       const rec = {
         key,
         rgb: [Number(color[0]), Number(color[1]), Number(color[2])],
-        bbox: Array.from(bbox),
+        bbox,
+        rotatedBBox: rotatedRect(page,bbox),
         lineWidth: Number(stroke?.lineWidth ?? 0),
-        alpha: Number(alpha ?? 1),
-        inCloud: rectIntersects(bbox, cloudBBox)
+        alpha: Number(alpha ?? 1)
       };
       if (!families.has(key)) families.set(key, []);
       families.get(key).push(rec);
@@ -53,31 +75,46 @@ function collectStrokeFamilies(mupdf, page, cloudBBox) {
   return families;
 }
 
+function evaluateFamily(strokes, cloudBBox, mode) {
+  const boxOf=s=>mode==='rotated'?s.rotatedBBox:s.bbox;
+  const inside=strokes.filter(s=>rectIntersects(boxOf(s),cloudBBox));
+  const outside=strokes.filter(s=>!rectIntersects(boxOf(s),cloudBBox));
+  if(inside.length<20||outside.length!==0) return null;
+  let union=null;
+  for(const s of inside) union=unionRect(union,boxOf(s));
+  const cw=Math.max(1,cloudBBox[2]-cloudBBox[0]);
+  const ch=Math.max(1,cloudBBox[3]-cloudBBox[1]);
+  const pad=Math.max(cw,ch)*0.08+3;
+  if(!rectContains(cloudBBox,union,pad)) return null;
+  const coverageX=Math.max(0,Math.min(union[2],cloudBBox[2])-Math.max(union[0],cloudBBox[0]))/cw;
+  const coverageY=Math.max(0,Math.min(union[3],cloudBBox[3])-Math.max(union[1],cloudBBox[1]))/ch;
+  if(coverageX<0.55||coverageY<0.55) return null;
+  const widths=inside.map(s=>s.lineWidth).filter(Number.isFinite);
+  const minW=widths.length?Math.min(...widths):0;
+  const maxW=widths.length?Math.max(...widths):0;
+  if(maxW-minW>Math.max(0.5,maxW*0.35)) return null;
+  return {strokes:inside,union,lineWidthRange:[minW,maxW],mode,coverageX,coverageY};
+}
+
 export function chooseExactCloudFamily(mupdf, page, cloudBBox) {
-  const families = collectStrokeFamilies(mupdf, page, cloudBBox);
-  const candidates = [];
-  for (const [key, strokes] of families) {
-    const inside = strokes.filter(s => s.inCloud);
-    const outside = strokes.filter(s => !s.inCloud);
-    if (inside.length < 20 || outside.length !== 0) continue;
-    let union = null;
-    for (const s of inside) union = unionRect(union, s.bbox);
-    const cw = Math.max(1, cloudBBox[2]-cloudBBox[0]);
-    const ch = Math.max(1, cloudBBox[3]-cloudBBox[1]);
-    const pad = Math.max(cw, ch) * 0.08 + 3;
-    if (!rectContains(cloudBBox, union, pad)) continue;
-    const coverageX = Math.max(0, Math.min(union[2],cloudBBox[2])-Math.max(union[0],cloudBBox[0])) / cw;
-    const coverageY = Math.max(0, Math.min(union[3],cloudBBox[3])-Math.max(union[1],cloudBBox[1])) / ch;
-    if (coverageX < 0.55 || coverageY < 0.55) continue;
-    const widths = inside.map(s=>s.lineWidth).filter(Number.isFinite);
-    const minW = widths.length ? Math.min(...widths) : 0;
-    const maxW = widths.length ? Math.max(...widths) : 0;
-    if (maxW - minW > Math.max(0.5, maxW * 0.35)) continue;
-    candidates.push({ key, rgb: inside[0].rgb, strokes: inside, union, lineWidthRange:[minW,maxW] });
+  const families=collectStrokeFamilies(mupdf,page);
+  const candidates=[];
+  for(const [key,strokes] of families){
+    const raw=evaluateFamily(strokes,cloudBBox,'raw');
+    const rot=evaluateFamily(strokes,cloudBBox,'rotated');
+    for(const fit of [raw,rot]) if(fit) candidates.push({key,rgb:strokes[0].rgb,...fit});
   }
   candidates.sort((a,b)=>b.strokes.length-a.strokes.length);
-  if (candidates.length !== 1) return { ok:false, reason:`familias exactas candidatas=${candidates.length}`, candidates };
-  return { ok:true, family:candidates[0] };
+  // If raw and rotated happen to represent the same family, prefer the fit with greater coverage
+  // rather than treating that coordinate-system ambiguity as two different color candidates.
+  if(candidates.length>1&&candidates[0].key===candidates[1].key){
+    const same=candidates.filter(c=>c.key===candidates[0].key);
+    same.sort((a,b)=>(b.coverageX*b.coverageY)-(a.coverageX*a.coverageY));
+    const other=candidates.filter(c=>c.key!==candidates[0].key);
+    candidates.splice(0,candidates.length,same[0],...other);
+  }
+  if(candidates.length!==1) return {ok:false,reason:`familias exactas candidatas=${candidates.length}`,candidates};
+  return {ok:true,family:candidates[0]};
 }
 
 function bufferToLatin1(buf) {
@@ -94,9 +131,6 @@ function latin1ToBytes(s) {
 }
 
 function findExactColorOCBlocks(streamText, rgb) {
-  // Parse every numeric DeviceRGB stroke operator and compare its three values numerically.
-  // This is still an exact-color guard: only formatting differences such as 0.05882 vs the
-  // equivalent float representation are ignored.
   const rg=/(^|[\s\r\n])([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+RG(?=\s|$)/gm;
   const matches=[];
   let m;
