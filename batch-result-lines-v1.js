@@ -1,3 +1,5 @@
+import './batch-search-variants-v1.js?v=20260814-searchvariants1';
+
 const TABLE = '#batchTable';
 const STYLE_ID = 'batch-result-lines-style';
 
