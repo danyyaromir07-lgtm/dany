@@ -24,7 +24,7 @@ function matchBox(data,target,ox,oy){const wanted=key(target),candidates=[];
 
 async function findOnPage(page,target){const pix=page.toPixmap(mupdf.Matrix.scale(SCALE,SCALE),mupdf.ColorSpace.DeviceRGB,false,false),bitmap=await createImageBitmap(new Blob([pix.asPNG()],{type:'image/png'}));try{
   const rw=Math.max(1,Math.ceil(bitmap.width*RIGHT_FRACTION)),rx=bitmap.width-rw,bh=Math.max(1,Math.ceil(bitmap.height*BOTTOM_FRACTION)),by=bitmap.height-bh;
-  const bottom=canvasCrop(bitmap,rx,by,rw,bh);let data=await recognize(bottom,7),m=matchBox(data,target,rx,by);if(m.length)return m;
+  const bottom=canvasCrop(bitmap,rx,by,rw,bh);let data=await recognize(bottom,6),m=matchBox(data,target,rx,by);if(m.length)return m;
   const strip=canvasCrop(bitmap,rx,0,rw,bitmap.height);data=await recognize(strip,6);m=matchBox(data,target,rx,0);return m;
 }finally{bitmap.close?.()}}
 
