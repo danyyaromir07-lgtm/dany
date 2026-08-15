@@ -1,4 +1,4 @@
-import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-selfdiag1';
+import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-uniondensity1';
 import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v2.js?v=20260815-cloudstream-colorarray1';
 
 const CHECKBOX='#batchRemoveRevisionClouds';
