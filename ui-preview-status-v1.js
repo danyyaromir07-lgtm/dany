@@ -60,12 +60,19 @@ function renderSummary(){
   }
   const item=currentItem();
   if(!item){box.classList.add('hidden');return;}
+  const ops=relevantOperations(item);
+  const linksDeferred=q('#batchRemoveLinks')?.checked===true;
+  const signature=JSON.stringify({file:String(item.name||''),ops,linksDeferred});
+  if(box.dataset.signature===signature){
+    box.classList.remove('hidden');
+    return;
+  }
+  box.dataset.signature=signature;
   box.replaceChildren();
   const label=document.createElement('span');
   label.className='preview-op-label';
   label.textContent='Incluido en preview:';
   box.appendChild(label);
-  const ops=relevantOperations(item);
   if(ops.length){for(const text of ops)box.appendChild(chip(text));}
   else{
     const empty=document.createElement('span');
@@ -73,7 +80,7 @@ function renderSummary(){
     empty.textContent='sin cambios detectados para este archivo';
     box.appendChild(empty);
   }
-  if(q('#batchRemoveLinks')?.checked){
+  if(linksDeferred){
     const deferredLabel=document.createElement('span');
     deferredLabel.className='preview-op-label';
     deferredLabel.textContent='Solo al aplicar:';
