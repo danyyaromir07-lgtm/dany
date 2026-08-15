@@ -1,5 +1,5 @@
-import './revision-cloud-vector-fallback-v1.js?v=20260814-vectorcloud1';
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v2.js?v=20260814-cloudstream4';
+import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-strokewidth1';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v2.js?v=20260815-cloudstream-strokewidth1';
 
 const CHECKBOX='#batchRemoveRevisionClouds';
 const STATUS='#batchStatus';
