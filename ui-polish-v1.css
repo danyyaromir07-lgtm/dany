@@ -92,6 +92,92 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .progress-track{height:9px;box-shadow:inset 0 1px 2px rgba(31,42,68,.08)}
 .note{margin-top:18px}
 
+/* Adaptive operations — presentation only. Existing checkbox IDs and behavior are untouched. */
+#analysisTool .analysis-grid .panel:nth-child(2){background:linear-gradient(180deg,#fff 0,#fbfcff 100%)}
+#analysisTool .analysis-grid .panel:nth-child(2)>.panel-title{margin-bottom:8px}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box{
+  position:relative;
+  margin-top:8px;
+  padding:12px 13px;
+  border:1px solid #e3e7f0;
+  border-radius:13px;
+  background:#fff;
+  box-shadow:0 2px 8px rgba(31,42,68,.025);
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box:hover{
+  border-color:#d5dbea;
+  box-shadow:0 5px 15px rgba(31,42,68,.05);
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box:has(input[type="checkbox"]:checked){
+  border-color:#d8d3ff;
+  background:linear-gradient(180deg,#fdfcff 0,#faf9ff 100%);
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box label{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 38px;
+  align-items:center;
+  gap:12px;
+  min-height:26px;
+  cursor:pointer;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box label>span{
+  grid-column:1;
+  grid-row:1;
+  min-width:0;
+  color:#293247;
+  font-size:12.75px;
+  font-weight:760;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]{
+  -webkit-appearance:none;
+  appearance:none;
+  grid-column:2;
+  grid-row:1;
+  width:38px;
+  height:22px;
+  margin:0;
+  border:0;
+  border-radius:999px;
+  background:#cfd5df;
+  box-shadow:inset 0 1px 3px rgba(31,42,68,.15);
+  position:relative;
+  cursor:pointer;
+  transition:background .16s ease,box-shadow .16s ease;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]::after{
+  content:"";
+  position:absolute;
+  top:3px;
+  left:3px;
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 1px 4px rgba(31,42,68,.28);
+  transition:transform .16s ease;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]:checked{
+  background:linear-gradient(135deg,#5b3df5,#3b72ff);
+  box-shadow:inset 0 1px 2px rgba(31,42,68,.08),0 0 0 3px rgba(91,61,245,.07);
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]:checked::after{transform:translateX(16px)}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]:focus-visible{outline:3px solid rgba(91,61,245,.18);outline-offset:3px}
+#analysisTool .analysis-grid .panel:nth-child(2) .option-box small{
+  margin:5px 50px 0 0;
+  padding-left:0;
+  color:#7a8497;
+  font-size:10.75px;
+  line-height:1.4;
+}
+#analysisTool .analysis-grid .panel:nth-child(2) .info-box{
+  margin-top:10px;
+  padding:11px 12px;
+  border-color:#e6e8f3;
+  background:#fafbfe;
+  color:#6c7587;
+}
+
 @media(max-width:900px){
   .analysis-grid{grid-template-columns:1fr}
   .action-bar{grid-template-columns:1fr 1fr}
@@ -106,4 +192,5 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   .selected-file-count{min-width:0;width:100%}
   .results-card-head,.preview-card-head{align-items:flex-start;flex-wrap:wrap}
   .preview-controls{width:100%;justify-content:flex-end}
+  #analysisTool .analysis-grid .panel:nth-child(2) .option-box small{margin-right:0}
 }
