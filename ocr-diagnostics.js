@@ -1,3 +1,11 @@
+if(!document.querySelector('link[data-diagnostics-ui]')){
+  const diagnosticsCss=document.createElement('link');
+  diagnosticsCss.rel='stylesheet';
+  diagnosticsCss.href='./ui-diagnostics-v1.css?v=20260815-diagui1';
+  diagnosticsCss.dataset.diagnosticsUi='1';
+  document.head.appendChild(diagnosticsCss);
+}
+
 let panel=document.querySelector('#ocrDiagnosticsBox')||document.querySelector('#ocrDiagnosticsPanel');
 if(!panel){
   panel=document.createElement('section');
