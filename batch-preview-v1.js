@@ -3,6 +3,7 @@ import { PDFDocument, PDFName } from 'https://esm.sh/pdf-lib@1.17.1';
 import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
 import { editDoc } from './text-editor-v64.js';
 import { applyVectorOCR } from './vector-apply-v2.js?v=20260812-307';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v5.js?v=20260815-cloudpreview1';
 
 const q=s=>document.querySelector(s);
 let resultUrl='', originalUrl='', currentMode='result', currentIndex=-1, currentPage=1;
@@ -43,6 +44,11 @@ async function makePreview(idx){const batch=window.__batchAnalysis||[],a=batch[i
   const removeComments=q('#batchRemoveComments')?.checked!==false;
   const removeSignatures=q('#batchRemoveSignatures')?.checked===true;
   work=await cleanSelectedAnnotations(work,rules,{removeComments,removeSignatures});
+  const removeClouds=q('#batchRemoveRevisionClouds')?.checked===true;
+  if(removeClouds&&Array.isArray(a.revisionClouds)&&a.revisionClouds.length){
+    const cloudPreview=await removeDetectedRevisionCloudsByExactFamily(work,a.revisionClouds);
+    if(cloudPreview?.removed>0)work=new Uint8Array(cloudPreview.data);
+  }
   const resultDoc=mupdf.PDFDocument.openDocument(new Uint8Array(work),'application/pdf');
   const applied=applyTextAndVector(resultDoc,a);
   const out=resultDoc.saveToBuffer('garbage=4,compress=yes,appearance=yes').asUint8Array();
