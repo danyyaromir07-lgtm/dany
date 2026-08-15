@@ -3,6 +3,8 @@
 const q=(s)=>document.querySelector(s);
 const WATCHED_IDS=new Set(['batchRemoveComments','batchEnableOCR','batchRemoveRevisionClouds','batchRemoveSignatures','batchRemoveLinks']);
 let queued=false;
+let activeIndex=-1;
+let resultPreviewActive=false;
 
 function ensureStyles(){
   if(document.querySelector('link[data-preview-ui="1"]'))return;
@@ -16,6 +18,7 @@ function ensureStyles(){
 function currentItem(){
   const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];
   const name=String(window.__previewFileName||'');
+  if(Number.isInteger(activeIndex)&&activeIndex>=0&&batch[activeIndex]&&String(batch[activeIndex]?.name||'')===name)return batch[activeIndex];
   return batch.find((item)=>String(item?.name||'')===name)||null;
 }
 
@@ -54,7 +57,7 @@ function relevantOperations(item){
 
 function renderSummary(){
   const box=ensureSummary(),preview=q('#batchPreview');
-  if(!box||!preview||preview.classList.contains('hidden')||!window.__previewFileName){
+  if(!box||!preview||!resultPreviewActive||preview.classList.contains('hidden')||!window.__previewFileName){
     box?.classList.add('hidden');
     return;
   }
@@ -98,7 +101,7 @@ function normalizeButtons(){
 
 function normalizeTitle(){
   const title=q('#batchPreviewTitle');
-  if(!title||!window.__previewFileName)return;
+  if(!resultPreviewActive||!title||!window.__previewFileName)return;
   const current=String(title.textContent||'');
   const pageMatch=current.match(/página\s+(\d+)/i);
   const page=pageMatch?.[1]||'1';
@@ -145,7 +148,23 @@ function wire(){
     if(WATCHED_IDS.has(event.target?.id))scheduleRefresh();
   });
   document.addEventListener('click',(event)=>{
-    if(event.target?.closest?.('.bpreviewResult,#previewOriginalBtn,#previewResultBtn'))setTimeout(scheduleRefresh,0);
+    const resultButton=event.target?.closest?.('.bpreviewResult');
+    if(resultButton){
+      const idx=Number(resultButton.dataset?.idx);
+      activeIndex=Number.isInteger(idx)?idx:-1;
+      resultPreviewActive=true;
+      setTimeout(scheduleRefresh,0);
+      return;
+    }
+    const originalOnly=event.target?.closest?.('.bpreview');
+    if(originalOnly){
+      const idx=Number(originalOnly.dataset?.idx);
+      activeIndex=Number.isInteger(idx)?idx:-1;
+      resultPreviewActive=false;
+      setTimeout(scheduleRefresh,0);
+      return;
+    }
+    if(event.target?.closest?.('#previewOriginalBtn,#previewResultBtn'))setTimeout(scheduleRefresh,0);
   });
 }
 
