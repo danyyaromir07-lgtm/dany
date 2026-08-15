@@ -1,10 +1,13 @@
-const panel=document.createElement('section');
-panel.className='text-warning';
-panel.id='ocrDiagnosticsPanel';
-panel.style.marginTop='12px';
-panel.innerHTML=`<details><summary><strong>🧪 Diagnóstico OCR</strong> — ver en qué etapa está, cuánto tarda y dónde falla</summary><div style="margin-top:10px"><div id="ocrDiagSummary" style="font-size:.9rem;margin-bottom:8px">Sin actividad OCR.</div><pre id="ocrDiagLog" style="max-height:280px;overflow:auto;white-space:pre-wrap;margin:0;padding:10px;background:rgba(0,0,0,.04);border-radius:8px;font-size:12px"></pre><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="ocrDiagCopy" class="secondary small" type="button">Copiar diagnóstico</button><button id="ocrDiagClear" class="secondary small" type="button">Limpiar</button></div></div></details>`;
-const anchor=document.querySelector('#analysisTool .text-warning:last-of-type')||document.querySelector('#analysisTool');
-anchor?.parentElement?.insertBefore(panel,anchor.nextSibling);
+let panel=document.querySelector('#ocrDiagnosticsBox')||document.querySelector('#ocrDiagnosticsPanel');
+if(!panel){
+  panel=document.createElement('section');
+  panel.className='text-warning';
+  panel.id='ocrDiagnosticsPanel';
+  panel.style.marginTop='12px';
+  panel.innerHTML=`<details><summary><strong>🧪 Diagnóstico OCR</strong> — ver en qué etapa está, cuánto tarda y dónde falla</summary><div style="margin-top:10px"><div id="ocrDiagSummary" style="font-size:.9rem;margin-bottom:8px">Sin actividad OCR.</div><pre id="ocrDiagLog" style="max-height:280px;overflow:auto;white-space:pre-wrap;margin:0;padding:10px;background:rgba(0,0,0,.04);border-radius:8px;font-size:12px"></pre><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="ocrDiagCopy" class="secondary small" type="button">Copiar diagnóstico</button><button id="ocrDiagClear" class="secondary small" type="button">Limpiar</button></div></div></details>`;
+  const anchor=document.querySelector('#analysisTool .text-warning:last-of-type')||document.querySelector('#analysisTool');
+  anchor?.parentElement?.insertBefore(panel,anchor.nextSibling);
+}
 
 // OCR es opcional en este proyecto: se activa explícitamente desde el checkbox.
 const optionsPanel=document.querySelector('#analysisTool .option-box');
