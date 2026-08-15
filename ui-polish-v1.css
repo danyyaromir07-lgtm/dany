@@ -13,7 +13,7 @@ body{color:var(--ui-ink);background:linear-gradient(180deg,#fbfcff 0,#f6f8fc 28%
 .shell{max-width:1240px;padding-top:26px}
 
 .hero{margin-bottom:18px}
-.brand-copy strong{font-size:20px;font-weight:800}
+.brand-copy strong{font-size:20px;font-weight:700}
 .brand-copy span{font-size:12.5px;letter-spacing:.01em}
 .icon-btn{box-shadow:0 2px 8px rgba(31,42,68,.04);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
 .icon-btn:hover{transform:translateY(-1px);border-color:#d5d9e5;box-shadow:0 5px 14px rgba(31,42,68,.08)}
@@ -29,7 +29,7 @@ body{color:var(--ui-ink);background:linear-gradient(180deg,#fbfcff 0,#f6f8fc 28%
 
 .card{border-color:var(--ui-line);border-radius:22px;padding:24px;box-shadow:var(--ui-shadow)}
 .tool-head{margin-bottom:20px}
-.tool-head h2{font-size:22px;font-weight:820}
+.tool-head h2{font-size:22px;font-weight:700}
 .tool-head p{font-size:13.5px;max-width:760px}
 
 .dropzone{border-color:#c6c0ff;border-radius:18px;background:linear-gradient(180deg,#fff 0,#fbfbff 100%);box-shadow:inset 0 0 0 1px rgba(91,61,245,.025)}
@@ -57,8 +57,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .secondary:hover{background:#eceff5;border-color:#d6dbe7}
 
 .action-bar{gap:12px;margin-top:20px;padding:13px;border:1px solid #e3e7f0;border-radius:16px;background:#f8f9fc;box-shadow:0 6px 18px rgba(31,42,68,.04)}
-.action-bar button{min-height:62px;border-radius:12px;font-weight:780}
-.action-bar button small{display:block;margin-top:3px;font-size:11px;font-weight:550;opacity:.8}
+.action-bar button{min-height:62px;border-radius:12px;font-weight:650}
+.action-bar button small{display:block;margin-top:3px;font-size:11px;font-weight:500;opacity:.8}
 
 .status{min-height:26px;margin-top:14px;padding:0 2px;line-height:1.5}
 .summary{border-radius:14px;padding:14px 16px;box-shadow:0 3px 12px rgba(32,164,100,.04)}
@@ -72,7 +72,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 
 .stats{gap:0;padding:12px 8px;border-color:#dcebe2;background:linear-gradient(180deg,#fbfffc,#f8fcfa);box-shadow:0 4px 15px rgba(32,164,100,.035)}
 .stat{min-height:56px;padding:6px 20px}
-.stat strong{font-size:21px;font-weight:820}
+.stat strong{font-size:21px;font-weight:700}
 .stat span{font-size:11.5px}
 
 .results-grid{gap:18px;margin-top:18px}
@@ -129,7 +129,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   min-width:0;
   color:#293247;
   font-size:12.75px;
-  font-weight:760;
+  font-weight:600;
 }
 #analysisTool .analysis-grid .panel:nth-child(2) .option-box input[type="checkbox"]{
   -webkit-appearance:none;
