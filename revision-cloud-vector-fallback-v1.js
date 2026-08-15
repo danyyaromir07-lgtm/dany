@@ -9,13 +9,13 @@ function q(s){ return document.querySelector(s); }
 function sameNumber(a,b){ return Math.abs(Number(a)-Number(b)) <= EPS; }
 function isRed(rgb){
   if(!rgb || rgb.length < 3) return false;
-  const [r,g,b]=rgb.map(Number);
+  const [r,g,b]=Array.from(rgb).slice(0,3).map(Number);
   return r >= 0.50 && r >= g + 0.12 && r >= b + 0.12;
 }
 function colorKey(cs,color){
   const name=String(cs||'');
-  if(!/DeviceRGB|RGB/i.test(name) || !Array.isArray(color) || color.length<3) return null;
-  return color.slice(0,3).map(v=>Number(v).toPrecision(12)).join('|');
+  if(!/DeviceRGB|RGB/i.test(name) || !color || typeof color.length!=='number' || color.length<3) return null;
+  return Array.from(color).slice(0,3).map(v=>Number(v).toPrecision(12)).join('|');
 }
 function widthKey(w){ return Number(w||0).toPrecision(12); }
 function unionRect(a,b){
