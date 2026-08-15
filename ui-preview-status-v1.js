@@ -4,6 +4,15 @@ const q=(s)=>document.querySelector(s);
 const WATCHED_IDS=new Set(['batchRemoveComments','batchEnableOCR','batchRemoveRevisionClouds','batchRemoveSignatures','batchRemoveLinks']);
 let queued=false;
 
+function ensureStyles(){
+  if(document.querySelector('link[data-preview-ui="1"]'))return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='./ui-preview-v1.css?v=20260816-preview1';
+  link.dataset.previewUi='1';
+  document.head.appendChild(link);
+}
+
 function currentItem(){
   const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];
   const name=String(window.__previewFileName||'');
@@ -103,6 +112,7 @@ function compactNote(){
 
 function refresh(){
   queued=false;
+  ensureStyles();
   ensureSummary();
   normalizeButtons();
   normalizeTitle();
@@ -117,6 +127,7 @@ function scheduleRefresh(){
 }
 
 function wire(){
+  ensureStyles();
   refresh();
   const card=q('.preview-card');
   if(card){
