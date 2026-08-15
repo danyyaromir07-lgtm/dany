@@ -43,7 +43,7 @@ function collectFamilies(mupdf,page){
       let bbox;
       try{ bbox=Array.from(path.getBounds(stroke,ctm)); }catch(_){ return; }
       if(!bbox || bbox.length<4) return;
-      const w=Number(stroke?.lineWidth ?? 0);
+      const w=Number(stroke?.getLineWidth?.() ?? stroke?.lineWidth ?? 0);
       const key=`${ck}::${widthKey(w)}`;
       const rec={
         bbox,
