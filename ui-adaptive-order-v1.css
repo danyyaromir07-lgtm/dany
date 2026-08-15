@@ -1,0 +1,13 @@
+/* Adaptive operations ordering v1 — presentation only.
+   Does not move/recreate DOM nodes and does not change control IDs or behavior. */
+#analysisTool .analysis-grid .panel:nth-child(2){
+  display:flex;
+  flex-direction:column;
+}
+#analysisTool .analysis-grid .panel:nth-child(2)>.panel-title{order:0;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveComments){order:10;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchEnableOCR){order:20;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveRevisionClouds){order:30;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveSignatures){order:40;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveLinks){order:50;}
+#analysisTool .analysis-grid .panel:nth-child(2)>.info-box{order:60;}
