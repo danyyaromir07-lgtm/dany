@@ -36,7 +36,7 @@ function ensureDiagnosticPanel() {
 }
 
 function loadDetailedDiagnostics() {
-  import('./revision-cloud-diagnostics-v2.js?v=20260815-clouddiag-resilient1').catch(err => {
+  import('./revision-cloud-diagnostics-v2.js?v=20260815-clouddiag-resilient2').catch(err => {
     const summary = q('#cloudDiagSummary');
     const log = q('#cloudDiagLog');
     const msg = err && err.message ? err.message : String(err);
