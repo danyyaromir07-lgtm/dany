@@ -29,6 +29,39 @@ function rectGap(a,b){
   return Math.hypot(dx,dy);
 }
 function area(r){ return Math.max(0,r[2]-r[0])*Math.max(0,r[3]-r[1]); }
+function rectUnionArea(rects){
+  if(!Array.isArray(rects) || !rects.length) return 0;
+  const xs=[];
+  for(const r of rects){
+    if(!r || r.length<4) continue;
+    if(Number.isFinite(r[0])&&Number.isFinite(r[2])){ xs.push(r[0],r[2]); }
+  }
+  xs.sort((a,b)=>a-b);
+  const unique=[];
+  for(const x of xs){ if(!unique.length || Math.abs(x-unique[unique.length-1])>EPS) unique.push(x); }
+  let total=0;
+  for(let i=0;i+1<unique.length;i++){
+    const x0=unique[i],x1=unique[i+1];
+    if(x1<=x0) continue;
+    const spans=[];
+    for(const r of rects){
+      if(!r || r.length<4 || r[0]>=x1 || r[2]<=x0) continue;
+      const y0=Number(r[1]),y1=Number(r[3]);
+      if(Number.isFinite(y0)&&Number.isFinite(y1)&&y1>y0) spans.push([y0,y1]);
+    }
+    if(!spans.length) continue;
+    spans.sort((a,b)=>a[0]-b[0] || a[1]-b[1]);
+    let y0=spans[0][0],y1=spans[0][1],covered=0;
+    for(let j=1;j<spans.length;j++){
+      const s=spans[j];
+      if(s[0]<=y1+EPS){ if(s[1]>y1)y1=s[1]; }
+      else { covered+=Math.max(0,y1-y0); y0=s[0]; y1=s[1]; }
+    }
+    covered+=Math.max(0,y1-y0);
+    total+=(x1-x0)*covered;
+  }
+  return total;
+}
 
 async function loadMuPDF(){
   if(!mupdfPromise) mupdfPromise=import('https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js');
@@ -93,17 +126,20 @@ function evaluateFamily(key,strokes,pageBounds){
   const frac=area(union)/pageArea;
   if(frac < 0.00015) return {candidate:null,reason:'familia demasiado pequeña respecto a la página',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac}};
   if(frac > 0.08) return {candidate:null,reason:'familia ocupa demasiado de la página',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac}};
-  const sparse=sumBoxArea/Math.max(1,area(union));
-  if(sparse > 0.25) return {candidate:null,reason:'densidad demasiado alta',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse}};
+  const bboxArea=Math.max(1,area(union));
+  const rawDensity=sumBoxArea/bboxArea;
+  const occupiedArea=rectUnionArea(main.map(s=>s.bbox));
+  const sparse=occupiedArea/bboxArea;
+  if(sparse > 0.25) return {candidate:null,reason:'densidad de unión demasiado alta',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,rawDensity,occupiedArea}};
   const aspect=Math.min(w,h)/Math.max(w,h);
-  if(aspect < 0.10) return {candidate:null,reason:'geometría demasiado lineal/alargada',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,aspect}};
+  if(aspect < 0.10) return {candidate:null,reason:'geometría demasiado lineal/alargada',metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,rawDensity,occupiedArea,aspect}};
   const outside=strokes.length-main.length;
   const outsideLimit=Math.max(2,Math.floor(strokes.length*0.05));
-  if(outside > outsideLimit) return {candidate:null,reason:`demasiados trazos fuera del componente principal (${outside})`,metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,aspect,outside,outsideLimit}};
+  if(outside > outsideLimit) return {candidate:null,reason:`demasiados trazos fuera del componente principal (${outside})`,metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,rawDensity,occupiedArea,aspect,outside,outsideLimit}};
   return {
     candidate:{key,bbox:union,rgb:main[0].rgb,lineWidth:main[0].lineWidth,strokeCount:main.length,sparse,fraction:frac,source:'vector-family'},
     reason:null,
-    metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,aspect,outside,outsideLimit}
+    metrics:{...base,gapLimit,components:comps.length,main:main.length,mainRatio,bbox:union,width:w,height:h,fraction:frac,density:sparse,rawDensity,occupiedArea,aspect,outside,outsideLimit}
   };
 }
 
@@ -128,7 +164,7 @@ export async function detectVectorCloudFallback(data,context={}){
       if(context.file){
         diag({stage:'cloud.fallback.real.page',detail:`detector real · familias=${groups.size} · candidatas=${candidates.length}`,file:context.file,page:i+1,candidates:candidates.length});
         for(const f of families.filter(x=>x.strokes>=20 && x.strokes<=1200)){
-          diag({stage:f.accepted?'cloud.fallback.real.accept':'cloud.fallback.real.reject',detail:f.accepted?'familia aceptada por detector real':'familia rechazada por detector real',file:context.file,page:i+1,strokes:f.strokes,rgb:f.rgb,lineWidth:f.lineWidth,bbox:f.bbox,reason:f.reason,components:f.components,main:f.main,fraction:f.fraction,density:f.density,aspect:f.aspect,outside:f.outside});
+          diag({stage:f.accepted?'cloud.fallback.real.accept':'cloud.fallback.real.reject',detail:f.accepted?'familia aceptada por detector real':'familia rechazada por detector real',file:context.file,page:i+1,strokes:f.strokes,rgb:f.rgb,lineWidth:f.lineWidth,bbox:f.bbox,reason:f.reason,components:f.components,main:f.main,fraction:f.fraction,density:f.density,rawDensity:f.rawDensity,aspect:f.aspect,outside:f.outside});
         }
       }
       if(candidates.length===1){
@@ -180,7 +216,7 @@ async function runFallbackAfterRaster(){
     }catch(err){ item.revisionCloudVectorError=err?.message||String(err); }
     await sleep(0);
   }
-  window.__revisionCloudVectorFallbackDebug={added,version:'selfdiag-1',debug,batch:batch.map(x=>({name:x?.name,count:x?.revisionCloudCount||0,vector:!!x?.revisionCloudVectorFallback,error:x?.revisionCloudVectorError||null}))};
+  window.__revisionCloudVectorFallbackDebug={added,version:'union-density-1',debug,batch:batch.map(x=>({name:x?.name,count:x?.revisionCloudCount||0,vector:!!x?.revisionCloudVectorFallback,error:x?.revisionCloudVectorError||null}))};
   if(added) refreshCloudReport(batch);
 }
 
