@@ -1,3 +1,5 @@
+import './revision-cloud-results-inline-v1.js?v=20260816-inline1';
+
 const CHECKBOX = '#batchRemoveRevisionClouds';
 const ANALYZE = '#batchAnalyze';
 const STATUS = '#batchStatus';
