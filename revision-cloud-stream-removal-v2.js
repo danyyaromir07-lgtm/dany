@@ -5,8 +5,8 @@ function sameNumber(a,b){return Math.abs(Number(a)-Number(b))<=EPS;}
 function rectIntersects(a,b){return a&&b&&a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];}
 function rectContains(outer,inner,pad=0){return inner[0]>=outer[0]-pad&&inner[1]>=outer[1]-pad&&inner[2]<=outer[2]+pad&&inner[3]<=outer[3]+pad;}
 function unionRect(a,b){if(!a)return b.slice();return[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[2],b[2]),Math.max(a[3],b[3])];}
-function exactRGBKey(cs,color){const name=String(cs||'');if(!/DeviceRGB|RGB/i.test(name)||!Array.isArray(color)||color.length<3)return null;return color.slice(0,3).map(v=>Number(v).toPrecision(12)).join('|');}
-function isRedRGB(rgb){if(!rgb||rgb.length<3)return false;const[r,g,b]=rgb.map(Number);return r>=0.5&&r>=g+0.12&&r>=b+0.12;}
+function exactRGBKey(cs,color){const name=String(cs||'');if(!/DeviceRGB|RGB/i.test(name)||!color||typeof color.length!=='number'||color.length<3)return null;return Array.from(color).slice(0,3).map(v=>Number(v).toPrecision(12)).join('|');}
+function isRedRGB(rgb){if(!rgb||rgb.length<3)return false;const[r,g,b]=Array.from(rgb).slice(0,3).map(Number);return r>=0.5&&r>=g+0.12&&r>=b+0.12;}
 function sameRGB(a,b){return a&&b&&a.length>=3&&b.length>=3&&sameNumber(a[0],b[0])&&sameNumber(a[1],b[1])&&sameNumber(a[2],b[2]);}
 function pageRotation(page){try{const v=page.getObject()?.getInheritable?.('Rotate');const n=((Number(v?.valueOf?.()??v??0)%360)+360)%360;return[0,90,180,270].includes(n)?n:0;}catch(_){return 0;}}
 function rotatedRect(page,r){const rot=pageRotation(page);if(!rot)return r.slice();const b=Array.from(page.getBounds());const dw=b[2]-b[0],dh=b[3]-b[1],uw=(rot===90||rot===270)?dh:dw,uh=(rot===90||rot===270)?dw:dh;const x0=r[0]-b[0],y0=r[1]-b[1],x1=r[2]-b[0],y1=r[3]-b[1];let out;if(rot===90)out=[uh-y1,x0,uh-y0,x1];else if(rot===180)out=[uw-x1,uh-y1,uw-x0,uh-y0];else out=[y0,uw-x1,y1,uw-x0];return[out[0]+b[0],out[1]+b[1],out[2]+b[0],out[3]+b[1]];}
