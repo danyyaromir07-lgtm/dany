@@ -206,3 +206,87 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   .preview-controls{width:100%;justify-content:flex-end}
   #analysisTool .analysis-grid .panel:nth-child(2) .option-box small{margin-right:0}
 }
+
+/* Preview refinement — CSS only. No DOM movement and no event changes. */
+.preview-card-head{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  column-gap:14px;
+  row-gap:8px;
+}
+#batchPreviewTitle{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#70798b;
+  font-size:11.5px;
+}
+.preview-controls{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:5px;
+  white-space:nowrap;
+}
+.preview-controls>span:first-child{
+  display:inline-flex!important;
+  align-items:center;
+  gap:3px!important;
+  margin-right:8px!important;
+  padding:3px;
+  border:1px solid #dfe3ec;
+  border-radius:10px;
+  background:#eef1f6;
+}
+#previewOriginalBtn.small,#previewResultBtn.small{
+  min-height:32px;
+  padding:6px 11px;
+  border:1px solid transparent;
+  border-radius:7px;
+  font-size:12px;
+  font-weight:650;
+  box-shadow:none;
+  transform:none;
+}
+#previewOriginalBtn.secondary,#previewResultBtn.secondary{
+  background:transparent;
+  color:#606a7b;
+}
+#previewOriginalBtn.primary,#previewResultBtn.primary{
+  background:#fff;
+  color:#30277f;
+  border-color:#dcd8ff;
+  box-shadow:0 2px 7px rgba(31,42,68,.09);
+}
+#previewOriginalBtn:hover,#previewResultBtn:hover{transform:none}
+#previewMinus{margin-left:2px}
+#previewMinus,#preview100,#previewPlus,#previewFit{
+  min-height:32px;
+  border-radius:8px;
+}
+.preview-wrap{margin:8px 12px 8px}
+.preview-note{
+  margin:8px 12px 12px;
+  padding:8px 10px;
+  border-color:#e5e7ee;
+  background:#fafbfe;
+  color:#778094;
+  font-size:10.5px;
+  line-height:1.4;
+}
+.preview-note strong{color:#5f687b;font-weight:650}
+
+@media(max-width:760px){
+  .preview-card-head{grid-template-columns:1fr auto}
+  .preview-card-head>strong{grid-column:1}
+  #batchPreviewTitle{grid-column:1/-1;grid-row:2}
+  .preview-controls{grid-column:2;grid-row:1}
+}
+@media(max-width:620px){
+  .preview-card-head{display:flex;align-items:flex-start;flex-direction:column}
+  #batchPreviewTitle{width:100%;white-space:normal}
+  .preview-controls{width:100%;justify-content:flex-start;flex-wrap:wrap}
+  .preview-controls>span:first-child{margin-right:3px!important}
+}
