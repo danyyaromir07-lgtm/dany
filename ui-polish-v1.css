@@ -180,6 +180,16 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   color:#6c7587;
 }
 
+/* Stable visual ordering for adaptive operations. This uses CSS order only; DOM and listeners stay untouched. */
+#analysisTool .analysis-grid .panel:nth-child(2){display:flex;flex-direction:column}
+#analysisTool .analysis-grid .panel:nth-child(2)>.panel-title{order:0}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveComments){order:10}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchEnableOCR){order:20}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveRevisionClouds){order:30}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveSignatures){order:40}
+#analysisTool .analysis-grid .panel:nth-child(2)>.option-box:has(#batchRemoveLinks){order:50}
+#analysisTool .analysis-grid .panel:nth-child(2)>.info-box{order:60}
+
 @media(max-width:900px){
   .analysis-grid{grid-template-columns:1fr}
   .action-bar{grid-template-columns:1fr 1fr}
