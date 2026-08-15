@@ -1,0 +1,89 @@
+/* Diagnostics UI v1 — visual layer only. No diagnostic logic or DOM relocation. */
+#ocrDiagnosticsBox,
+#cloudDiagnosticsPanel{
+  margin-top:10px!important;
+  padding:0;
+  overflow:hidden;
+  border:1px solid #e3e7f0!important;
+  border-radius:13px;
+  background:#fafbfe!important;
+  color:#626c7e;
+  box-shadow:0 2px 8px rgba(31,42,68,.025);
+}
+
+#ocrDiagnosticsBox details,
+#cloudDiagnosticsPanel details{
+  margin:0;
+}
+
+#ocrDiagnosticsBox details>summary,
+#cloudDiagnosticsPanel details>summary{
+  cursor:pointer;
+  list-style:none;
+  padding:11px 13px;
+  color:#566176;
+  font-size:11.75px;
+  line-height:1.4;
+  background:#fafbfe;
+}
+
+#ocrDiagnosticsBox details>summary::-webkit-details-marker,
+#cloudDiagnosticsPanel details>summary::-webkit-details-marker{
+  display:none;
+}
+
+#ocrDiagnosticsBox details>summary::before,
+#cloudDiagnosticsPanel details>summary::before{
+  content:'›';
+  display:inline-block;
+  margin-right:8px;
+  font-size:17px;
+  line-height:1;
+  color:#697387;
+  transition:transform .15s ease;
+}
+
+#ocrDiagnosticsBox details[open]>summary::before,
+#cloudDiagnosticsPanel details[open]>summary::before{
+  transform:rotate(90deg);
+}
+
+#ocrDiagnosticsBox details>summary strong,
+#cloudDiagnosticsPanel details>summary strong{
+  color:#303a50;
+  font-size:12.25px;
+  font-weight:650;
+}
+
+#ocrDiagnosticsBox details[open]>summary,
+#cloudDiagnosticsPanel details[open]>summary{
+  border-bottom:1px solid #e8ebf2;
+  background:#f8f9fc;
+}
+
+#ocrDiagnosticsBox details>div,
+#cloudDiagnosticsPanel details>div{
+  padding:0 12px 12px;
+}
+
+#ocrDiagnosticsBox pre,
+#cloudDiagnosticsPanel pre{
+  border:1px solid #e2e6ee!important;
+  border-radius:9px!important;
+  background:#f6f8fb!important;
+  color:#3f495b;
+  line-height:1.45;
+}
+
+#ocrDiagnosticsBox .secondary.small,
+#cloudDiagnosticsPanel .secondary.small{
+  min-height:30px;
+  padding:6px 10px;
+  font-size:11px;
+}
+
+#revisionCloudLocationBox{
+  border-color:#e3e7f0!important;
+  background:#fafbfe!important;
+  color:#5f697b;
+}
