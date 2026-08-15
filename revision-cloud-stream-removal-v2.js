@@ -15,7 +15,7 @@ function collectStrokes(mupdf,page){
   const out=[];
   const device=new mupdf.Device({strokePath(path,stroke,ctm,colorSpace,color,alpha){
     const key=exactRGBKey(colorSpace,color);if(!key||!isRedRGB(color))return;let bbox;try{bbox=Array.from(path.getBounds(stroke,ctm));}catch(_){return;}if(!bbox||bbox.length<4)return;
-    out.push({key,rgb:[Number(color[0]),Number(color[1]),Number(color[2])],bbox,rotatedBBox:rotatedRect(page,bbox),lineWidth:Number(stroke?.lineWidth??0),alpha:Number(alpha??1)});
+    out.push({key,rgb:[Number(color[0]),Number(color[1]),Number(color[2])],bbox,rotatedBBox:rotatedRect(page,bbox),lineWidth:Number(stroke?.getLineWidth?.()??stroke?.lineWidth??0),alpha:Number(alpha??1)});
   }});
   page.runPageContents(device,mupdf.Matrix.identity);device.close?.();return out;
 }
