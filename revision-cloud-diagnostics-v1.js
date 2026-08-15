@@ -2,13 +2,12 @@ const CHECKBOX = '#batchRemoveRevisionClouds';
 const ANALYZE = '#batchAnalyze';
 const STATUS = '#batchStatus';
 const PANEL_ID = 'cloudDiagnosticsPanel';
-
 const q = (s) => document.querySelector(s);
 let timer = null;
 let lastSignature = '';
 
-function ensureDiagnosticPanel() {
-  let panel = document.getElementById(PANEL_ID);
+function ensurePanel() {
+  let panel = q(`#${PANEL_ID}`);
   if (panel) return panel;
   const host = q('#analysisTool');
   if (!host) return null;
@@ -18,52 +17,16 @@ function ensureDiagnosticPanel() {
   panel.style.marginTop = '12px';
   panel.innerHTML = '<details><summary><strong>☁️ 🧪 Diagnóstico de nubes</strong> — detección raster, familia vectorial y borrado seguro</summary><div style="margin-top:10px"><div id="cloudDiagSummary" style="font-size:.9rem;margin-bottom:8px">Diagnóstico de nubes cargado. Sin actividad todavía.</div><pre id="cloudDiagLog" style="max-height:340px;overflow:auto;white-space:pre-wrap;margin:0;padding:10px;background:rgba(0,0,0,.04);border-radius:8px;font-size:12px">Activa “Eliminar nubes de revisión gráficas” y pulsa Analizar PDFs para registrar el proceso.</pre><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="cloudDiagCopy" class="secondary small" type="button">Copiar diagnóstico</button><button id="cloudDiagClear" class="secondary small" type="button">Limpiar</button></div></div></details>';
   const anchor = q('#revisionCloudLocationBox') || q('#ocrDiagnosticsBox') || q('#batchStatus');
-  if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(panel, anchor.nextSibling);
+  if (anchor?.parentElement) anchor.parentElement.insertBefore(panel, anchor.nextSibling);
   else host.appendChild(panel);
   q('#cloudDiagCopy')?.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(q('#cloudDiagLog')?.textContent || ''); } catch (_) {}
   });
-  q('#cloudDiagClear')?.addEventListener('click', () => {
-    if (typeof window.__cloudDiagnosticsReset === 'function') window.__cloudDiagnosticsReset();
-    else {
-      const log = q('#cloudDiagLog');
-      const summary = q('#cloudDiagSummary');
-      if (log) log.textContent = 'Diagnóstico limpiado.';
-      if (summary) summary.textContent = 'Sin actividad de nubes.';
-    }
-  });
+  q('#cloudDiagClear')?.addEventListener('click', () => window.__cloudDiagnosticsReset?.());
   return panel;
 }
 
-function loadDetailedDiagnostics() {
-  import('./revision-cloud-diagnostics-v2.js?v=20260815-clouddiag-resilient2').catch(err => {
-    const summary = q('#cloudDiagSummary');
-    const log = q('#cloudDiagLog');
-    const msg = err && err.message ? err.message : String(err);
-    if (summary) summary.textContent = 'No se pudo cargar el diagnóstico detallado.';
-    if (log) log.textContent = 'cloud.diagnostic.loader.error | ' + msg;
-    console.error('Cloud diagnostics loader error', err);
-  });
-}
-
-function cloudRows() {
-  const batch = Array.isArray(window.__batchAnalysis) ? window.__batchAnalysis : [];
-  const rows = [];
-  for (const item of batch) {
-    if (!item || item.error) continue;
-    const pages = Array.isArray(item.revisionClouds)
-      ? item.revisionClouds
-          .filter(p => Array.isArray(p?.clouds) && p.clouds.length)
-          .map(p => ({ page: Number(p.page), count: p.clouds.length }))
-      : [];
-    const count = pages.reduce((n, p) => n + p.count, 0);
-    if (!count) continue;
-    rows.push({ name: item.name || '(sin nombre)', count, pages });
-  }
-  return rows;
-}
-
-function ensureBox() {
+function ensureLocationBox() {
   let box = q('#revisionCloudLocationBox');
   if (box) return box;
   const status = q(STATUS);
@@ -76,8 +39,25 @@ function ensureBox() {
   return box;
 }
 
-function renderRows(rows) {
-  const box = ensureBox();
+function cloudRows() {
+  const batch = Array.isArray(window.__batchAnalysis) ? window.__batchAnalysis : [];
+  return batch.flatMap((item) => {
+    if (!item || item.error) return [];
+    const pages = Array.isArray(item.revisionClouds)
+      ? item.revisionClouds.filter((p) => Array.isArray(p?.clouds) && p.clouds.length).map((p) => ({ page: Number(p.page), count: p.clouds.length }))
+      : [];
+    const count = pages.reduce((n, p) => n + p.count, 0);
+    return count ? [{ name: item.name || '(sin nombre)', count, pages }] : [];
+  });
+}
+
+function renderLocations() {
+  if (!q(CHECKBOX)?.checked) return;
+  const rows = cloudRows();
+  const signature = JSON.stringify(rows);
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+  const box = ensureLocationBox();
   if (!box) return;
   if (!rows.length) {
     box.classList.add('hidden');
@@ -85,8 +65,8 @@ function renderRows(rows) {
     return;
   }
   box.replaceChildren();
-  const title = document.createElement('strong');
   const total = rows.reduce((n, r) => n + r.count, 0);
+  const title = document.createElement('strong');
   title.textContent = `☁️ Ubicación de ${total} nube${total === 1 ? '' : 's'} de revisión`;
   box.appendChild(title);
   for (const row of rows) {
@@ -95,56 +75,47 @@ function renderRows(rows) {
     file.textContent = `📄 ${row.name}`;
     box.appendChild(file);
     for (const p of row.pages) {
-      const page = document.createElement('div');
-      page.style.marginLeft = '18px';
-      page.textContent = `↳ Página ${p.page}: ${p.count} nube${p.count === 1 ? '' : 's'}`;
-      box.appendChild(page);
+      const line = document.createElement('div');
+      line.style.marginLeft = '18px';
+      line.textContent = `↳ Página ${p.page}: ${p.count} nube${p.count === 1 ? '' : 's'}`;
+      box.appendChild(line);
     }
   }
   box.classList.remove('hidden');
 }
 
-function render() {
-  if (!q(CHECKBOX)?.checked) return;
-  const batch = Array.isArray(window.__batchAnalysis) ? window.__batchAnalysis : [];
-  if (!batch.length) return;
-  const ready = batch.some(item => item && (Number.isFinite(Number(item.revisionCloudCount)) || item.revisionCloudError));
-  if (!ready) return;
-  const rows = cloudRows();
-  const signature = JSON.stringify(rows);
-  if (signature === lastSignature) return;
-  lastSignature = signature;
-  renderRows(rows);
-}
-
 function startWatch() {
   lastSignature = '';
-  const box = ensureBox();
+  const box = ensureLocationBox();
   if (box) { box.classList.add('hidden'); box.textContent = ''; }
   if (timer) clearInterval(timer);
   let ticks = 0;
   timer = setInterval(() => {
-    render();
-    ticks++;
-    if (ticks >= 600) {
-      clearInterval(timer);
-      timer = null;
-    }
+    renderLocations();
+    if (++ticks >= 600) { clearInterval(timer); timer = null; }
   }, 100);
 }
 
-function wire() {
-  ensureDiagnosticPanel();
-  ensureBox();
-  loadDetailedDiagnostics();
-  q(ANALYZE)?.addEventListener('click', () => {
-    if (q(CHECKBOX)?.checked) startWatch();
+function loadDetailed() {
+  import('./revision-cloud-diagnostics-v2.js?v=20260815-strokewidth1').catch((err) => {
+    const summary = q('#cloudDiagSummary');
+    const log = q('#cloudDiagLog');
+    const msg = err?.message || String(err);
+    if (summary) summary.textContent = 'No se pudo cargar el diagnóstico detallado.';
+    if (log) log.textContent = `cloud.diagnostic.loader.error | ${msg}`;
   });
-  document.addEventListener('change', e => {
+}
+
+function wire() {
+  ensurePanel();
+  ensureLocationBox();
+  loadDetailed();
+  q(ANALYZE)?.addEventListener('click', () => { if (q(CHECKBOX)?.checked) startWatch(); });
+  document.addEventListener('change', (e) => {
     if (!e.target?.matches?.(CHECKBOX)) return;
     if (e.target.checked) startWatch();
     else {
-      const box = ensureBox();
+      const box = ensureLocationBox();
       if (box) { box.classList.add('hidden'); box.textContent = ''; }
     }
   });
