@@ -88,6 +88,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .preview-controls{align-items:center}
 .preview-controls .small{min-width:36px}
 .preview-note{line-height:1.5}
+/* Keep preview mode buttons at their natural content width when they become .primary. */
+#previewOriginalBtn.small,#previewResultBtn.small{flex:0 0 auto;width:auto;min-width:max-content;white-space:nowrap}
 
 .progress-track{height:9px;box-shadow:inset 0 1px 2px rgba(31,42,68,.08)}
 .note{margin-top:18px}
