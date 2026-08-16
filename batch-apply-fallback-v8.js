@@ -74,7 +74,7 @@ export async function runFallback() {
 
     progressSet(0, list.length, 'Cargando motores');
 
-    const vectorModule = await import('./vector-apply-v5.js?v=20260813-orientation1');
+    const vectorModule = await import('./vector-apply-v6.js?v=20260816-structuredsafe1');
     const applyVectorOCR = vectorModule.applyVectorOCR;
     if (typeof applyVectorOCR !== 'function') throw new Error('No se pudo cargar el motor vector/OCR con orientación.');
 
