@@ -1,7 +1,7 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 // Isolated second-pass OCR for short structured title-block codes.
-// It also removes unsafe fuzzy OCR matches for those codes before retrying.
+// It also removes unsafe fuzzy title-block OCR matches before retrying.
 const ANALYZE='#batchAnalyze';
 const OCR='#batchEnableOCR';
 const STATUS='#batchStatus';
@@ -17,6 +17,7 @@ const canonical=s=>norm(s).replace(/\s*[-]\s*/g,'-').replace(/\s*([:/_.])\s*/g,'
 const key=s=>canonical(s).replace(/[^a-z0-9]/g,'').replace(/o/g,'0');
 function simpleTarget(s){return key(s).length>=4&&key(s).length<=14&&String(s).split(/[_\-\s./:]+/).filter(Boolean).length<=3}
 function structuredTarget(s){return String(s||'').includes('_')&&simpleTarget(s)}
+function leadingAbbrevTarget(s){return /^\s*[A-Za-z0-9]\./.test(String(s||''))}
 function iou(a,b){const x=Math.max(0,Math.min(a[2],b[2])-Math.max(a[0],b[0])),y=Math.max(0,Math.min(a[3],b[3])-Math.max(a[1],b[1]));const inter=x*y,aa=Math.max(1,(a[2]-a[0])*(a[3]-a[1])),bb=Math.max(1,(b[2]-b[0])*(b[3]-b[1]));return inter/(aa+bb-inter)}
 function diag(stage,extra={}){try{window.__ocrDiagnostic?.({time:new Date().toISOString(),stage,detail:'titleblock-focused-retry-v2',...extra})}catch(_){}}
 
@@ -107,17 +108,17 @@ function refreshRow(idx){
   span.replaceChildren(hitWrap,footer);span.dataset.resultLines='1';
 }
 
-function pruneUnsafeStructuredMatches(batch){
+function pruneUnsafeMatches(batch){
   let removed=0;const changed=[];
   for(let ai=0;ai<batch.length;ai++){
     const item=batch[ai];if(item?.error)continue;let itemChanged=false;
     for(const c of item.counts||[]){
-      if(!structuredTarget(c?.find))continue;
-      const wanted=key(c.find),before=Array.isArray(c.ocrMatches)?c.ocrMatches:[],safe=before.filter(m=>{const seen=key(m?.ocrText||'');return !!seen&&seen.includes(wanted)});
+      const structured=structuredTarget(c?.find),abbrev=leadingAbbrevTarget(c?.find);if(!structured&&!abbrev)continue;
+      const wanted=key(c.find),before=Array.isArray(c.ocrMatches)?c.ocrMatches:[],safe=before.filter(m=>{const strict=structured||(abbrev&&m?.titleBlockFallback===true);if(!strict)return true;const seen=key(m?.ocrText||'');return !!seen&&seen.includes(wanted)});
       if(safe.length===before.length)continue;
       removed+=before.length-safe.length;c.ocrMatches=safe;c.ocrCount=safe.length;
       if(Number(c.count||0)===0&&Number(c.annotationCount||0)===0)c.pages=[...new Set(safe.map(m=>Number(m.page)).filter(p=>Number.isFinite(p)&&p>0))];
-      itemChanged=true;diag('ocr.titleblock.structured.reject',{file:item.name,target:c.find,removed:before.length-safe.length});
+      itemChanged=true;diag('ocr.titleblock.safety.reject',{file:item.name,target:c.find,removed:before.length-safe.length,structured,abbrev});
     }
     if(itemChanged)changed.push(ai);
   }
@@ -136,7 +137,7 @@ function refreshTotals(batch){
 async function supplement(token){
   if(document.querySelector(OCR)?.checked!==true||token!==runToken)return;
   const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];if(!batch.length)return;
-  const pruned=pruneUnsafeStructuredMatches(batch);let total=0;
+  const pruned=pruneUnsafeMatches(batch);let total=0;
   for(let ai=0;ai<batch.length;ai++){
     const item=batch[ai];if(token!==runToken||item?.error||!item?.data||item?.kinds?.vector!==true)continue;
     const pending=(item.counts||[]).filter(c=>c?.find?.trim()&&structuredTarget(c.find)&&Number(c.count||0)===0&&Number(c.annotationCount||0)===0&&Number(c.ocrCount||0)===0);if(!pending.length)continue;
