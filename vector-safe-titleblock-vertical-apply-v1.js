@@ -60,9 +60,36 @@ function metrics(raw, replacement, orientation) {
   return { width, height, size, scaleX, orientation, replacementRun: fontAdvance(font, replacement) * size * scaleX };
 }
 function pageTransform(page) {
-  const transform = Array.from(page.getTransform?.() || [], Number);
-  if (transform.length !== 6 || !transform.every(Number.isFinite)) throw new Error('No se pudo obtener page.getTransform().');
-  return transform;
+  const base = Array.from(page.getTransform?.() || [], Number);
+  if (base.length !== 6 || !base.every(Number.isFinite)) throw new Error('No se pudo obtener page.getTransform().');
+  let rotation = 0;
+  try {
+    const dict = resolved(page.getObject());
+    const rotateObject = dict?.getInheritable?.('Rotate') || dict?.get?.('Rotate');
+    const rotateValue = resolved(rotateObject);
+    rotation = Number(rotateValue?.asNumber?.() ?? rotateValue?.valueOf?.() ?? 0);
+  } catch (_) {}
+  rotation = ((rotation % 360) + 360) % 360;
+  if (rotation !== 90 && rotation !== 180 && rotation !== 270) return base;
+  const bounds = Array.from(page.getBounds?.() || [], Number);
+  if (bounds.length !== 4 || !bounds.every(Number.isFinite)) return base;
+  const [x0, y0, x1, y1] = bounds;
+  const width = Math.abs(x1 - x0);
+  const height = Math.abs(y1 - y0);
+  let derotate;
+  if (rotation === 90) derotate = [0, -1, 1, 0, -y0, width + x0];
+  else if (rotation === 180) derotate = [-1, 0, 0, -1, width + x0, height + y0];
+  else derotate = [0, 1, -1, 0, height + y0, -x0];
+  const [a1, b1, c1, d1, e1, f1] = derotate;
+  const [a2, b2, c2, d2, e2, f2] = base;
+  return [
+    a2 * a1 + c2 * b1,
+    b2 * a1 + d2 * b1,
+    a2 * c1 + c2 * d1,
+    b2 * c1 + d2 * d1,
+    a2 * e1 + c2 * f1 + e2,
+    b2 * e1 + d2 * f1 + f2,
+  ];
 }
 function resolved(obj) {
   try { return obj?.resolve?.() || obj; } catch (_) { return obj; }
