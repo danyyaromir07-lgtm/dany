@@ -219,16 +219,25 @@ function updateResultLine(index, rule) {
   const row = document.querySelectorAll('.batch-result')[index];
   const hitWrap = row?.querySelector('.batch-hit-lines');
   if (!hitWrap) return;
-  for (const line of [...hitWrap.querySelectorAll('.batch-hit-line')]) if (line.textContent.trim() === 'Sin coincidencias') line.remove();
   const key = `safe-code-${String(rule.find || '').replace(/[^a-z0-9]/gi, '_')}`;
-  let line = hitWrap.querySelector(`[data-safe-code-key="${key}"]`);
-  if (!line) {
-    line = document.createElement('span');
+  const needle = `${rule.find} (vector/OCR`;
+  for (const line of [...hitWrap.querySelectorAll('.batch-hit-line')]) {
+    if (line.dataset.safeCodeKey === key || line.textContent.includes(needle) || line.textContent.trim() === 'Sin coincidencias') line.remove();
+  }
+  const n = Number(rule.ocrCount || 0);
+  if (n > 0) {
+    const line = document.createElement('span');
     line.className = 'batch-hit-line';
     line.dataset.safeCodeKey = key;
+    line.textContent = `${n}× ${rule.find} (vector/OCR cartela segura)`;
     hitWrap.appendChild(line);
   }
-  line.textContent = `${Number(rule.ocrCount || 0)}× ${rule.find} (vector/OCR cartela segura)`;
+  if (!hitWrap.querySelector('.batch-hit-line')) {
+    const empty = document.createElement('span');
+    empty.className = 'batch-hit-line';
+    empty.textContent = 'Sin coincidencias';
+    hitWrap.appendChild(empty);
+  }
 }
 function refreshTotals(batch) {
   const total = batch.reduce((sum, item) => sum + (item?.error ? 0 : (item.counts || []).reduce((n, rule) => n + Number(rule.count || 0) + Number(rule.annotationCount || 0) + Number(rule.ocrCount || 0), 0)), 0);
@@ -236,6 +245,55 @@ function refreshTotals(batch) {
   if (stat) stat.textContent = total;
   const apply = document.querySelector('#batchApply');
   if (apply) apply.disabled = !batch.some(item => !item?.error && ((item.counts || []).some(rule => rule.count || rule.annotationCount || rule.ocrCount) || Number(item.comments || 0) > 0));
+}
+function validateExistingOCR(doc, item, rule) {
+  const accepted = [];
+  for (const match of rule.ocrMatches || []) {
+    if (match?.safeTitleblockCode === true) { accepted.push(match); continue; }
+    const pageNo = Math.max(1, Number(match?.page || 1));
+    const source = String(match?.ocrText || '');
+    const hit = locateExact(source, rule.find);
+    const raw = Array.isArray(match?.bbox) ? match.bbox.map(Number) : [];
+    if (!hit || Number(match?.confidence || 0) < 12 || raw.length !== 4 || !raw.every(Number.isFinite) || raw[2] <= raw[0] || raw[3] <= raw[1]) {
+      diag('titleblock.code.exact.reject', { file: item.name, page: pageNo, target: rule.find, ocr: source, reason: 'existing-ocr-not-exact' });
+      continue;
+    }
+    const bbox = bboxForSubstring(raw, source, hit);
+    let page;
+    try { page = doc.loadPage(pageNo - 1); }
+    catch (_) {
+      diag('titleblock.code.exact.reject', { file: item.name, page: pageNo, target: rule.find, ocr: source, reason: 'invalid-page' });
+      continue;
+    }
+    const real = overlappingPdfText(structuredLines(page), bbox);
+    if (real.length) {
+      diag('titleblock.code.pdftext.reject', {
+        file: item.name, page: pageNo, target: rule.find, ocr: hit.rawText, bbox,
+        pdfText: real.map(line => line.text).join(' | ').slice(0, 500), source: 'existing-ocr',
+      });
+      continue;
+    }
+    const safe = {
+      ...match,
+      bbox,
+      confidence: Number(match.confidence || 0),
+      similarity: 1,
+      exact: true,
+      titleBlockFallback: true,
+      safeTitleblockCode: true,
+      matchedText: hit.rawText,
+      normalizedMatch: hit.normalized,
+      sourceType: 'existing-ocr-validated',
+    };
+    accepted.push(safe);
+    diag('titleblock.code.exact.accept', { file: item.name, page: pageNo, target: rule.find, ocr: hit.rawText, normalized: hit.normalized, bbox, source: 'existing-ocr' });
+  }
+  rule.ocrMatches = accepted;
+  rule.ocrCount = accepted.length;
+  const ocrPages = accepted.map(match => Math.max(1, Number(match.page || 1)));
+  const nonOcrPages = Number(rule.count || 0) > 0 || Number(rule.annotationCount || 0) > 0 ? (rule.pages || []) : [];
+  rule.pages = [...new Set([...nonOcrPages, ...ocrPages])];
+  return accepted.length;
 }
 async function supplement(token) {
   if (document.querySelector(OCR)?.checked !== true || token !== runToken) return;
@@ -245,20 +303,26 @@ async function supplement(token) {
   for (let fileIndex = 0; fileIndex < batch.length; fileIndex++) {
     const item = batch[fileIndex];
     if (token !== runToken || item?.error || !item?.data) continue;
-    const pending = (item.counts || []).filter(rule =>
+    const candidates = (item.counts || []).filter(rule =>
       rule?.find?.trim() && isShortStructuredCode(rule.find) &&
-      Number(rule.count || 0) === 0 && Number(rule.annotationCount || 0) === 0 && Number(rule.ocrCount || 0) === 0
+      Number(rule.count || 0) === 0 && Number(rule.annotationCount || 0) === 0
     );
-    if (!pending.length) continue;
+    if (!candidates.length) continue;
     const doc = mupdf.PDFDocument.openDocument(item.data, 'application/pdf');
     try {
+      for (const rule of candidates) {
+        diag('titleblock.code.start', { file: item.name, target: rule.find, source: 'existing-ocr-validation' });
+        total += validateExistingOCR(doc, item, rule);
+        updateResultLine(fileIndex, rule);
+      }
+      const pending = candidates.filter(rule => Number(rule.ocrCount || 0) === 0);
       for (let pageIndex = 0; pageIndex < doc.countPages() && pending.some(rule => Number(rule.ocrCount || 0) === 0); pageIndex++) {
         if (token !== runToken) return;
         const page = doc.loadPage(pageIndex);
         const textLines = structuredLines(page);
         for (const rule of pending) {
           if (Number(rule.ocrCount || 0) > 0) continue;
-          diag('titleblock.code.start', { file: item.name, page: pageIndex + 1, target: rule.find });
+          diag('titleblock.code.start', { file: item.name, page: pageIndex + 1, target: rule.find, source: 'focused-ocr' });
           const status = document.querySelector(STATUS);
           if (status) status.textContent = `OCR cartela seguro · ${item.name} · página ${pageIndex + 1}`;
           let matches = [];
@@ -268,10 +332,9 @@ async function supplement(token) {
           }
           if (!matches.length) continue;
           const withPage = matches.map(match => ({ ...match, page: pageIndex + 1 }));
-          rule.ocrMatches = (rule.ocrMatches || []).concat(withPage);
-          rule.ocrCount = Number(rule.ocrCount || 0) + withPage.length;
-          rule.pages = rule.pages || [];
-          if (!rule.pages.includes(pageIndex + 1)) rule.pages.push(pageIndex + 1);
+          rule.ocrMatches = withPage;
+          rule.ocrCount = withPage.length;
+          rule.pages = [...new Set(withPage.map(match => Math.max(1, Number(match.page || 1))))];
           total += withPage.length;
           diag('titleblock.code.focused.match', { file: item.name, page: pageIndex + 1, target: rule.find, count: withPage.length, ocr: withPage[0]?.matchedText });
           updateResultLine(fileIndex, rule);
@@ -283,7 +346,7 @@ async function supplement(token) {
   const status = document.querySelector(STATUS);
   if (status) status.textContent = total
     ? `Reconocimiento seguro terminado: ${total} coincidencia${total === 1 ? '' : 's'} exacta${total === 1 ? '' : 's'} en cartela. No se ha modificado ningún PDF.`
-    : 'Análisis completado. Sin coincidencias adicionales exactas en cartela segura.';
+    : 'Análisis completado. Sin coincidencias exactas adicionales en cartela segura.';
   window.__safeTitleblockCodeOCR = { total, version: 1 };
 }
 function waitForPrimary(token, previous) {
