@@ -60,34 +60,63 @@ function pageTransform(page) {
   if (transform.length !== 6 || !transform.every(Number.isFinite)) throw new Error('No se pudo obtener page.getTransform().');
   return transform;
 }
+function resolved(obj) {
+  try { return obj?.resolve?.() || obj; } catch (_) { return obj; }
+}
+function pageHandle(page) {
+  const ref = page.getObject();
+  const dict = resolved(ref);
+  if (!dict?.isDictionary?.()) throw new Error('No se pudo resolver el diccionario de página.');
+  return { ref, dict, indirect: !ref?.isDictionary?.() };
+}
+function commitIndirect(ref, obj, indirect) {
+  if (indirect && typeof ref?.writeObject === 'function') ref.writeObject(obj);
+}
 function chooseFontResource(doc, page) {
-  const pageObject = page.getObject();
-  let resources = pageObject.get('Resources');
-  if (!resources || !resources.isDictionary?.()) { resources = doc.newDictionary(); pageObject.put('Resources', resources); }
-  let fonts = resources.get('Font');
-  if (!fonts || !fonts.isDictionary?.()) { fonts = doc.newDictionary(); resources.put('Font', fonts); }
+  const pageObj = pageHandle(page);
+  const resourceRef = pageObj.dict.get('Resources');
+  let resources = resolved(resourceRef);
+  const resourceIndirect = !!resourceRef && !resourceRef?.isDictionary?.();
+  if (!resources || !resources.isDictionary?.()) {
+    resources = doc.newDictionary();
+    pageObj.dict.put('Resources', resources);
+  }
+  let fontRef = resources.get('Font');
+  let fonts = resolved(fontRef);
+  const fontIndirect = !!fontRef && !fontRef?.isDictionary?.();
+  if (!fonts || !fonts.isDictionary?.()) {
+    fonts = doc.newDictionary();
+    resources.put('Font', fonts);
+    fontRef = null;
+  }
   let suffix = 1;
   let name = `${FONT_BASE}${suffix}`;
   while (fonts.get(name) && !fonts.get(name).isNull?.()) { suffix++; name = `${FONT_BASE}${suffix}`; }
   fonts.put(name, doc.addSimpleFont(new mupdf.Font('Helvetica'), 'Latin'));
+  if (fontIndirect && fontRef?.writeObject) fontRef.writeObject(fonts);
+  if (resourceIndirect && resourceRef?.writeObject) resourceRef.writeObject(resources);
+  commitIndirect(pageObj.ref, pageObj.dict, pageObj.indirect);
   return name;
 }
 function appendContent(doc, page, content) {
-  const pageObject = page.getObject();
-  const stream = doc.addStream(content, {});
-  const contents = pageObject.get('Contents');
-  if (!contents || contents.isNull?.()) { pageObject.put('Contents', stream); return; }
-  if (contents.isArray?.()) {
-    const array = doc.newArray();
-    for (let i = 0; i < contents.length; i++) array.push(contents.get(i));
-    array.push(stream);
-    pageObject.put('Contents', array);
+  const pageObj = pageHandle(page);
+  const stream = doc.addStream(content);
+  const contentsRef = pageObj.dict.get('Contents');
+  if (!contentsRef || contentsRef.isNull?.()) {
+    pageObj.dict.put('Contents', stream);
+    commitIndirect(pageObj.ref, pageObj.dict, pageObj.indirect);
     return;
   }
+  const contents = resolved(contentsRef);
   const array = doc.newArray();
-  array.push(contents);
+  if (contents?.isArray?.()) {
+    for (let i = 0; i < contents.length; i++) array.push(contents.get(i));
+  } else {
+    array.push(contentsRef);
+  }
   array.push(stream);
-  pageObject.put('Contents', array);
+  pageObj.dict.put('Contents', array);
+  commitIndirect(pageObj.ref, pageObj.dict, pageObj.indirect);
 }
 function makeOverlayContent(page, raw, replacement, m, fontName) {
   const [a, b, c, d, e, f] = pageTransform(page);
