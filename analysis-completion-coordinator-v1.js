@@ -1,5 +1,7 @@
 // Completion observer for Analyze PDFs.
 // It never disables buttons, changes PDF bytes, or alters detector/remover algorithms.
+import './presence-config-v1.js?v=20260817-presence1';
+import './presence-sessions-v1.js?v=20260817-presence1';
 import { inspectSelectedAnnotationMetadata } from './analysis-annotation-inspection-v1.js?v=20260817-completion1';
 const ANALYZE='#batchAnalyze',CLOUD='#batchRemoveRevisionClouds',OCR='#batchEnableOCR',OCR_DIAG='#ocrDiagLog',FILES='#batchFiles';
 const q=s=>document.querySelector(s);
