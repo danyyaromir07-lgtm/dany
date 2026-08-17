@@ -47,9 +47,16 @@ async function makePreview(idx){const batch=window.__batchAnalysis||[],a=batch[i
   work=await cleanSelectedAnnotations(work,rules,{removeComments,removeSignatures});
   const removeClouds=q('#batchRemoveRevisionClouds')?.checked===true;
   const manualClouds=q('#batchForceRevisionClouds')?.checked===true;
+  a.revisionCloudPreviewValidated=0;
+  a.revisionCloudPreviewDetails=[];
   if(removeClouds&&((Array.isArray(a.revisionClouds)&&a.revisionClouds.length)||manualClouds)){
     const cloudPreview=await removeDetectedRevisionCloudsByExactFamily(work,Array.isArray(a.revisionClouds)?a.revisionClouds:[],{context:'preview',file:a.name});
-    if(cloudPreview?.removed>0)work=new Uint8Array(cloudPreview.data);
+    if(cloudPreview?.removed>0){
+      work=new Uint8Array(cloudPreview.data);
+      a.revisionCloudPreviewValidated=Number(cloudPreview.removed||0);
+      a.revisionCloudPreviewDetails=Array.isArray(cloudPreview.details)?cloudPreview.details:[];
+    }
+    window.__refreshBatchResultLines?.();
   }
   const resultDoc=mupdf.PDFDocument.openDocument(new Uint8Array(work),'application/pdf');
   const applied=applyTextAndVector(resultDoc,a);
