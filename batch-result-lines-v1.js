@@ -58,11 +58,13 @@ function buildHits(item) {
   }
 
   const accepted = latestCloudAccept(item);
+  const previewValidated = Math.max(0, Number(item?.revisionCloudPreviewValidated || 0));
   const detected = Math.max(0, Number(item?.revisionCloudCount || 0));
   const acceptedCount = Math.max(0, Number(accepted?.components || 0));
-  const cloudCount = acceptedCount || detected || (accepted ? 1 : 0);
+  const cloudCount = previewValidated || acceptedCount || detected || (accepted ? 1 : 0);
   if (cloudCount > 0) {
-    const suffix = accepted ? ' · validada en Preview' : '';
+    const validated = previewValidated > 0 || !!accepted;
+    const suffix = validated ? ' · validada en Preview' : '';
     hits.push(`☁️ ${cloudCount}× nube${cloudCount === 1 ? '' : 's'} de revisión${suffix}`);
   }
   return hits;
@@ -127,6 +129,7 @@ function wire() {
   if (!table) return;
   const observer = new MutationObserver(() => queueMicrotask(formatAll));
   observer.observe(table, { childList: true, subtree: true });
+  window.__refreshBatchResultLines = refreshAll;
   formatAll();
   lastCloudEventCount = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents.length : 0;
   setInterval(() => {
