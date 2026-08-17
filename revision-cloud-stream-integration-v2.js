@@ -1,6 +1,6 @@
 import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-uniondensity1';
 import './revision-cloud-multicloud-v1.js?v=20260815-multicloud1';
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260817-singleexact1';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260817-coloroptional1';
 
 const CHECKBOX='#batchRemoveRevisionClouds';
 const STATUS='#batchStatus';
@@ -25,7 +25,7 @@ async function applyExactFamilyCloudRemoval(){
     }catch(err){ failures.push(`${item.name}: ${err?.message||String(err)}`); }
     await sleep(0);
   }
-  window.__revisionCloudStreamApplyDebug={removed,failures,version:'5+manual2+zeroexact1+singleexact1'};
+  window.__revisionCloudStreamApplyDebug={removed,failures,version:'5+manual2+zeroexact1+singleexact1+coloroptional1'};
   if(failures.length) throw new Error(`Nubes: no se pudo validar eliminación segura en ${failures.length} archivo${failures.length===1?'':'s'} · ${failures.join(' | ')}`.slice(0,2500));
   if(removed){ const s=document.querySelector(STATUS); if(s)s.textContent=`☁️ ${removed} nube${removed===1?'':'s'} de revisión eliminada${removed===1?'':'s'}.`; }
 }
@@ -41,9 +41,9 @@ function install(){
   };
   wrapped.__cloudSafeWrap=true;
   wrapped.__exactCloudStreamWrap=true;
-  wrapped.__exactCloudStreamVersion='5+manual2+zeroexact1+singleexact1';
+  wrapped.__exactCloudStreamVersion='5+manual2+zeroexact1+singleexact1+coloroptional1';
   window.__prepareBatchAnnotationOperations=wrapped;
   return true;
 }
 let ticks=0;const timer=setInterval(()=>{if(install()||++ticks>300)clearInterval(timer);},50);install();
-window.__revisionCloudStreamIntegration={version:'5+manual2+zeroexact1+singleexact1'};
+window.__revisionCloudStreamIntegration={version:'5+manual2+zeroexact1+singleexact1+coloroptional1'};
