@@ -5,6 +5,7 @@ import './signature-result-badge-v1.js?v=20260814-signaturebadge1';
 const TABLE = '#batchTable';
 const STYLE_ID = 'batch-result-lines-style';
 let lastCloudEventCount = -1;
+let lastPendingVersion = -1;
 
 function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return;
@@ -60,8 +61,9 @@ function buildHits(item) {
   const accepted = latestCloudAccept(item);
   const previewValidated = Math.max(0, Number(item?.revisionCloudPreviewValidated || 0));
   const detected = Math.max(0, Number(item?.revisionCloudCount || 0));
+  const pending = Math.max(0, Number(item?.revisionCloudPending?.count || 0));
   const acceptedCount = Math.max(0, Number(accepted?.components || 0));
-  const cloudCount = previewValidated || acceptedCount || detected || (accepted ? 1 : 0);
+  const cloudCount = previewValidated || acceptedCount || detected || pending || (accepted ? 1 : 0);
   if (cloudCount > 0) {
     const validated = previewValidated > 0 || !!accepted;
     const suffix = validated ? ' · validada en Preview' : '';
@@ -132,10 +134,13 @@ function wire() {
   window.__refreshBatchResultLines = refreshAll;
   formatAll();
   lastCloudEventCount = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents.length : 0;
+  lastPendingVersion = Number(window.__revisionCloudZeroPendingVersion || 0);
   setInterval(() => {
     const count = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents.length : 0;
-    if (count === lastCloudEventCount) return;
+    const pendingVersion = Number(window.__revisionCloudZeroPendingVersion || 0);
+    if (count === lastCloudEventCount && pendingVersion === lastPendingVersion) return;
     lastCloudEventCount = count;
+    lastPendingVersion = pendingVersion;
     refreshAll();
   }, 200);
 }
