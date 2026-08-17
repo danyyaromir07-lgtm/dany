@@ -2,7 +2,7 @@
 // v2 keeps the proven single-family manual route and adds one isolated exact BMC multi-cloud route.
 import { removeDetectedRevisionCloudsByExactFamily as removeSafe } from './revision-cloud-stream-removal-v5.js?v=20260815-cloudstream-rastermulti1';
 import { detectVectorCloudFallback } from './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-uniondensity1';
-import { removeManualMultiCloudBlock } from './revision-cloud-manual-multicloud-v2.js?v=20260817-multicoord1';
+import { removeManualMultiCloudBlock } from './revision-cloud-manual-multicloud-v3.js?v=20260817-multidiag3';
 
 const MAIN = '#batchRemoveRevisionClouds';
 const FORCE = '#batchForceRevisionClouds';
