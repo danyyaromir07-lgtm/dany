@@ -1,6 +1,6 @@
 // Completion coordinator for Analyze PDFs.
 // UI/orchestration only: does not inspect or modify PDF bytes and does not alter detector/remover algorithms.
-const ANALYZE='#batchAnalyze', APPLY='#batchApply', STATUS='#batchStatus', CLOUD='#batchRemoveRevisionClouds', OCR='#batchEnableOCR', OCR_DIAG='#ocrDiagLog';
+const ANALYZE='#batchAnalyze', CLEAR='#batchClear', APPLY='#batchApply', STATUS='#batchStatus', CLOUD='#batchRemoveRevisionClouds', OCR='#batchEnableOCR', OCR_DIAG='#ocrDiagLog', FILES='#batchFiles';
 const q=s=>document.querySelector(s);
 let cycle=0, timer=null;
 
@@ -9,6 +9,7 @@ const now=()=>Date.now();
 function longCodeKey(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'').replace(/o/g,'0').replace(/i/g,'1');}
 function isLongDrawingCode(s){const raw=String(s||'').trim(),parts=raw.split('_').filter(Boolean),key=longCodeKey(raw);return raw.includes('_')&&key.length>=20&&key.length<=90&&parts.length>=5&&parts.every(p=>/^[A-Za-z0-9.-]+$/.test(p));}
 function hasLongDrawingCode(batch){return(batch||[]).some(item=>(item?.counts||[]).some(rule=>isLongDrawingCode(rule?.find)));}
+function hasSelectedFiles(){return Number(q(FILES)?.files?.length||0)>0;}
 
 function nonErrorBatch(){const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];return batch.filter(x=>x&&!x.error);}
 function selectedClouds(){return q(CLOUD)?.checked===true;}
@@ -52,13 +53,14 @@ function stageLabel(s){
   return 'consolidando resultados';
 }
 
+function lockControls(){const a=q(ANALYZE),c=q(CLEAR),p=q(APPLY);if(a)a.disabled=true;if(c)c.disabled=true;if(p)p.disabled=true;}
+function unlockNonApply(){const a=q(ANALYZE),c=q(CLEAR);if(a)a.disabled=false;if(c)c.disabled=false;}
 function writeBusy(label){const st=q(STATUS);if(st)st.textContent=`⏳ Comprobación en curso · ${label}…`;const apply=q(APPLY);if(apply)apply.disabled=true;}
-
 function publishState(state,extra={}){window.__analysisCompletionState={version:1,cycle:state.id,startedAt:state.startedAt,running:!state.finished,complete:false,...extra};window.dispatchEvent(new CustomEvent('analysis-completion-state',{detail:window.__analysisCompletionState}));}
 
 function finalize(state){
   if(state.finished)return;state.finished=true;if(timer){clearInterval(timer);timer=null;}
-  window.__refreshBatchResultLines?.();window.__revisionCloudApplyEnableV1?.sync?.();
+  window.__refreshBatchResultLines?.();window.__revisionCloudApplyEnableV1?.sync?.();unlockNonApply();
   const apply=q(APPLY);if(apply)apply.disabled=!hasApplyWork();
   const itemErrors=(Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[]).filter(x=>x?.error).length,cloudErrors=cloudErrorsAfter(state.startedAt),warnings=itemErrors+cloudErrors.length;
   const st=q(STATUS);if(st)st.textContent=warnings?`⚠️ Comprobación finalizada con avisos · todos los operadores seleccionados han terminado · ${warnings} aviso${warnings===1?'':'s'}.`:'✅ Comprobación completa · todos los operadores seleccionados han terminado.';
@@ -67,14 +69,15 @@ function finalize(state){
 }
 
 function beginCycle(){
+  if(!hasSelectedFiles())return;
   const id=++cycle;if(timer){clearInterval(timer);timer=null;}
   const previousBatch=window.__batchAnalysis;
-  const state={id,startedAt:now(),previousBatch,cloudSelected:selectedClouds(),zeroBaseline:Number(window.__revisionCloudZeroPendingVersion||0),colorBaseline:window.__revisionCloudColoredOptionalState,previousLong:window.__longTitleBlockOCR,previousVertical:window.__longTitleBlockVerticalOCR,previousLegacy:window.__longTitleBlockVerticalLegacyOCR,lastOcrDiag:String(q(OCR_DIAG)?.textContent||''),lastOcrDiagChange:now(),baseDone:false,baseDoneAt:0,deferredOcrDone:false,ocrHorizontalDone:false,ocrVerticalDone:false,ocrLegacyDone:false,cloudAnalysisDone:false,zeroPendingDone:false,colorOptionalDone:false,settledSince:0,finished:false};
+  const state={id,startedAt:now(),previousBatch,cloudSelected:selectedClouds(),zeroBaseline:Number(window.__revisionCloudZeroPendingVersion||0),colorBaseline:window.__revisionCloudColoredOptionalState,previousLong:window.__longTitleBlockOCR,previousVertical:window.__longTitleBlockVerticalOCR,previousLegacy:window.__longTitleBlockVerticalLegacyOCR,lastOcrDiag:String(q(OCR_DIAG)?.textContent||''),lastOcrDiagChange:now(),baseDone:false,baseDoneAt:0,controlsLocked:false,deferredOcrDone:false,ocrHorizontalDone:false,ocrVerticalDone:false,ocrLegacyDone:false,cloudAnalysisDone:false,zeroPendingDone:false,colorOptionalDone:false,settledSince:0,finished:false};
   publishState(state,{running:true});writeBusy('iniciando análisis');
   timer=setInterval(()=>{
     if(id!==cycle||state.finished)return;
     const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[],batchChanged=batch!==state.previousBatch,baseShape=batch.length>0&&batch.every(x=>x?.error||x?.data),analyzeIdle=q(ANALYZE)?.disabled===false;
-    state.baseDone=!!(batchChanged&&baseShape&&analyzeIdle);if(state.baseDone&&!state.baseDoneAt)state.baseDoneAt=now();
+    if(!state.baseDone&&batchChanged&&baseShape&&analyzeIdle){state.baseDone=true;state.baseDoneAt=now();state.controlsLocked=true;lockControls();}
     state.deferredOcrDone=state.baseDone&&deferredOcrDone(state,batch);
 
     if(state.cloudSelected&&state.baseDone){
@@ -91,7 +94,7 @@ function beginCycle(){
   },100);
 
   // Never report a false success. A stalled operator leaves Apply blocked instead of publishing a green completion state.
-  (async()=>{await sleep(30*60*1000);if(id!==cycle||state.finished)return;if(timer){clearInterval(timer);timer=null;}state.finished=true;const st=q(STATUS);if(st)st.textContent='⚠️ Comprobación detenida: un operador no publicó su señal de finalización. No se habilitó Aplicar para evitar un estado incompleto.';const apply=q(APPLY);if(apply)apply.disabled=true;window.__analysisCompletionState={version:1,cycle:id,startedAt:state.startedAt,finishedAt:now(),running:false,complete:false,timeout:true};window.dispatchEvent(new CustomEvent('analysis-completion-state',{detail:window.__analysisCompletionState}));})();
+  (async()=>{await sleep(30*60*1000);if(id!==cycle||state.finished)return;if(timer){clearInterval(timer);timer=null;}state.finished=true;unlockNonApply();const st=q(STATUS);if(st)st.textContent='⚠️ Comprobación detenida: un operador no publicó su señal de finalización. No se habilitó Aplicar para evitar un estado incompleto.';const apply=q(APPLY);if(apply)apply.disabled=true;window.__analysisCompletionState={version:1,cycle:id,startedAt:state.startedAt,finishedAt:now(),running:false,complete:false,timeout:true};window.dispatchEvent(new CustomEvent('analysis-completion-state',{detail:window.__analysisCompletionState}));})();
 }
 
 function wire(){
