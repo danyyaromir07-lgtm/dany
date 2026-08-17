@@ -1,6 +1,7 @@
 // Additive wrapper. Stable v3 runs first unchanged; chromatic Optional Content fallback runs only if v3 removed nothing.
 import { removeDetectedRevisionCloudsByExactFamily as baseRemove } from './revision-cloud-manual-force-v3.js?v=20260817-singleexact1';
 import { removeColoredOptionalClouds } from './revision-cloud-colored-optional-v1.js?v=20260817-coloroptional1';
+import './analysis-completion-coordinator-v1.js?v=20260817-completion1';
 
 function hasColoredOptional(pages){return(pages||[]).some(p=>(p?.clouds||[]).some(c=>c?.source==='vector-optional-color'));}
 export async function removeDetectedRevisionCloudsByExactFamily(data,detectedPages,options={}){
