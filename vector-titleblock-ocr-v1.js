@@ -1,5 +1,5 @@
 // Compatibility shim: title-block OCR v2.
-import './batch-check-completion-v1.js?v=20260817-completion3';
+import './batch-check-completion-v1.js?v=20260817-completion4';
 import './vector-titleblock-ocr-v2.js?v=20260817-longvertical1';
 import './vector-titleblock-long-code-v5.js?v=20260814-longcode6';
 import './vector-titleblock-long-code-vertical-v1.js?v=20260817-longvertical1';
