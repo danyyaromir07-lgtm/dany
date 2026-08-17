@@ -83,7 +83,7 @@ function overlappingPdfText(lines, bbox) {
 async function getWorker() {
   if (workerPromise) return workerPromise;
   workerPromise = import('https://esm.sh/tesseract.js@5.1.0')
-    .then(({ createWorker }) => createWorker('spa+eng'))
+    .then(({ createWorker }) => createWorker('eng'))
     .catch(error => { workerPromise = null; throw error; });
   return workerPromise;
 }
@@ -144,6 +144,7 @@ function matchesFromData(data, target, region) {
   };
   for (const line of data?.lines || []) add(line?.text, line?.bbox, line?.confidence, 'adaptive-line');
   for (const word of data?.words || []) add(word?.text, word?.bbox, word?.confidence, 'adaptive-word');
+
   const words = (data?.words || []).filter(word => word?.bbox && String(word?.text || '').trim());
   for (let i = 0; i < words.length; i++) {
     let text = '';
@@ -163,6 +164,7 @@ function matchesFromData(data, target, region) {
       if (text.length > String(target || '').length + 80) break;
     }
   }
+
   const unique = [];
   for (const match of found) {
     if (match.confidence < 12) continue;
@@ -173,17 +175,95 @@ function matchesFromData(data, target, region) {
   }
   return unique;
 }
+function targetParts(target) {
+  return String(target || '').trim().split('_').filter(Boolean).map(normalizedCode);
+}
+function candidateLines(data, target) {
+  const parts = targetParts(target);
+  if (parts.length < 2) return [];
+  return (data?.lines || []).filter(line => {
+    if (!line?.bbox || !String(line?.text || '').trim()) return false;
+    const text = normalizedCode(line.text);
+    return parts.every(part => text.includes(part));
+  }).slice(0, 4);
+}
+function thresholdLineCanvas(source, lineBox, region, threshold = 220) {
+  const h = Math.max(1, lineBox.y1 - lineBox.y0);
+  const xMargin = Math.max(20, Math.round(h * 0.75));
+  const yMargin = Math.max(10, Math.round(h * 0.50));
+  const x0 = Math.max(0, Math.floor(lineBox.x0 - xMargin));
+  const y0 = Math.max(0, Math.floor(lineBox.y0 - yMargin));
+  const x1 = Math.min(source.width, Math.ceil(lineBox.x1 + xMargin));
+  const y1 = Math.min(source.height, Math.ceil(lineBox.y1 + yMargin));
+  if (x1 <= x0 || y1 <= y0) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = x1 - x0;
+  canvas.height = y1 - y0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(source, x0, y0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = image.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const gray = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
+    const value = gray < threshold ? 0 : 255;
+    px[i] = value; px[i + 1] = value; px[i + 2] = value; px[i + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  return {
+    canvas,
+    region: [
+      region[0] + x0 / SCALE,
+      region[1] + y0 / SCALE,
+      region[0] + x1 / SCALE,
+      region[1] + y1 / SCALE,
+    ],
+  };
+}
+async function tightLineRetry(worker, canvas, data, target, region, label) {
+  for (const line of candidateLines(data, target)) {
+    const tight = thresholdLineCanvas(canvas, line.bbox, region, 220);
+    if (!tight) continue;
+    diag('titleblock.code.adaptive.line', {
+      target, label, threshold: 220, sourceText: String(line.text || '').slice(0, 300), region: tight.region,
+    });
+    try {
+      await worker.setParameters({
+        tessedit_pageseg_mode: '7',
+        preserve_interword_spaces: '1',
+        tessedit_char_whitelist: '',
+      });
+    } catch (_) {}
+    const retryData = (await worker.recognize(tight.canvas))?.data || null;
+    const retryMatches = matchesFromData(retryData, target, tight.region);
+    if (retryMatches.length) {
+      diag('titleblock.code.adaptive.line.match', {
+        target, label, threshold: 220, ocrText: String(retryData?.text || '').slice(0, 300),
+      });
+      return retryMatches;
+    }
+    diag('titleblock.code.adaptive.line.reject', {
+      target, label, threshold: 220, reason: 'tight-line-not-exact', ocrText: String(retryData?.text || '').slice(0, 300),
+    });
+  }
+  return [];
+}
 async function recognizePass(page, target, region, label, psm, whitelist = false) {
   diag('titleblock.code.adaptive.pass', { target, label, psm, region, whitelist });
   const pix = renderRegion(page, region);
   try {
     const canvas = await pixmapCanvas(pix);
     const worker = await getWorker();
-    const params = { tessedit_pageseg_mode: String(psm), preserve_interword_spaces: '1' };
+    const params = {
+      tessedit_pageseg_mode: String(psm),
+      preserve_interword_spaces: '1',
+    };
     params.tessedit_char_whitelist = whitelist ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-. ' : '';
     try { await worker.setParameters(params); } catch (_) {}
     const data = (await worker.recognize(canvas))?.data || null;
-    const matches = matchesFromData(data, target, region);
+    let matches = matchesFromData(data, target, region);
+    if (!matches.length && Number(psm) === 12 && !whitelist) {
+      matches = await tightLineRetry(worker, canvas, data, target, region, label);
+    }
     if (!matches.length) {
       diag('titleblock.code.adaptive.reject', {
         target, label, psm, whitelist, reason: 'no-exact-token',
