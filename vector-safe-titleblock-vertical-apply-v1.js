@@ -81,7 +81,13 @@ function appendContent(doc, page, content) {
   const stream = doc.addStream(content, {});
   const contents = pageObject.get('Contents');
   if (!contents || contents.isNull?.()) { pageObject.put('Contents', stream); return; }
-  if (contents.isArray?.()) { contents.push(stream); return; }
+  if (contents.isArray?.()) {
+    const array = doc.newArray();
+    for (let i = 0; i < contents.length; i++) array.push(contents.get(i));
+    array.push(stream);
+    pageObject.put('Contents', array);
+    return;
+  }
   const array = doc.newArray();
   array.push(contents);
   array.push(stream);
