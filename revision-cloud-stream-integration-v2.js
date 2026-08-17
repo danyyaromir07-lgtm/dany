@@ -1,6 +1,6 @@
 import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-uniondensity1';
 import './revision-cloud-multicloud-v1.js?v=20260815-multicloud1';
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260817-multicoord1';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260817-smalldensity1';
 
 const CHECKBOX='#batchRemoveRevisionClouds';
 const STATUS='#batchStatus';
