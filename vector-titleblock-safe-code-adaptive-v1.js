@@ -59,6 +59,21 @@ function iou(a, b) {
   const inter = x * y;
   return inter / Math.max(1, area(a) + area(b) - inter);
 }
+function sourceRank(match) {
+  if (match?.sourceType === 'adaptive-word') return 0;
+  if (match?.sourceType === 'adaptive-word-sequence') return 1;
+  return 2;
+}
+function singleBestMatch(matches) {
+  const list = (matches || []).filter(match => Array.isArray(match?.bbox) && match.bbox.length === 4);
+  if (!list.length) return [];
+  list.sort((a, b) =>
+    sourceRank(a) - sourceRank(b) ||
+    area(a.bbox) - area(b.bbox) ||
+    Number(b.confidence || 0) - Number(a.confidence || 0)
+  );
+  return [list[0]];
+}
 function structuredLines(page) {
   try {
     const data = JSON.parse(page.toStructuredText('preserve-spans').asJSON());
@@ -234,10 +249,12 @@ async function tightLineRetry(worker, canvas, data, target, region, label) {
       });
     } catch (_) {}
     const retryData = (await worker.recognize(tight.canvas))?.data || null;
-    const retryMatches = matchesFromData(retryData, target, tight.region);
+    const retryMatches = singleBestMatch(matchesFromData(retryData, target, tight.region));
     if (retryMatches.length) {
+      const best = retryMatches[0];
       diag('titleblock.code.adaptive.line.match', {
-        target, label, threshold: 220, ocrText: String(retryData?.text || '').slice(0, 300),
+        target, label, threshold: 220,
+        ocrText: `${String(retryData?.text || '').trim()} | elegido=${best.sourceType} | bbox=${best.bbox.map(v => Number(v).toFixed(2)).join(',')}`,
       });
       return retryMatches;
     }
@@ -307,12 +324,17 @@ async function findAdaptive(page, target, textLines, file, pageNo) {
         continue;
       }
       safe.push(match);
-      diag('titleblock.code.exact.accept', {
-        file, page: pageNo, target, ocr: match.matchedText, normalized: match.normalizedMatch,
-        bbox: match.bbox, source: 'adaptive-ocr', pass: pass.label,
-      });
     }
-    if (safe.length) return safe;
+    const chosen = singleBestMatch(safe);
+    if (chosen.length) {
+      const match = chosen[0];
+      diag('titleblock.code.exact.accept', {
+        file, page: pageNo, target, normalized: match.normalizedMatch,
+        bbox: match.bbox, source: 'adaptive-ocr', pass: pass.label,
+        ocrText: `${match.matchedText} | ${match.sourceType} | bbox=${match.bbox.map(v => Number(v).toFixed(2)).join(',')}`,
+      });
+      return chosen;
+    }
   }
   return [];
 }
@@ -383,7 +405,8 @@ async function supplement(token) {
           total += withPage.length;
           diag('titleblock.code.adaptive.match', {
             file: item.name, page: pageIndex + 1, target: rule.find,
-            count: withPage.length, ocr: withPage[0]?.matchedText,
+            count: withPage.length,
+            ocrText: `${withPage[0]?.matchedText || ''} | count=${withPage.length} | bbox=${withPage[0]?.bbox?.map(v => Number(v).toFixed(2)).join(',') || ''}`,
           });
           updateResultLine(fileIndex, rule);
         }
@@ -395,7 +418,7 @@ async function supplement(token) {
   if (status) status.textContent = total
     ? `Reconocimiento adaptativo terminado: ${total} coincidencia${total === 1 ? '' : 's'} exacta${total === 1 ? '' : 's'} en cartela. No se ha modificado ningún PDF.`
     : 'Análisis completado. Sin coincidencias exactas adicionales en cartela adaptativa.';
-  window.__safeTitleblockCodeAdaptiveOCR = { total, version: 1 };
+  window.__safeTitleblockCodeAdaptiveOCR = { total, version: 2 };
 }
 function waitForSafeCode(token, previous) {
   let ticks = 0;
@@ -416,4 +439,4 @@ document.querySelector(ANALYZE)?.addEventListener('click', () => {
   runToken++;
   waitForSafeCode(runToken, previous);
 });
-window.__safeTitleblockCodeAdaptiveOCRLoaded = { version: 1 };
+window.__safeTitleblockCodeAdaptiveOCRLoaded = { version: 2 };
