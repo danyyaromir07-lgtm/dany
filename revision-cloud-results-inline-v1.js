@@ -40,7 +40,15 @@ function cloudInfo(item) {
     const source = String(cloud?.source || '');
     return source === 'vector-family' || source === 'vector-family-multi' || !!cloud?.vectorFamilyKey || Array.isArray(cloud?.exactRGB);
   });
-  return { total, pages, exact };
+  if (total > 0) return { total, pages, exact, pending: false };
+
+  const pending = item?.revisionCloudPending;
+  const pendingCount = Math.max(0, Number(pending?.count || 0));
+  const pendingPage = Math.max(0, Number(pending?.page || 0));
+  if (pendingCount > 0 && pendingPage > 0) {
+    return { total: pendingCount, pages: [{ page: pendingPage, count: pendingCount, clouds: [] }], exact: false, pending: true };
+  }
+  return { total: 0, pages: [], exact: false, pending: false };
 }
 
 function titleBlockCount(item) {
@@ -59,9 +67,11 @@ function pageLabel(pages) {
 
 function cloudState(item, cloud) {
   const applied = Math.max(0, Number(item?.revisionCloudApplied || 0));
+  const previewValidated = Math.max(0, Number(item?.revisionCloudPreviewValidated || 0));
   const validated = Array.isArray(item?.revisionCloudStreamDetails) && item.revisionCloudStreamDetails.length > 0;
   if (applied > 0) return { state: 'applied', applied };
-  if (validated && cloud.total > 0) return { state: 'discarded', applied: 0 };
+  if (cloud.pending && previewValidated > 0) return { state: 'confirmed', applied: 0, preview: true };
+  if (validated && cloud.total > 0 && !cloud.pending) return { state: 'discarded', applied: 0 };
   if (cloud.exact) return { state: 'confirmed', applied: 0 };
   return { state: 'candidate', applied: 0 };
 }
@@ -85,7 +95,9 @@ function cloudText(item, cloud) {
   if (info.state === 'confirmed') {
     return {
       state: info.state,
-      text: `✅ ${cloud.total} nube${cloud.total === 1 ? '' : 's'} confirmada${cloud.total === 1 ? '' : 's'} · familia vectorial exacta${location}`
+      text: info.preview
+        ? `✅ ${cloud.total} nube${cloud.total === 1 ? '' : 's'} confirmada${cloud.total === 1 ? '' : 's'} · validación segura en Preview${location}`
+        : `✅ ${cloud.total} nube${cloud.total === 1 ? '' : 's'} confirmada${cloud.total === 1 ? '' : 's'} · familia vectorial exacta${location}`
     };
   }
   return {
