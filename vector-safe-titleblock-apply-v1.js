@@ -204,7 +204,7 @@ export function applySafeTitleblockCodes(doc, analysis) {
       const raw = hit.bbox.map(Number);
       const ocrToken = String(hit.matchedText || hit.ocrText || '');
       if (normalizedCode(ocrToken) !== normalizedCode(rule.find)) {
-        diag('titleblock.code.exact.reject', { target: rule.find, ocr: ocrToken, page: pageNo, reason: 'apply-double-check' });
+        diag('titleblock.code.exact.reject', { target: rule.find, ocrText: `${ocrToken} | apply-double-check`, page: pageNo, reason: 'apply-double-check' });
         skipped.push(`${rule.find}: coincidencia OCR rechazada en la segunda comprobación exacta`);
         continue;
       }
@@ -220,20 +220,21 @@ export function applySafeTitleblockCodes(doc, analysis) {
         continue;
       }
       try {
-        diag('titleblock.code.overlay.start', { target: rule.find, replacement, page: pageNo, bbox: raw });
+        diag('titleblock.code.overlay.start', { target: rule.find, replacement, page: pageNo, bbox: raw, ocrText: `bbox=${raw.map(v => Number(v).toFixed(2)).join(',')}` });
         const check = preflightOverlay(doc, pageNo, raw, replacement);
-        diag('titleblock.code.visual.validate', { target: rule.find, page: pageNo, bbox: raw, changed: check.changed, outside: check.outside, allowed: check.allowed });
+        const visualMeta = `bbox=${raw.map(v => Number(v).toFixed(2)).join(',')} | allowed=${(check.allowed || []).map(v => Number(v).toFixed(2)).join(',')} | changed=${Number(check.changed || 0)} | outside=${Number(check.outside || 0)}`;
+        diag('titleblock.code.visual.validate', { target: rule.find, page: pageNo, bbox: raw, changed: check.changed, outside: check.outside, allowed: check.allowed, ocrText: visualMeta });
         if (!check.safe) {
-          diag('titleblock.code.visual.reject', { target: rule.find, page: pageNo, bbox: raw, reason: check.reason, changed: check.changed, outside: check.outside });
+          diag('titleblock.code.visual.reject', { target: rule.find, page: pageNo, bbox: raw, reason: check.reason, changed: check.changed, outside: check.outside, allowed: check.allowed, ocrText: `${check.reason} | ${visualMeta}` });
           skipped.push(`${rule.find}: overlay rechazado por verificación visual (${check.reason})`);
           continue;
         }
         const m = applyOverlay(doc, pageNo, raw, replacement);
-        diag('titleblock.code.visual.accept', { target: rule.find, page: pageNo, bbox: raw, changed: check.changed, outside: check.outside });
+        diag('titleblock.code.visual.accept', { target: rule.find, page: pageNo, bbox: raw, changed: check.changed, outside: check.outside, ocrText: visualMeta });
         count++;
         replacements.push({ page: pageNo, bbox: raw, find: String(rule.find), text: replacement, mode: 'titleblock-code-overlay-verified', size: m.size, scaleX: m.scaleX, visualCheck: { changed: check.changed, outside: check.outside, allowed: check.allowed } });
       } catch (error) {
-        diag('titleblock.code.visual.reject', { target: rule.find, page: pageNo, bbox: raw, reason: error?.message || String(error) });
+        diag('titleblock.code.visual.reject', { target: rule.find, page: pageNo, bbox: raw, reason: error?.message || String(error), ocrText: `${error?.message || String(error)} | bbox=${raw.map(v => Number(v).toFixed(2)).join(',')}` });
         skipped.push(`${rule.find}: overlay seguro no aplicado (${error?.message || error})`);
       }
     }
