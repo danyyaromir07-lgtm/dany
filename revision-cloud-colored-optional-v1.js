@@ -113,9 +113,9 @@ export async function removeColoredOptionalClouds(data,detectedPages,options={})
     return{data:out,removed:componentCount,details:[{removed:true,page:e.page,mode:'optional-content-exact-strokes',removedClouds:componentCount,strokes:total,rgb,lineWidth:w}]};
   }finally{doc.destroy();}
 }
-async function runAfterEstablished(){
+async function runAfterEstablished(pendingVersionStart=Number(window.__revisionCloudZeroPendingVersion||0)){
   if(q('#batchRemoveRevisionClouds')?.checked!==true)return;
-  let batch=[];for(let i=0;i<900;i++){batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];if(batch.length&&batch.every(x=>x?.error||typeof x?.revisionCloudCount==='number'))break;await new Promise(r=>setTimeout(r,100));}
+  let batch=[];for(let i=0;i<900;i++){batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];const ready=batch.length&&batch.every(x=>x?.error||typeof x?.revisionCloudCount==='number');const pendingDone=Number(window.__revisionCloudZeroPendingVersion||0)>pendingVersionStart;if(ready&&pendingDone)break;await new Promise(r=>setTimeout(r,100));}
   if(!batch.length)return;let added=0;
   for(const item of batch){if(item?.error||!item?.data||Number(item.revisionCloudCount||0)>0||Number(item?.revisionCloudPending?.count||0)>0)continue;
     try{const pages=await detectColoredOptionalClouds(item.data,{file:item.name});if(pages.length){item.revisionClouds=pages;item.revisionCloudCount=pages.reduce((n,p)=>n+(p.clouds?.length||0),0);item.revisionCloudColoredOptional=true;added+=item.revisionCloudCount;}}
@@ -124,5 +124,5 @@ async function runAfterEstablished(){
   if(added){window.__refreshBatchResultLines?.();window.__revisionCloudApplyEnableV1?.sync?.();}
   window.__revisionCloudColoredOptionalState={version:1,added};
 }
-function wire(){q('#batchAnalyze')?.addEventListener('click',()=>{setTimeout(()=>runAfterEstablished().catch(()=>{}),0);});}
+function wire(){q('#batchAnalyze')?.addEventListener('click',()=>{const v=Number(window.__revisionCloudZeroPendingVersion||0);setTimeout(()=>runAfterEstablished(v).catch(()=>{}),0);});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
