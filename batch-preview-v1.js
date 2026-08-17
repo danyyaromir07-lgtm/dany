@@ -4,7 +4,7 @@ import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
 import { editDoc } from './text-editor-v65.js?v=20260816-previewtext1';
 import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
 import { applyVectorOCR } from './vector-apply-safe-wrapper-v1.js?v=20260817-longvertical1';
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-stream-removal-v5.js?v=20260815-cloudpreview1';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v1.js?v=20260817-manualcloud1';
 
 const q=s=>document.querySelector(s);
 let resultUrl='', originalUrl='', currentMode='result', currentIndex=-1, currentPage=1;
@@ -47,7 +47,7 @@ async function makePreview(idx){const batch=window.__batchAnalysis||[],a=batch[i
   work=await cleanSelectedAnnotations(work,rules,{removeComments,removeSignatures});
   const removeClouds=q('#batchRemoveRevisionClouds')?.checked===true;
   if(removeClouds&&Array.isArray(a.revisionClouds)&&a.revisionClouds.length){
-    const cloudPreview=await removeDetectedRevisionCloudsByExactFamily(work,a.revisionClouds);
+    const cloudPreview=await removeDetectedRevisionCloudsByExactFamily(work,a.revisionClouds,{context:'preview',file:a.name});
     if(cloudPreview?.removed>0)work=new Uint8Array(cloudPreview.data);
   }
   const resultDoc=mupdf.PDFDocument.openDocument(new Uint8Array(work),'application/pdf');
