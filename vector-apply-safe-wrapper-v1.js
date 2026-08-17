@@ -1,6 +1,6 @@
 import { applyVectorOCR as applyLegacyVectorOCR } from './vector-apply-v4.js?v=20260813-partialtoken1';
-import { applySafeTitleblockCodes } from './vector-safe-titleblock-apply-v1.js?v=20260817-visualdiag1';
-import { applySafeVerticalTitleblockCodes } from './vector-safe-titleblock-vertical-apply-v1.js?v=20260817-vertical1';
+import { applySafeTitleblockCodes } from './vector-safe-titleblock-apply-v1.js?v=20260817-contentarray1';
+import { applySafeVerticalTitleblockCodes } from './vector-safe-titleblock-vertical-apply-v1.js?v=20260817-contentarray1';
 
 function normalizedCode(s) {
   return String(s || '').toUpperCase().replace(/O/g, '0');
