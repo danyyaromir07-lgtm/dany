@@ -4,6 +4,7 @@ import './signature-result-badge-v1.js?v=20260814-signaturebadge1';
 
 const TABLE = '#batchTable';
 const STYLE_ID = 'batch-result-lines-style';
+let lastCloudEventCount = -1;
 
 function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return;
@@ -38,12 +39,31 @@ function ensureStyle() {
   document.head.appendChild(style);
 }
 
+function latestCloudAccept(item) {
+  const events = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const e = events[i];
+    if (e?.file !== item?.name) continue;
+    if (e.stage === 'cloud.manual.vector.accept' || e.stage === 'cloud.manual.multi.accept' || e.stage === 'cloud.manual.zero.accept' || e.stage === 'cloud.manual.zeroexact.accept') return e;
+  }
+  return null;
+}
+
 function buildHits(item) {
   const hits = [];
   for (const c of item?.counts || []) {
     if (c?.count) hits.push(`${c.count}× ${c.find}`);
     if (c?.annotationCount) hits.push(`${c.annotationCount}× ${c.find} (FreeText)`);
     if (c?.ocrCount) hits.push(`${c.ocrCount}× ${c.find} (vector/OCR)`);
+  }
+
+  const accepted = latestCloudAccept(item);
+  const detected = Math.max(0, Number(item?.revisionCloudCount || 0));
+  const acceptedCount = Math.max(0, Number(accepted?.components || 0));
+  const cloudCount = acceptedCount || detected || (accepted ? 1 : 0);
+  if (cloudCount > 0) {
+    const suffix = accepted ? ' · validada en Preview' : '';
+    hits.push(`☁️ ${cloudCount}× nube${cloudCount === 1 ? '' : 's'} de revisión${suffix}`);
   }
   return hits;
 }
@@ -94,6 +114,13 @@ function formatAll() {
   table.querySelectorAll('.batch-result').forEach(formatRow);
 }
 
+function refreshAll() {
+  const table = document.querySelector(TABLE);
+  if (!table) return;
+  table.querySelectorAll('.batch-result > span[data-result-lines="1"]').forEach((result) => { delete result.dataset.resultLines; });
+  formatAll();
+}
+
 function wire() {
   ensureStyle();
   const table = document.querySelector(TABLE);
@@ -101,6 +128,13 @@ function wire() {
   const observer = new MutationObserver(() => queueMicrotask(formatAll));
   observer.observe(table, { childList: true, subtree: true });
   formatAll();
+  lastCloudEventCount = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents.length : 0;
+  setInterval(() => {
+    const count = Array.isArray(window.__cloudDiagnosticsEvents) ? window.__cloudDiagnosticsEvents.length : 0;
+    if (count === lastCloudEventCount) return;
+    lastCloudEventCount = count;
+    refreshAll();
+  }, 200);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
