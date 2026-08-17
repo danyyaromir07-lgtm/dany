@@ -44,34 +44,40 @@ function evaluate(page,strokes){
 function toText(buf){const bytes=buf?.asUint8Array?buf.asUint8Array():buf;let s='';for(let i=0;i<bytes.length;i+=0x8000)s+=String.fromCharCode(...bytes.subarray(i,Math.min(bytes.length,i+0x8000)));return s;}
 function toBytes(s){const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i)&255;return a;}
 function refs(page){const c=page.getObject().get('Contents');if(!c)return[];if(c.isStream?.())return[c];const a=[];for(let i=0;i<Number(c.length||0);i++){const r=c.get(i);if(r?.isStream?.())a.push(r);}return a;}
-// Scan only painting/state operators. We never delete a marked-content block; matching S is changed to n.
 function rewriteOptionalStrokes(text,targetRGB,targetW){
-  const tok=/\b(?:q|Q|RG|w|BDC|BMC|EMC|S)\b/g;
-  const gs=[{rgb:null,w:null}],mc=[];let m,removed=0,out='',last=0,lastOpEnd=0;
+  // Effective MuPDF line width may include CTM scaling, so raw stream "w" is not used as a destructive criterion.
+  // Safety instead requires: exact detected RGB family + Optional Content scope + exact total stroke count.
+  const lines=text.match(/.*(?:\r\n|\n|\r|$)/g)||[];
+  const gs=[{rgb:null}],mc=[];let removed=0,out='';
   const current=()=>gs[gs.length-1];
-  while((m=tok.exec(text))){
-    const op=m[0],pre=text.slice(lastOpEnd,m.index);
-    if(op==='q')gs.push({rgb:current().rgb?.slice?.()||current().rgb,w:current().w});
-    else if(op==='Q'){if(gs.length>1)gs.pop();}
-    else if(op==='RG'){
-      const nums=pre.match(/[-+]?(?:\d+(?:\.\d*)?|\.\d+)/g);if(nums?.length>=3)current().rgb=nums.slice(-3).map(Number);
-    } else if(op==='w'){
-      const nums=pre.match(/[-+]?(?:\d+(?:\.\d*)?|\.\d+)/g);if(nums?.length)current().w=Number(nums[nums.length-1]);
-    } else if(op==='BDC')mc.push(/\/OC\b/.test(pre));
-    else if(op==='BMC')mc.push(false);
-    else if(op==='EMC'){if(mc.length)mc.pop();}
-    else if(op==='S'){
-      const lineStart=text.lastIndexOf('\n',m.index-1)+1,lineEndRaw=text.indexOf('\n',m.index),lineEnd=lineEndRaw<0?text.length:lineEndRaw;
-      const standalone=text.slice(lineStart,lineEnd).replace(/\r/g,'').trim()==='S';
-      const inOptional=mc.some(Boolean),st=current();
-      if(standalone&&inOptional&&sameRGB(st.rgb,targetRGB)&&same(st.w,targetW)){
-        out+=text.slice(last,m.index)+'n';last=m.index+1;removed++;
-      }
+  for(const line of lines){
+    if(!line)continue;
+    const raw=line.replace(/[\r\n]+$/,'');const trim=raw.trim();const events=[];
+    if(trim==='q')events.push({at:raw.indexOf('q'),op:'q'});
+    else if(trim==='Q')events.push({at:raw.indexOf('Q'),op:'Q'});
+    for(const m of raw.matchAll(/([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+RG\b/g))events.push({at:m.index,op:'RG',rgb:[+m[1],+m[2],+m[3]]});
+    for(const m of raw.matchAll(/([-+]?(?:\d+(?:\.\d*)?|\.\d+))\s+G\b/g))events.push({at:m.index,op:'COLOR_OTHER'});
+    for(const m of raw.matchAll(/(?:[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s+){4}K\b/g))events.push({at:m.index,op:'COLOR_OTHER'});
+    for(const m of raw.matchAll(/\bEMC\b/g))events.push({at:m.index,op:'EMC'});
+    const optionalRanges=[];
+    for(const m of raw.matchAll(/\/OC\s+\/[^\s]+\s+BDC\b/g)){events.push({at:m.index,op:'BDC_OPT'});optionalRanges.push([m.index,m.index+m[0].length]);}
+    for(const m of raw.matchAll(/\bBMC\b/g))events.push({at:m.index,op:'BMC'});
+    for(const m of raw.matchAll(/\bBDC\b/g))if(!optionalRanges.some(([a,b])=>m.index>=a&&m.index<b))events.push({at:m.index,op:'BDC'});
+    const sm=/\bS\s*$/.exec(raw);if(sm)events.push({at:sm.index,op:'S',start:sm.index,end:sm.index+1});
+    let replacement=null;
+    for(const e of events.sort((a,b)=>a.at-b.at)){
+      if(e.op==='q'){const prev=current().rgb?.slice?.()||current().rgb;gs.push({rgb:prev});}
+      else if(e.op==='Q'){if(gs.length>1)gs.pop();}
+      else if(e.op==='RG')current().rgb=e.rgb;
+      else if(e.op==='COLOR_OTHER')current().rgb=null;
+      else if(e.op==='BDC_OPT')mc.push(true);
+      else if(e.op==='BDC'||e.op==='BMC')mc.push(false);
+      else if(e.op==='EMC'){if(mc.length)mc.pop();}
+      else if(e.op==='S'&&mc.some(Boolean)&&sameRGB(current().rgb,targetRGB)){replacement=e;removed++;}
     }
-    lastOpEnd=tok.lastIndex;
+    if(replacement)out+=raw.slice(0,replacement.start)+'n'+raw.slice(replacement.end)+line.slice(raw.length);else out+=line;
   }
-  if(!removed)return{text,removed:0};
-  out+=text.slice(last);return{text:out,removed};
+  return{text:out,removed};
 }
 async function inspectDocument(data,context={}){
   const mupdf=await import('https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js');
