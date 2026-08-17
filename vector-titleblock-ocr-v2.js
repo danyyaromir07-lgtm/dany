@@ -13,7 +13,7 @@ const canonical=s=>norm(s).replace(/\s*[-]\s*/g,'-').replace(/\s*([:/_.])\s*/g,'
 const key=s=>canonical(s).replace(/[^a-z0-9]/g,'').replace(/o/g,'0');
 function lev(a,b){const p=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){const q=[i];for(let j=1;j<=b.length;j++)q[j]=Math.min(q[j-1]+1,p[j]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));for(let j=0;j<q.length;j++)p[j]=q[j]}return p[b.length]}
 function sim(a,b){return a&&b?1-lev(a,b)/Math.max(a.length,b.length):0}
-function simpleTarget(s){return key(s).length>=4&&key(s).length<=14&&String(s).split(/[_\-\s./:]+/).filter(Boolean).length<=3}
+function simpleTarget(s){return !String(s||'').includes('_')&&key(s).length>=4&&key(s).length<=14&&String(s).split(/[_\-\s./:]+/).filter(Boolean).length<=3}
 function iou(a,b){const x=Math.max(0,Math.min(a[2],b[2])-Math.max(a[0],b[0])),y=Math.max(0,Math.min(a[3],b[3])-Math.max(a[1],b[1]));const inter=x*y,aa=Math.max(1,(a[2]-a[0])*(a[3]-a[1])),bb=Math.max(1,(b[2]-b[0])*(b[3]-b[1]));return inter/(aa+bb-inter)}
 async function getWorker(){if(workerPromise)return workerPromise;workerPromise=import('https://esm.sh/tesseract.js@5.1.0').then(({createWorker})=>createWorker('spa+eng')).then(async w=>{try{await w.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'})}catch(_){}return w}).catch(e=>{workerPromise=null;throw e});return workerPromise}
 function indexedKey(text){const raw=canonical(text).replace(/o/g,'0'),positions=[];let k='';for(let i=0;i<raw.length;i++){const ch=raw[i];if(/[a-z0-9]/.test(ch)){positions.push(i);k+=ch}}return{raw,key:k,positions}}
