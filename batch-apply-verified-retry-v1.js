@@ -22,7 +22,6 @@ function progressSet(done, total, label = '') {
   if (progressText) progressText.textContent = `${pct}% · ${done} / ${total}${label ? ` · ${label}` : ''}`;
 }
 
-// Memory-safe view: do not duplicate a whole PDF merely to normalize its binary type.
 function asBytes(data) {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
@@ -41,7 +40,6 @@ function expectedPdfTextEdits(item) {
 
 async function applyTextRule(doc, rule, expected, fileName, diagnostics, prefix = '') {
   let applied = 0;
-
   if (expected > 0) {
     try {
       const direct = Number(editDoc(doc, rule.find, rule.replace) || 0);
@@ -50,7 +48,6 @@ async function applyTextRule(doc, rule, expected, fileName, diagnostics, prefix 
       diagnostics.push(`${fileName}: ${prefix}edición directa de «${rule.find}» falló; probando búsqueda PDF segura (${error?.message || String(error)})`);
     }
   }
-
   if (applied < expected) {
     const remaining = expected - applied;
     try {
@@ -61,11 +58,7 @@ async function applyTextRule(doc, rule, expected, fileName, diagnostics, prefix 
       diagnostics.push(`${fileName}: ${prefix}fallback de texto PDF falló para «${rule.find}»: ${error?.message || String(error)}`);
     }
   }
-
-  if (applied < expected) {
-    diagnostics.push(`${fileName}: ${prefix}«${rule.find}» encontrado=${expected}, aplicado=${applied}`);
-  }
-
+  if (applied < expected) diagnostics.push(`${fileName}: ${prefix}«${rule.find}» encontrado=${expected}, aplicado=${applied}`);
   return applied;
 }
 
@@ -74,21 +67,14 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
   let pdfTextEdits = 0;
   let freeTextEdits = 0;
   let vectorEdits = 0;
-  // Until an edit is actually produced, reuse the source object instead of cloning it.
   let bytes = source;
-
   try {
-    // MuPDF receives a zero-copy Uint8Array view. The document is still destroyed in finally.
     const inputView = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
     doc = mupdf.PDFDocument.openDocument(inputView, 'application/pdf');
     const rules = (item.counts || []).filter((r) => String(r.find || '').trim() && String(r.replace ?? '') !== '');
-
     for (const rule of rules) {
       const expected = Math.max(0, Number(rule.count || 0));
-      if (expected > 0) {
-        pdfTextEdits += await applyTextRule(doc, rule, expected, item.name, diagnostics, prefix);
-      }
-
+      if (expected > 0) pdfTextEdits += await applyTextRule(doc, rule, expected, item.name, diagnostics, prefix);
       try {
         const freeTextResult = editFreeTextDetailed(doc, rule.find, rule.replace) || {};
         freeTextEdits += Number(freeTextResult.count || 0);
@@ -96,13 +82,9 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
         diagnostics.push(`${item.name}: ${prefix}FreeText «${rule.find}» no pudo aplicarse: ${error?.message || String(error)}`);
       }
     }
-
     const vectorResult = applyVectorOCR(doc, item) || {};
     vectorEdits = Number(vectorResult.count || 0);
-    if (Array.isArray(vectorResult.skipped) && vectorResult.skipped.length) {
-      diagnostics.push(`${item.name}: ${prefix}${vectorResult.skipped.join(' · ')}`);
-    }
-
+    if (Array.isArray(vectorResult.skipped) && vectorResult.skipped.length) diagnostics.push(`${item.name}: ${prefix}${vectorResult.skipped.join(' · ')}`);
     if (pdfTextEdits || freeTextEdits || vectorEdits) bytes = savePdf(doc);
     return { bytes, pdfTextEdits, freeTextEdits, vectorEdits };
   } finally {
@@ -113,7 +95,6 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
 async function processItemWithRetry(item, source, applyVectorOCR, diagnostics) {
   const expected = expectedPdfTextEdits(item);
   let result = await processItemOnce(item, source, applyVectorOCR, diagnostics);
-
   if (expected > result.pdfTextEdits) {
     diagnostics.push(`${item.name}: ⚠️ texto PDF esperado=${expected}, aplicado=${result.pdfTextEdits}; reintentando el archivo de forma aislada`);
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -124,31 +105,32 @@ async function processItemWithRetry(item, source, applyVectorOCR, diagnostics) {
       if (retry.pdfTextEdits > result.pdfTextEdits) {
         diagnostics.push(`${item.name}: ✓ reintento aislado recuperó ${retry.pdfTextEdits - result.pdfTextEdits} edición${retry.pdfTextEdits - result.pdfTextEdits === 1 ? '' : 'es'} de texto PDF`);
         result = retry;
-      } else {
-        diagnostics.push(`${item.name}: reintento aislado no mejoró el resultado (${retry.pdfTextEdits}/${expected})`);
-      }
+      } else diagnostics.push(`${item.name}: reintento aislado no mejoró el resultado (${retry.pdfTextEdits}/${expected})`);
     } catch (error) {
       diagnostics.push(`${item.name}: reintento aislado falló: ${error?.message || String(error)}`);
     }
   }
-
   return { ...result, expectedPdfText: expected, unresolvedPdfText: Math.max(0, expected - result.pdfTextEdits) };
+}
+
+async function prepareSequentialItemIfNeeded(item, index, total) {
+  if (window.__batchAnnotationSequentialPrep !== true) return;
+  const prepareItem = window.__prepareBatchAnnotationItem;
+  if (typeof prepareItem !== 'function') throw new Error('La preparación secuencial de anotaciones no está disponible.');
+  say(`Preparando y aplicando ${index + 1} de ${total}: ${item.name}`);
+  progressSet(index, total, `Preparando ${item.name}`);
+  await prepareItem(item);
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export async function runFallback() {
   try {
     const list = window.__batchAnalysis || [];
-    if (!list.length) {
-      say('Primero analiza al menos un PDF.');
-      return;
-    }
-
+    if (!list.length) { say('Primero analiza al menos un PDF.'); return; }
     progressSet(0, list.length, 'Cargando motores');
-
     const vectorModule = await import('./vector-apply-v2.js?v=20260812-307');
     const applyVectorOCR = vectorModule.applyVectorOCR;
     if (typeof applyVectorOCR !== 'function') throw new Error('No se pudo cargar el motor vector/OCR.');
-
     const outputs = [];
     const diagnostics = [];
     let totalEdits = 0;
@@ -160,30 +142,21 @@ export async function runFallback() {
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
       progressSet(i, list.length, `Procesando ${item?.name || 'PDF'}`);
-
-      if (item?.error) {
-        failures++;
-        diagnostics.push(`${item.name}: ${item.error}`);
-        continue;
-      }
-
-      say(`Aplicando ${i + 1} de ${list.length}: ${item.name}`);
-      const source = asBytes(item.data);
-
+      if (item?.error) { failures++; diagnostics.push(`${item.name}: ${item.error}`); continue; }
+      let source = asBytes(item.data);
       try {
+        await prepareSequentialItemIfNeeded(item, i, list.length);
+        source = asBytes(item.data);
+        say(`Aplicando ${i + 1} de ${list.length}: ${item.name}`);
+        progressSet(i, list.length, `Aplicando ${item.name}`);
         const result = await processItemWithRetry(item, source, applyVectorOCR, diagnostics);
         outputs.push({ name: item.name, bytes: result.bytes });
         totalEdits += result.pdfTextEdits + result.freeTextEdits;
         totalVector += result.vectorEdits;
-
         item.batchApplyExpectedText = result.expectedPdfText;
         item.batchApplyAppliedText = result.pdfTextEdits;
         item.batchApplyUnresolvedText = result.unresolvedPdfText;
-
-        // Keep Preview usable after Apply, but point it to the same output object held by ZIP.
-        // This releases the previous input bytes instead of retaining input + output for every PDF.
         item.data = result.bytes;
-
         if (result.unresolvedPdfText > 0) {
           unresolvedFiles++;
           unresolvedNames.push(item.name);
@@ -193,28 +166,20 @@ export async function runFallback() {
         failures++;
         diagnostics.push(`${item.name}: ${error?.message || String(error)}`);
         outputs.push({ name: item.name, bytes: source });
-        // Same object in both places; do not retain another full copy of this PDF.
         item.data = source;
       }
-
       progressSet(i + 1, list.length, item.name);
-      // Yield between files so destroyed MuPDF documents and superseded byte arrays
-      // can become collectible before the next large PDF is opened.
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
     if (!outputs.length) throw new Error('No hay PDFs de salida.');
-
     say('Generando ZIP…');
     const { default: JSZip } = await import('https://esm.sh/jszip@3.10.1');
     const zip = new JSZip();
-
     for (const output of outputs) {
       const safeName = String(output.name || 'resultado.pdf').replace(/[\\/]/g, '_');
       zip.file(safeName, output.bytes);
     }
-
-    // streamFiles reduces the peak temporary allocation while preserving STORE/no recompression.
     const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -222,35 +187,23 @@ export async function runFallback() {
     link.download = 'PDF_tools_procesados.zip';
     document.body.appendChild(link);
     link.click();
-    setTimeout(() => {
-      link.remove();
-      URL.revokeObjectURL(url);
-    }, 3000);
-
+    setTimeout(() => { link.remove(); URL.revokeObjectURL(url); }, 3000);
     if ($('#statFiles')) $('#statFiles').textContent = outputs.length;
     if ($('#statEdits')) $('#statEdits').textContent = totalEdits + totalVector;
     if ($('#statZip')) $('#statZip').textContent = unresolvedFiles ? '⚠ Revisar' : '✓ Descargado';
-
     if (summary) {
       const plural = outputs.length === 1 ? '' : 's';
       const editPlural = totalEdits === 1 ? 'ación' : 'aciones';
       summary.textContent = `${outputs.length} PDF${plural} procesado${plural} · ${totalEdits} edit${editPlural} de texto/FreeText · ${totalVector} edición${totalVector === 1 ? '' : 'es'} vector/OCR${unresolvedFiles ? ` · ⚠️ ${unresolvedFiles} archivo${unresolvedFiles === 1 ? '' : 's'} con sustituciones pendientes` : ' · ✓ todas las sustituciones PDF esperadas aplicadas'}${failures ? ` · ${failures} error${failures === 1 ? '' : 'es'}` : ''}${diagnostics.length ? ' · revisa el diagnóstico' : ''} · ZIP descargado`;
       summary.classList.remove('hidden');
     }
-
     progressSet(list.length, list.length, 'ZIP listo');
-    if (unresolvedFiles) {
-      say(`⚠️ ZIP generado, pero ${unresolvedFiles} archivo${unresolvedFiles === 1 ? '' : 's'} requiere${unresolvedFiles === 1 ? '' : 'n'} revisión: ${unresolvedNames.join(' | ').slice(0, 2500)}`);
-    } else {
-      say(diagnostics.length ? `Aplicación terminada con avisos: ${diagnostics.join(' | ').slice(0, 3500)}` : 'Aplicación terminada correctamente. Todas las sustituciones PDF esperadas fueron aplicadas.');
-    }
+    if (unresolvedFiles) say(`⚠️ ZIP generado, pero ${unresolvedFiles} archivo${unresolvedFiles === 1 ? '' : 's'} requiere${unresolvedFiles === 1 ? '' : 'n'} revisión: ${unresolvedNames.join(' | ').slice(0, 2500)}`);
+    else say(diagnostics.length ? `Aplicación terminada con avisos: ${diagnostics.join(' | ').slice(0, 3500)}` : 'Aplicación terminada correctamente. Todas las sustituciones PDF esperadas fueron aplicadas.');
   } catch (error) {
     console.error(error);
     say(`ERROR AL APLICAR: ${error?.message || String(error)}`);
-    if (summary) {
-      summary.textContent = `Error al aplicar. ${error?.message || String(error)}`;
-      summary.classList.remove('hidden');
-    }
+    if (summary) { summary.textContent = `Error al aplicar. ${error?.message || String(error)}`; summary.classList.remove('hidden'); }
   }
 }
 
