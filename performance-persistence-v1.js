@@ -3,9 +3,9 @@
 // nunca conserva bytes de archivos y nunca participa en Analyze/Apply/ZIP.
 const STORAGE_KEY='pdf-tools::performance-diagnostic-snapshot-v1';
 const STATUS='#batchStatus',PROGRESS='#batchProgressText',APPLY='#batchApply',ANALYZE='#batchAnalyze';
-const MAX_EVENTS=160;
+const MAX_EVENTS=800;
 const q=s=>document.querySelector(s);
-let timer=null,observer=null,lastSavedText='';
+let timer=null,observer=null,settleTimer=null,lastSavedText='';
 
 function mem(){
   try{
@@ -21,24 +21,40 @@ function cleanEvent(e){
   }
   return out;
 }
+function currentLog(){
+  try{return String(q('#perfDiagLog')?.textContent||'');}catch(_){return '';}
+}
+function updateInfo(data){
+  try{
+    const info=q('#perfDiagRecoveredInfo');
+    if(!info)return;
+    info.textContent=data?`Última copia persistente: ${fmtDate(data.savedAt)} · ${data.status||data.reason||''}`:'Sin copia persistente todavía.';
+  }catch(_){}
+}
 function snapshot(reason='intervalo'){
   try{
     const api=window.__performanceDiagnosticsV1;
     const events=Array.isArray(api?.events)?api.events.slice(-MAX_EVENTS).map(cleanEvent).filter(Boolean):[];
     const data={
-      version:1,
+      version:2,
       savedAt:Date.now(),
       reason:String(reason||''),
       href:String(location.href||''),
       status:String(q(STATUS)?.textContent||''),
       progress:String(q(PROGRESS)?.textContent||''),
       memoryUsed:mem(),
+      liveText:currentLog(),
       events
     };
     const text=JSON.stringify(data);
     if(text!==lastSavedText){localStorage.setItem(STORAGE_KEY,text);lastSavedText=text;}
+    updateInfo(data);
     return data;
   }catch(_){return null;}
+}
+function settledSnapshot(reason){
+  if(settleTimer)clearTimeout(settleTimer);
+  settleTimer=setTimeout(()=>snapshot(reason||'estado estabilizado'),150);
 }
 function read(){
   try{
@@ -64,39 +80,69 @@ function toText(data=read()){
     `Estado: ${data.status||''}`,
     `Progreso: ${data.progress||''}`,
     `Memoria JS: ${fmtMB(data.memoryUsed)}`,
-    '',
-    'EVENTOS'
+    ''
   ];
-  (Array.isArray(data.events)?data.events:[]).forEach((e,i)=>lines.push(eventLine(e,i)));
+  if(String(data.liveText||'').trim()){
+    lines.push('DIAGNÓSTICO COMPLETO CAPTURADO','',String(data.liveText));
+  }else{
+    lines.push('EVENTOS');
+    (Array.isArray(data.events)?data.events:[]).forEach((e,i)=>lines.push(eventLine(e,i)));
+  }
   return lines.join('\n');
 }
-function download(){
-  const text=toText();
-  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+function saveText(text,filename){
+  const blob=new Blob([String(text||'')],{type:'text/plain;charset=utf-8'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='diagnostico_rendimiento_recuperado.txt';document.body.appendChild(a);a.click();
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();
   setTimeout(()=>{try{a.remove();URL.revokeObjectURL(url);}catch(_){}},1000);
 }
-function clear(){try{localStorage.removeItem(STORAGE_KEY);lastSavedText='';}catch(_){} }
+function downloadRecovered(){
+  saveText(toText(),'diagnostico_rendimiento_recuperado.txt');
+}
+function downloadCurrent(){
+  const data=snapshot('descarga diagnóstico actual');
+  const live=currentLog();
+  if(live.trim()){
+    const header=[
+      'DIAGNÓSTICO DE RENDIMIENTO ACTUAL',
+      `Guardado: ${fmtDate(data?.savedAt||Date.now())}`,
+      `Estado: ${String(q(STATUS)?.textContent||'')}`,
+      `Progreso: ${String(q(PROGRESS)?.textContent||'')}`,
+      `Memoria JS: ${fmtMB(mem())}`,
+      '',
+      live
+    ].join('\n');
+    saveText(header,'diagnostico_rendimiento_actual.txt');
+  }else saveText(toText(data),'diagnostico_rendimiento_actual.txt');
+}
+function clear(){try{localStorage.removeItem(STORAGE_KEY);lastSavedText='';updateInfo(null);}catch(_){} }
 function ensureButton(){
-  const panel=q('#performanceDiagnosticsPanel');if(!panel||q('#perfDiagRecoveredDownload'))return;
+  const panel=q('#performanceDiagnosticsPanel');if(!panel)return;
   const host=panel.querySelector('details > div');if(!host)return;
-  const row=document.createElement('div');row.style.cssText='margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
-  const b=document.createElement('button');b.id='perfDiagRecoveredDownload';b.type='button';b.className='secondary small';b.textContent='Descargar diagnóstico recuperado';b.addEventListener('click',download);
-  const info=document.createElement('span');info.id='perfDiagRecoveredInfo';info.style.fontSize='12px';
-  const old=read();info.textContent=old?`Última copia persistente: ${fmtDate(old.savedAt)} · ${old.status||old.reason||''}`:'Sin copia persistente todavía.';
-  row.append(b,info);host.appendChild(row);
+  let row=q('#perfDiagPersistenceRow');
+  if(!row){
+    row=document.createElement('div');row.id='perfDiagPersistenceRow';row.style.cssText='margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+    const current=document.createElement('button');current.id='perfDiagCurrentDownload';current.type='button';current.className='secondary small';current.textContent='Descargar diagnóstico actual';current.addEventListener('click',downloadCurrent);
+    const recovered=document.createElement('button');recovered.id='perfDiagRecoveredDownload';recovered.type='button';recovered.className='secondary small';recovered.textContent='Descargar diagnóstico recuperado';recovered.addEventListener('click',downloadRecovered);
+    const info=document.createElement('span');info.id='perfDiagRecoveredInfo';info.style.fontSize='12px';
+    row.append(current,recovered,info);host.appendChild(row);
+  }
+  updateInfo(read());
 }
 function install(){
   ensureButton();
-  observer=new MutationObserver(()=>{snapshot('cambio de estado/progreso');ensureButton();});
+  observer=new MutationObserver(()=>{
+    snapshot('cambio de estado/progreso');
+    settledSnapshot('estado/progreso estabilizado');
+    ensureButton();
+  });
   const s=q(STATUS),p=q(PROGRESS);if(s)observer.observe(s,{childList:true,subtree:true,characterData:true});if(p)observer.observe(p,{childList:true,subtree:true,characterData:true});
-  q(APPLY)?.addEventListener('click',()=>snapshot('clic Apply'),true);
-  q(ANALYZE)?.addEventListener('click',()=>snapshot('clic Analizar'),true);
+  q(APPLY)?.addEventListener('click',()=>{snapshot('clic Apply');settledSnapshot('Apply iniciado');},true);
+  q(ANALYZE)?.addEventListener('click',()=>{snapshot('clic Analizar');settledSnapshot('Análisis iniciado');},true);
   window.addEventListener('pagehide',()=>snapshot('pagehide'));
   document.addEventListener('visibilitychange',()=>snapshot(document.hidden?'pestaña oculta':'pestaña visible'));
   timer=setInterval(()=>snapshot('intervalo 2 s'),2000);
   snapshot('módulo cargado');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-window.__performancePersistenceV1={version:1,read,toText,download,clear,snapshot};
+window.__performancePersistenceV1={version:2,read,toText,download:downloadRecovered,downloadCurrent,clear,snapshot};
