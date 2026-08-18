@@ -1,8 +1,8 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
-import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
-import { editDoc } from './text-editor-v65.js';
-import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
+import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260818-applymem1';
+import { editDoc } from './text-editor-v65.js?v=20260818-applymem1';
+import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260818-applymem1';
 
 const $ = (s) => document.querySelector(s);
 const status = $('#batchStatus');
@@ -10,6 +10,9 @@ const progress = $('#batchProgress');
 const progressBar = $('#batchProgressBar');
 const progressText = $('#batchProgressText');
 const summary = $('#batchSummary');
+const yieldUI = () => new Promise((resolve) => setTimeout(resolve, 0));
+const byteLength = (data) => Number(data?.byteLength ?? data?.length ?? 0);
+function perf(event) { try { window.__performanceDiagnostic?.({ scope: 'apply', ...event }); } catch (_) {} }
 
 function say(text) {
   if (status) status.textContent = text;
@@ -22,16 +25,25 @@ function progressSet(done, total, label = '') {
   if (progressText) progressText.textContent = `${pct}% · ${done} / ${total}${label ? ` · ${label}` : ''}`;
 }
 
+// Devuelve una vista cuando ya existe almacenamiento binario compatible.
+// No se clona el PDF solo para pasarlo al motor; las salidas modificadas sí se copian
+// una vez antes de liberar el Buffer nativo de MuPDF.
 function asBytes(data) {
-  if (data instanceof Uint8Array) return new Uint8Array(data);
-  if (data instanceof ArrayBuffer) return new Uint8Array(data.slice(0));
-  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   throw new Error('Los datos del PDF no tienen un formato binario válido.');
 }
 
 function savePdf(doc) {
-  const buffer = doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');
-  return buffer?.asUint8Array ? new Uint8Array(buffer.asUint8Array()) : new Uint8Array(buffer);
+  let buffer = null;
+  try {
+    buffer = doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');
+    const view = buffer?.asUint8Array ? buffer.asUint8Array() : buffer;
+    return new Uint8Array(view);
+  } finally {
+    try { buffer?.destroy?.(); } catch (_) {}
+  }
 }
 
 function expectedPdfTextEdits(item) {
@@ -73,10 +85,13 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
   let pdfTextEdits = 0;
   let freeTextEdits = 0;
   let vectorEdits = 0;
-  let bytes = new Uint8Array(source);
+  let bytes = source;
+  const openKey = `mupdf-open::${prefix}::${item.name}`;
 
   try {
-    doc = mupdf.PDFDocument.openDocument(new Uint8Array(source), 'application/pdf');
+    perf({ action: 'start', stage: 'abrir PDF en MuPDF', key: openKey, file: item.name, sizeBytes: byteLength(source) });
+    doc = mupdf.PDFDocument.openDocument(source, 'application/pdf');
+    perf({ action: 'end', stage: 'abrir PDF en MuPDF', key: openKey, file: item.name, sizeBytes: byteLength(source) });
     const rules = (item.counts || []).filter((r) => String(r.find || '').trim() && String(r.replace ?? '') !== '');
 
     for (const rule of rules) {
@@ -85,11 +100,18 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
         pdfTextEdits += await applyTextRule(doc, rule, expected, item.name, diagnostics, prefix);
       }
 
+      let freeTextResult = null;
       try {
-        const freeTextResult = editFreeTextDetailed(doc, rule.find, rule.replace) || {};
+        freeTextResult = editFreeTextDetailed(doc, rule.find, rule.replace) || {};
         freeTextEdits += Number(freeTextResult.count || 0);
       } catch (error) {
         diagnostics.push(`${item.name}: ${prefix}FreeText «${rule.find}» no pudo aplicarse: ${error?.message || String(error)}`);
+      } finally {
+        // En Apply solo usamos el contador; las envolturas de anotación devueltas no se
+        // conservan y deben liberar su referencia nativa antes de seguir con otra regla.
+        try {
+          for (const annotation of freeTextResult?.preserved || []) annotation?.destroy?.();
+        } catch (_) {}
       }
     }
 
@@ -99,10 +121,16 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
       diagnostics.push(`${item.name}: ${prefix}${vectorResult.skipped.join(' · ')}`);
     }
 
-    if (pdfTextEdits || freeTextEdits || vectorEdits) bytes = savePdf(doc);
+    if (pdfTextEdits || freeTextEdits || vectorEdits) {
+      const saveKey = `mupdf-save::${prefix}::${item.name}`;
+      perf({ action: 'start', stage: 'guardar PDF desde MuPDF', key: saveKey, file: item.name, sizeBytes: byteLength(source) });
+      bytes = savePdf(doc);
+      perf({ action: 'end', stage: 'guardar PDF desde MuPDF', key: saveKey, file: item.name, sizeBytes: byteLength(source), outputBytes: byteLength(bytes) });
+    }
     return { bytes, pdfTextEdits, freeTextEdits, vectorEdits };
   } finally {
     try { doc?.destroy(); } catch (_) {}
+    perf({ action: 'event', stage: 'liberar PDF de MuPDF', file: item.name, sizeBytes: byteLength(source) });
   }
 }
 
@@ -141,7 +169,7 @@ export async function runFallback() {
 
     progressSet(0, list.length, 'Cargando motores');
 
-    const vectorModule = await import('./vector-apply-v2.js?v=20260812-307');
+    const vectorModule = await import('./vector-apply-v2.js?v=20260818-applymem1');
     const applyVectorOCR = vectorModule.applyVectorOCR;
     if (typeof applyVectorOCR !== 'function') throw new Error('No se pudo cargar el motor vector/OCR.');
 
@@ -188,7 +216,8 @@ export async function runFallback() {
       }
 
       progressSet(i + 1, list.length, item.name);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      // Dar al navegador una oportunidad explícita de ejecutar GC/pintado entre PDFs.
+      await yieldUI();
     }
 
     if (!outputs.length) throw new Error('No hay PDFs de salida.');
@@ -202,7 +231,7 @@ export async function runFallback() {
       zip.file(safeName, output.bytes);
     }
 
-    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
