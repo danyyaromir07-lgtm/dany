@@ -130,4 +130,8 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else wire();
 
 // Rendimiento es un observador independiente: si no carga, nubes/OCR/análisis continúan sin cambios.
-import('./performance-diagnostics-v1.js?v=20260818-perfdiag3').catch(() => {});
+// El router de Apply se instala DESPUÉS del diagnóstico para que el click quede medido antes
+// de interceptar el antiguo preflight global de index.html.
+import('./performance-diagnostics-v1.js?v=20260818-perfdiag3')
+  .catch(() => {})
+  .finally(() => { import('./apply-per-item-orchestrator-v1.js?v=20260818-peritem1').catch(() => {}); });
