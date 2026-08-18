@@ -1,7 +1,7 @@
 import './revision-cloud-results-inline-v1.js?v=20260817-zeropending1';
 import './revision-cloud-zero-pending-v1.js?v=20260817-applyenable1';
 import './revision-cloud-apply-enable-v1.js?v=20260817-confirmed1';
-import './revision-cloud-colored-optional-v1.js?v=20260817-coloroptional1';
+import './revision-cloud-colored-extended-v1.js?v=20260818-curvedgray1';
 
 const CHECKBOX = '#batchRemoveRevisionClouds';
 const ANALYZE = '#batchAnalyze';
