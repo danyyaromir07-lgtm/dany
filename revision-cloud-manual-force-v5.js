@@ -1,6 +1,6 @@
 // Additive wrapper. Stable v4 runs first unchanged; curved-cloud fallback runs only if v4 removed nothing.
 import { removeDetectedRevisionCloudsByExactFamily as baseRemove } from './revision-cloud-manual-force-v4.js?v=20260817-coloroptional1';
-import { removeCurvedGrayClouds } from './revision-cloud-curved-gray-v1.js?v=20260818-curvedgray1';
+import { removeCurvedGrayClouds } from './revision-cloud-curved-gray-v2.js?v=20260818-curvedgray2';
 function hasCurved(pages){return(pages||[]).some(p=>(p?.clouds||[]).some(c=>c?.source==='vector-curved-cloud'));}
 export async function removeDetectedRevisionCloudsByExactFamily(data,detectedPages,options={}){
   const base=await baseRemove(data,detectedPages,options);
@@ -13,4 +13,4 @@ export async function removeDetectedRevisionCloudsByExactFamily(data,detectedPag
   }catch(err){try{window.__cloudDiagnostic?.({stage:'cloud.curved.remove.error',detail:'manual-cloud-force-v5',file:String(options?.file||''),error:err?.message||String(err)});}catch(_){}return base;}
 }
 export { isManualCloudForceEnabled, clearManualCloudForcePreviewApprovals } from './revision-cloud-manual-force-v4.js?v=20260817-coloroptional1';
-window.__revisionCloudManualForceV5={version:'5+curvedgray1'};
+window.__revisionCloudManualForceV5={version:'5+curvedgray2'};
