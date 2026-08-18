@@ -1,12 +1,32 @@
-// DanForge PDF branding only. It changes presentation metadata and the visible brand; no tool behavior is touched.
-const ICON='data:image/jpeg;base64,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';
+// PDF Forge branding only. Presentation metadata and visible brand only; no tool behavior is touched.
+const ICON = new URL('./assets/pdf-forge-icon.jpg?v=20260818-pdfforge1', import.meta.url).href;
+
 function applyBrand(){
-  document.title='DanForge PDF';
+  document.title='PDF Forge';
   let fav=document.querySelector('link[rel~="icon"]');
-  if(!fav){fav=document.createElement('link');fav.rel='icon';document.head.appendChild(fav);}fav.type='image/jpeg';fav.href=ICON;
+  if(!fav){fav=document.createElement('link');fav.rel='icon';document.head.appendChild(fav);}
+  fav.type='image/jpeg';
+  fav.href=ICON;
+
   const mark=document.querySelector('.brand-mark');
-  if(mark){mark.textContent='';mark.style.overflow='hidden';mark.style.padding='0';const img=document.createElement('img');img.src=ICON;img.alt='DanForge PDF';Object.assign(img.style,{display:'block',width:'100%',height:'100%',objectFit:'cover',borderRadius:'inherit'});mark.appendChild(img);}
-  const name=document.querySelector('.brand-copy strong');if(name)name.textContent='DanForge PDF';
-  const meta=document.querySelector('meta[name="description"]');if(meta)meta.content='DanForge PDF: edición, análisis y procesamiento local de documentos PDF técnicos.';
+  if(mark){
+    mark.textContent='';
+    mark.style.overflow='hidden';
+    mark.style.padding='0';
+    mark.style.background='#06172f';
+    const img=document.createElement('img');
+    img.src=ICON;
+    img.alt='PDF Forge';
+    Object.assign(img.style,{display:'block',width:'100%',height:'100%',objectFit:'cover',borderRadius:'inherit'});
+    mark.appendChild(img);
+  }
+
+  const name=document.querySelector('.brand-copy strong');
+  if(name)name.textContent='PDF Forge';
+
+  const meta=document.querySelector('meta[name="description"]');
+  if(meta)meta.content='PDF Forge: edición, análisis y procesamiento local de documentos PDF técnicos.';
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyBrand,{once:true});else applyBrand();
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyBrand,{once:true});
+else applyBrand();
