@@ -19,7 +19,7 @@ function sameRef(a, b) { return String(a?.objectNumber ?? '') === String(b?.obje
 function annotationArray(page) { const a = page.node.get(PDFName.of('Annots')); return a?.size && a?.get ? a : null; }
 function annotationContents(doc, ref) { const obj = resolve(doc, ref); const c = obj?.get?.(PDFName.of('Contents')); try { return c?.decodeText?.() || ''; } catch (_) { return String(c || '').replace(/^\(|\)$/g, ''); } }
 function preservedFreeText(doc, ref, rules) { if (subtype(doc, ref) !== 'FreeText') return false; const text = annotationContents(doc, ref).replace(/\s+/g, ' ').trim().toLowerCase(); return rules.some((r) => { const needle = String(r.find || '').replace(/\s+/g, ' ').trim().toLowerCase(); return needle && text.includes(needle); }); }
-function knownCount(value) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
+function knownCount(value) { if (value == null || value === '') return null; const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
 function analysisProvesNoSelectedTargets(item, removeComments, removeSignatures, removeLinks) {
   if (item?.signatureError) return false;
   const annotationCount = removeComments ? knownCount(item?.annotationCount) : 0;
