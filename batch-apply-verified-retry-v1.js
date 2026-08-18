@@ -231,7 +231,7 @@ export async function runFallback() {
       zip.file(safeName, output.bytes);
     }
 
-    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true });
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
