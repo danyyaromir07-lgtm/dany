@@ -19,6 +19,17 @@ function sameRef(a, b) { return String(a?.objectNumber ?? '') === String(b?.obje
 function annotationArray(page) { const a = page.node.get(PDFName.of('Annots')); return a?.size && a?.get ? a : null; }
 function annotationContents(doc, ref) { const obj = resolve(doc, ref); const c = obj?.get?.(PDFName.of('Contents')); try { return c?.decodeText?.() || ''; } catch (_) { return String(c || '').replace(/^\(|\)$/g, ''); } }
 function preservedFreeText(doc, ref, rules) { if (subtype(doc, ref) !== 'FreeText') return false; const text = annotationContents(doc, ref).replace(/\s+/g, ' ').trim().toLowerCase(); return rules.some((r) => { const needle = String(r.find || '').replace(/\s+/g, ' ').trim().toLowerCase(); return needle && text.includes(needle); }); }
+function knownCount(value) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : null; }
+function analysisProvesNoSelectedTargets(item, removeComments, removeSignatures, removeLinks) {
+  if (item?.signatureError) return false;
+  const annotationCount = removeComments ? knownCount(item?.annotationCount) : 0;
+  const signatureCount = removeSignatures ? knownCount(item?.signatureCount) : 0;
+  const linkCount = removeLinks ? knownCount(item?.linkCount) : 0;
+  if (removeComments && annotationCount == null) return false;
+  if (removeSignatures && signatureCount == null) return false;
+  if (removeLinks && linkCount == null) return false;
+  return Number(annotationCount || 0) === 0 && Number(signatureCount || 0) === 0 && Number(linkCount || 0) === 0;
+}
 async function prepare(data, rules, removeComments, removeSignatures, removeLinks, context = {}) {
   if (!removeComments && !removeSignatures && !removeLinks) return data;
   const file = String(context.file || '');
@@ -67,8 +78,6 @@ async function prepare(data, rules, removeComments, removeSignatures, removeLink
       else acro.delete(PDFName.of('Fields'));
     }
   }
-  // Importante para lotes grandes: si no hubo cambios, conservar exactamente el mismo buffer.
-  // La versión anterior clonaba todo el PDF aunque no hubiera nada que eliminar.
   if (!changed) return data;
   const saveKey = `annotations-save::${context.index ?? ''}::${file}`;
   perf({ action: 'start', stage: 'guardar PDF tras anotaciones', key: saveKey, file, index: context.index, total: context.total, sizeBytes: byteLength(data) });
@@ -97,6 +106,11 @@ async function prepareForApply() {
     const key = `annotations-file::${i + 1}::${a.name || ''}`;
     perf({ action: 'start', stage: 'preparar anotaciones del PDF', key, file: a.name, index: i + 1, total: batch.length, sizeBytes: byteLength(a.data) });
     await yieldUI();
+    if (analysisProvesNoSelectedTargets(a, removeComments, removeSignatures, removeLinks)) {
+      perf({ action: 'end', stage: 'preparar anotaciones del PDF', key, file: a.name, index: i + 1, total: batch.length, sizeBytes: byteLength(a.data), outputBytes: byteLength(a.data), warning: 'omitido: análisis confirmó 0 elementos seleccionados' });
+      await yieldUI();
+      continue;
+    }
     try {
       const before = a.data;
       a.data = await prepare(a.data, rules, removeComments, removeSignatures, removeLinks, { file: a.name, index: i + 1, total: batch.length });
