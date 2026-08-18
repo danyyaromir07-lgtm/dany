@@ -22,10 +22,11 @@ function progressSet(done, total, label = '') {
   if (progressText) progressText.textContent = `${pct}% · ${done} / ${total}${label ? ` · ${label}` : ''}`;
 }
 
+// Memory-safe view: do not duplicate a whole PDF merely to normalize its binary type.
 function asBytes(data) {
-  if (data instanceof Uint8Array) return new Uint8Array(data);
-  if (data instanceof ArrayBuffer) return new Uint8Array(data.slice(0));
-  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   throw new Error('Los datos del PDF no tienen un formato binario válido.');
 }
 
@@ -73,10 +74,13 @@ async function processItemOnce(item, source, applyVectorOCR, diagnostics, prefix
   let pdfTextEdits = 0;
   let freeTextEdits = 0;
   let vectorEdits = 0;
-  let bytes = new Uint8Array(source);
+  // Until an edit is actually produced, reuse the source object instead of cloning it.
+  let bytes = source;
 
   try {
-    doc = mupdf.PDFDocument.openDocument(new Uint8Array(source), 'application/pdf');
+    // MuPDF receives a zero-copy Uint8Array view. The document is still destroyed in finally.
+    const inputView = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    doc = mupdf.PDFDocument.openDocument(inputView, 'application/pdf');
     const rules = (item.counts || []).filter((r) => String(r.find || '').trim() && String(r.replace ?? '') !== '');
 
     for (const rule of rules) {
@@ -176,6 +180,10 @@ export async function runFallback() {
         item.batchApplyAppliedText = result.pdfTextEdits;
         item.batchApplyUnresolvedText = result.unresolvedPdfText;
 
+        // Keep Preview usable after Apply, but point it to the same output object held by ZIP.
+        // This releases the previous input bytes instead of retaining input + output for every PDF.
+        item.data = result.bytes;
+
         if (result.unresolvedPdfText > 0) {
           unresolvedFiles++;
           unresolvedNames.push(item.name);
@@ -185,9 +193,13 @@ export async function runFallback() {
         failures++;
         diagnostics.push(`${item.name}: ${error?.message || String(error)}`);
         outputs.push({ name: item.name, bytes: source });
+        // Same object in both places; do not retain another full copy of this PDF.
+        item.data = source;
       }
 
       progressSet(i + 1, list.length, item.name);
+      // Yield between files so destroyed MuPDF documents and superseded byte arrays
+      // can become collectible before the next large PDF is opened.
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
@@ -202,7 +214,8 @@ export async function runFallback() {
       zip.file(safeName, output.bytes);
     }
 
-    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    // streamFiles reduces the peak temporary allocation while preserving STORE/no recompression.
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE', streamFiles: true });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
