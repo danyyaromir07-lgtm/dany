@@ -65,22 +65,27 @@ function applyRedactions(page,boxes){for(const box of boxes){const red=page.crea
 export function editTextByPageSearch(doc,target,replacement,maxHits=50){
   let count=0;const wanted=String(target||'').trim();if(!wanted)return 0;
   for(let pi=0;pi<doc.countPages()&&count<maxHits;pi++){
-    const page=doc.loadPage(pi);let hits=[];
-    try{hits=page.search(wanted,Math.min(50,maxHits-count))||[]}catch(_){hits=[]}
-    if(!hits.length)continue;
-    const items=[];
-    for(const hit of hits){
-      const g=hitGeometry(hit);if(!g)continue;
-      let angle=nearestRightAngle(g.dir);
-      const raw=g.bbox;const w=raw[2]-raw[0],h=raw[3]-raw[1];
-      if(Math.max(w,h)>0 && Math.min(w,h)/Math.max(w,h)<0.45 && !g.dir){angle=h>w?90:0}
-      const font=new mupdf.Font('Helvetica');const {size}=fitMetrics(font,replacement,raw,angle);
-      items.push({page,raw,text:replacement,angle,size});
-    }
-    if(!items.length)continue;
-    applyRedactions(page,items.map(x=>x.raw));
-    addFontResource(doc,page);
-    for(const item of items){appendContent(doc,item.page,makeContent(doc,item.page,item.raw,item.text,item.angle,item.size));count++}
+    const page=doc.loadPage(pi);
+    try{
+      let hits=[];
+      try{hits=page.search(wanted,Math.min(50,maxHits-count))||[]}catch(_){hits=[]}
+      if(!hits.length)continue;
+      const items=[];
+      for(const hit of hits){
+        const g=hitGeometry(hit);if(!g)continue;
+        let angle=nearestRightAngle(g.dir);
+        const raw=g.bbox;const w=raw[2]-raw[0],h=raw[3]-raw[1];
+        if(Math.max(w,h)>0 && Math.min(w,h)/Math.max(w,h)<0.45 && !g.dir){angle=h>w?90:0}
+        const font=new mupdf.Font('Helvetica');
+        let size;
+        try{({size}=fitMetrics(font,replacement,raw,angle));}finally{try{font?.destroy?.()}catch(_){}}
+        items.push({page,raw,text:replacement,angle,size});
+      }
+      if(!items.length)continue;
+      applyRedactions(page,items.map(x=>x.raw));
+      addFontResource(doc,page);
+      for(const item of items){appendContent(doc,item.page,makeContent(doc,item.page,item.raw,item.text,item.angle,item.size));count++}
+    }finally{try{page?.destroy?.()}catch(_){}}
   }
   return count;
 }
