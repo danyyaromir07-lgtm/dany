@@ -4,7 +4,7 @@ import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
 import { editDoc } from './text-editor-v65.js?v=20260816-previewtext1';
 import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
 import { applyVectorOCR } from './vector-apply-safe-wrapper-v1.js?v=20260817-longvertical1';
-import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260818-curvedgray1';
+import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260818-curvedgray2';
 
 const q=s=>document.querySelector(s);
 let resultUrl='', originalUrl='', currentMode='result', currentIndex=-1, currentPage=1;
