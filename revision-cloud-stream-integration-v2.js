@@ -35,6 +35,7 @@ function install(){
   if(typeof base!=='function'||!base.__cloudSafeWrap||base.__exactCloudStreamWrap) return false;
   const wrapped=async function(){
     const box=document.querySelector(CHECKBOX),wanted=!!box?.checked;
+    window.__batchCloudApplyWanted=wanted;
     if(box&&wanted) box.checked=false;
     try{ await base(); } finally { if(box&&wanted) box.checked=true; }
     if(wanted) await applyExactFamilyCloudRemoval();
