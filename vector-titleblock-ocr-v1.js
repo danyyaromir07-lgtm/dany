@@ -1,5 +1,5 @@
 // Compatibility shim: title-block OCR v2.
-import './danforge-branding-v2.js?v=20260817-brand1';
+import './danforge-branding-v2.js?v=20260818-pdfforge1';
 import './danforge-theme-v1.js?v=20260818-blue1';
 import './batch-check-completion-v1.js?v=20260817-completion4';
 import './vector-titleblock-ocr-v2.js?v=20260817-longvertical1';
