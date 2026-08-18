@@ -130,4 +130,4 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else wire();
 
 // Rendimiento es un observador independiente: si no carga, nubes/OCR/análisis continúan sin cambios.
-import('./performance-diagnostics-v1.js?v=20260818-perfdiag1').catch(() => {});
+import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(() => {});
