@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF Tools · prueba pesada combinada</title>
+</head>
+<body>
+  <p id="boot" style="font-family:system-ui;padding:20px">Cargando prueba aislada…</p>
+  <script>
+  (async()=>{
+    const boot=document.getElementById('boot');
+    try{
+      const response=await fetch('./index.html?v=20260819-heavycombined-isolated1',{cache:'no-store'});
+      if(!response.ok)throw new Error('No se pudo cargar index.html: '+response.status);
+      let html=await response.text();
+      const oldDiag='revision-cloud-diagnostics-v1.js?v=20260819-preflightprobe1';
+      const newDiag='revision-cloud-diagnostics-heavy-combined-v1.js?v=20260819-heavycombined1';
+      const oldLoader='batch-apply-fallback.js?v=20260819-loaderboundary3';
+      const newLoader='batch-apply-fallback-heavy-combined-v4.js?v=20260819-heavycombined1';
+      if(!html.includes(oldDiag))throw new Error('No encontré el cargador diagnóstico esperado.');
+      if(!html.includes(oldLoader))throw new Error('No encontré el loader Apply esperado.');
+      html=html.replace(oldDiag,newDiag).replace(oldLoader,newLoader);
+      document.open();
+      document.write(html);
+      document.close();
+    }catch(error){
+      boot.textContent='ERROR AL CARGAR LA PRUEBA AISLADA: '+(error?.message||String(error));
+    }
+  })();
+  </script>
+</body>
+</html>
