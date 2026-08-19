@@ -11,10 +11,10 @@
   (async()=>{
     const boot=document.getElementById('boot');
     try{
-      const response=await fetch('./index.html?v=20260819-cloud-pagerun-test3',{cache:'no-store'});
+      const response=await fetch('./index.html?v=20260819-cloud-coorddiag-test4',{cache:'no-store'});
       if(!response.ok)throw new Error('No se pudo cargar index.html: '+response.status);
       let html=await response.text();
-      const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v8.js?v=20260819-pagerun1'}})+'</'+'script>';
+      const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v8.js?v=20260819-pagerun1'}})+'</'+'script><script type="module" src="./revision-cloud-coordinate-diagnostic-v1.js?v=20260819-coorddiag1"></'+'script>';
       if(!html.includes('</head>'))throw new Error('No encontré </head> en index.html.');
       html=html.replace('</head>',marker+'</head>');
       document.open();
