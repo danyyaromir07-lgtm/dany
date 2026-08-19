@@ -13,13 +13,7 @@ function push(stage,extra={}){
 }
 function flags(fn){
   if(typeof fn!=='function')return {prepare:'none'};
-  return {
-    prepare:'function',
-    cloudSafe:!!fn.__cloudSafeWrap,
-    exact:!!fn.__exactCloudStreamWrap,
-    tolerance:!!fn.__cloudFailureToleranceWrap,
-    oldProbe:!!fn.__preflightBreadcrumbWrap
-  };
+  return {prepare:'function',cloudSafe:!!fn.__cloudSafeWrap,exact:!!fn.__exactCloudStreamWrap,tolerance:!!fn.__cloudFailureToleranceWrap,oldProbe:!!fn.__preflightBreadcrumbWrap};
 }
 let lastFn=null;
 function observePrepareIdentity(){
@@ -35,7 +29,7 @@ function installPerfObserver(){
   const base=current;
   perfWrapped=function(event){
     try{
-      if(event?.scope==='apply') push(`perf:${String(event.action||'event')}:${String(event.stage||'')}`,{
+      if(event?.scope==='apply')push(`perf:${String(event.action||'event')}:${String(event.stage||'')}`,{
         file:event.file||'',removed:event.removed??'',sizeBytes:event.sizeBytes??'',outputBytes:event.outputBytes??'',warning:event.warning||''
       });
     }catch(_){}
@@ -47,13 +41,8 @@ function installPerfObserver(){
 }
 function installClickTrace(){
   const b=document.querySelector('#batchApply');if(!b)return false;
-  b.addEventListener('click',()=>{
-    history=[];
-    push('click capture',flags(window.__prepareBatchAnnotationOperations));
-  },true);
-  b.addEventListener('click',()=>{
-    push('click bubble after primary handler yielded',flags(window.__prepareBatchAnnotationOperations));
-  });
+  b.addEventListener('click',()=>{history=[];push('click capture',flags(window.__prepareBatchAnnotationOperations));},true);
+  b.addEventListener('click',()=>push('click bubble after primary handler yielded',flags(window.__prepareBatchAnnotationOperations)));
   return true;
 }
 function install(){
@@ -62,11 +51,7 @@ function install(){
   observePrepareIdentity();
   installPerfObserver();
   let ticks=0;
-  const timer=setInterval(()=>{
-    observePrepareIdentity();
-    installPerfObserver();
-    if(++ticks>1200)clearInterval(timer);
-  },25);
+  const timer=setInterval(()=>{observePrepareIdentity();installPerfObserver();if(++ticks>1200)clearInterval(timer);},25);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 window.__applyPreflightTraceV2={version:2,push};
