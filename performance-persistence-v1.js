@@ -2,6 +2,8 @@
 // Solo guarda valores primitivos/diagnósticos en localStorage; nunca abre PDFs,
 // nunca conserva bytes de archivos y nunca participa en Analyze/Apply/ZIP.
 const STORAGE_KEY='pdf-tools::performance-diagnostic-snapshot-v1';
+const APPLY_CRUMB_KEY='pdf-tools::apply-breadcrumb-v1';
+const HEAVY_CRUMB_KEY='pdf_tools_heavy_text_breadcrumb_v1';
 const STATUS='#batchStatus',PROGRESS='#batchProgressText',APPLY='#batchApply',ANALYZE='#batchAnalyze';
 const MAX_EVENTS=800;
 const q=s=>document.querySelector(s);
@@ -21,6 +23,9 @@ function cleanEvent(e){
   }
   return out;
 }
+function readSmall(key){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null;}catch(_){return null;}}
+function writeApplyCrumb(stage,extra={}){try{localStorage.setItem(APPLY_CRUMB_KEY,JSON.stringify({at:new Date().toISOString(),stage,...extra}));}catch(_){}}
+function crumbLine(label,data){if(!data)return '';const parts=[String(data.stage||'')];for(const [k,v] of Object.entries(data)){if(k==='stage'||k==='at'||v==null||typeof v==='object')continue;parts.push(`${k}=${v}`);}return `${label}: ${parts.filter(Boolean).join(' · ')}${data.at?` · ${data.at}`:''}`;}
 function currentLog(){
   try{return String(q('#perfDiagLog')?.textContent||'');}catch(_){return '';}
 }
@@ -36,7 +41,7 @@ function snapshot(reason='intervalo'){
     const api=window.__performanceDiagnosticsV1;
     const events=Array.isArray(api?.events)?api.events.slice(-MAX_EVENTS).map(cleanEvent).filter(Boolean):[];
     const data={
-      version:2,
+      version:3,
       savedAt:Date.now(),
       reason:String(reason||''),
       href:String(location.href||''),
@@ -73,15 +78,17 @@ function eventLine(e,i){
 }
 function toText(data=read()){
   if(!data)return 'No hay diagnóstico persistido.';
+  const applyCrumb=readSmall(APPLY_CRUMB_KEY),heavyCrumb=readSmall(HEAVY_CRUMB_KEY);
   const lines=[
     'DIAGNÓSTICO DE RENDIMIENTO RECUPERADO',
     `Guardado: ${fmtDate(data.savedAt)}`,
     `Motivo: ${data.reason||''}`,
     `Estado: ${data.status||''}`,
     `Progreso: ${data.progress||''}`,
-    `Memoria JS: ${fmtMB(data.memoryUsed)}`,
-    ''
+    `Memoria JS: ${fmtMB(data.memoryUsed)}`
   ];
+  const a=crumbLine('Último breadcrumb Apply',applyCrumb),h=crumbLine('Último breadcrumb texto pesado',heavyCrumb);
+  if(a)lines.push(a);if(h)lines.push(h);lines.push('');
   if(String(data.liveText||'').trim()){
     lines.push('DIAGNÓSTICO COMPLETO CAPTURADO','',String(data.liveText));
   }else{
@@ -103,19 +110,22 @@ function downloadCurrent(){
   const data=snapshot('descarga diagnóstico actual');
   const live=currentLog();
   if(live.trim()){
+    const applyCrumb=readSmall(APPLY_CRUMB_KEY),heavyCrumb=readSmall(HEAVY_CRUMB_KEY);
+    const extras=[crumbLine('Último breadcrumb Apply',applyCrumb),crumbLine('Último breadcrumb texto pesado',heavyCrumb)].filter(Boolean);
     const header=[
       'DIAGNÓSTICO DE RENDIMIENTO ACTUAL',
       `Guardado: ${fmtDate(data?.savedAt||Date.now())}`,
       `Estado: ${String(q(STATUS)?.textContent||'')}`,
       `Progreso: ${String(q(PROGRESS)?.textContent||'')}`,
       `Memoria JS: ${fmtMB(mem())}`,
+      ...extras,
       '',
       live
     ].join('\n');
     saveText(header,'diagnostico_rendimiento_actual.txt');
   }else saveText(toText(data),'diagnostico_rendimiento_actual.txt');
 }
-function clear(){try{localStorage.removeItem(STORAGE_KEY);lastSavedText='';updateInfo(null);}catch(_){} }
+function clear(){try{localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(APPLY_CRUMB_KEY);localStorage.removeItem(HEAVY_CRUMB_KEY);lastSavedText='';updateInfo(null);}catch(_){} }
 function ensureButton(){
   const panel=q('#performanceDiagnosticsPanel');if(!panel)return;
   const host=panel.querySelector('details > div');if(!host)return;
@@ -137,7 +147,7 @@ function install(){
     ensureButton();
   });
   const s=q(STATUS),p=q(PROGRESS);if(s)observer.observe(s,{childList:true,subtree:true,characterData:true});if(p)observer.observe(p,{childList:true,subtree:true,characterData:true});
-  q(APPLY)?.addEventListener('click',()=>{snapshot('clic Apply');settledSnapshot('Apply iniciado');},true);
+  q(APPLY)?.addEventListener('click',()=>{writeApplyCrumb('clic Apply · captura');snapshot('clic Apply');settledSnapshot('Apply iniciado');},true);
   q(ANALYZE)?.addEventListener('click',()=>{snapshot('clic Analizar');settledSnapshot('Análisis iniciado');},true);
   window.addEventListener('pagehide',()=>snapshot('pagehide'));
   document.addEventListener('visibilitychange',()=>snapshot(document.hidden?'pestaña oculta':'pestaña visible'));
@@ -145,4 +155,4 @@ function install(){
   snapshot('módulo cargado');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-window.__performancePersistenceV1={version:2,read,toText,download:downloadRecovered,downloadCurrent,clear,snapshot};
+window.__performancePersistenceV1={version:3,read,toText,download:downloadRecovered,downloadCurrent,clear,snapshot};
