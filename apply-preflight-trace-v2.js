@@ -1,4 +1,5 @@
-const KEY='pdf-tools::apply-inline-trace-v1';
+const INLINE_KEY='pdf-tools::apply-inline-trace-v1';
+const LEGACY_KEY='pdf-tools::apply-breadcrumb-v1';
 const MAX=24;
 let history=[];
 function safeScalar(v){return v==null||['string','number','boolean'].includes(typeof v)?v:String(v);}
@@ -7,7 +8,10 @@ function push(stage,extra={}){
     const entry={at:new Date().toISOString(),stage:String(stage||'')};
     for(const [k,v] of Object.entries(extra||{}))if(v==null||typeof v!=='object')entry[k]=safeScalar(v);
     history.push(entry);if(history.length>MAX)history=history.slice(-MAX);
-    localStorage.setItem(KEY,JSON.stringify({...entry,history:history.map((e,i)=>`${i+1}:${e.stage}${e.file?`[${e.file}]`:''}`).join(' > ')}));
+    const data={...entry,history:history.map((e,i)=>`${i+1}:${e.stage}${e.file?`[${e.file}]`:''}`).join(' > ')};
+    const json=JSON.stringify(data);
+    localStorage.setItem(INLINE_KEY,json);
+    localStorage.setItem(LEGACY_KEY,json);
   }catch(_){}
 }
 function flags(fn){
