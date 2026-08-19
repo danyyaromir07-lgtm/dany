@@ -1,2 +1,2 @@
-export async function runFallback(){const mod=await import('./batch-apply-verified-heavy-fallback-v2.js?v=20260819-heavyfallback2');return mod.runFallback()}
+export async function runFallback(){const mod=await import('./batch-apply-verified-heavy-flate-v3.js?v=20260819-heavyflate3');return mod.runFallback()}
 window.__runBatchFallback=runFallback;
