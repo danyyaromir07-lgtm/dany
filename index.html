@@ -14,7 +14,7 @@
       const response=await fetch('./index-shell-v10.html?v=20260819-v10-recovery-shell1',{cache:'no-store'});
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
       let html=await response.text();
-      const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v10.js?v=20260819-density50-recovery2'}})+'</'+'script><script type="module" src="./signature-indirect-annots-fix-v1.js?v=20260819-signature-indirect1"></'+'script>';
+      const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v10.js?v=20260819-density50-recovery2','./signature-tools-v4.js?v=20260819-commentsafe2':'./signature-tools-v5.js?v=20260819-signatureindirect2'}})+'</'+'script>';
       if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
       html=html.replace('</head>',marker+'</head>');
       document.open();
