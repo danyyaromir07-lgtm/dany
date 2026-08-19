@@ -16,23 +16,14 @@ function flags(fn){
   return {prepare:'function',cloudSafe:!!fn.__cloudSafeWrap,exact:!!fn.__exactCloudStreamWrap,tolerance:!!fn.__cloudFailureToleranceWrap,oldProbe:!!fn.__preflightBreadcrumbWrap};
 }
 let lastFn=null;
-function observePrepare(){
-  const fn=window.__prepareBatchAnnotationOperations;
-  if(fn===lastFn)return;
-  lastFn=fn;
-  crumb('prepare function changed',flags(fn));
-}
+function observePrepare(){const fn=window.__prepareBatchAnnotationOperations;if(fn===lastFn)return;lastFn=fn;crumb('prepare function changed',flags(fn));}
 let perfWrapped=null;
 function observePerf(){
   const current=window.__performanceDiagnostic;
   if(typeof current!=='function'||current===perfWrapped||current.__applyTraceV2)return;
   const base=current;
   perfWrapped=function(event){
-    try{
-      if(event?.scope==='apply')crumb(`perf:${String(event.action||'event')}:${String(event.stage||'')}`,{
-        file:event.file||'',removed:event.removed??'',sizeBytes:event.sizeBytes??'',outputBytes:event.outputBytes??'',warning:event.warning||''
-      });
-    }catch(_){}
+    try{if(event?.scope==='apply')crumb(`perf:${String(event.action||'event')}:${String(event.stage||'')}`,{file:event.file||'',removed:event.removed??'',sizeBytes:event.sizeBytes??'',outputBytes:event.outputBytes??'',warning:event.warning||''});}catch(_){}
     return base.apply(this,arguments);
   };
   perfWrapped.__applyTraceV2=true;
@@ -47,8 +38,7 @@ function install(){
     b.addEventListener('click',()=>crumb('click bubble after primary handler yielded',flags(window.__prepareBatchAnnotationOperations)));
   }
   observePrepare();observePerf();
-  let ticks=0;
-  const timer=setInterval(()=>{observePrepare();observePerf();if(++ticks>1200)clearInterval(timer);},25);
+  let ticks=0;const timer=setInterval(()=>{observePrepare();observePerf();if(++ticks>1200)clearInterval(timer);},25);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 window.__applyPreflightBreadcrumbV1={version:2,crumb};
