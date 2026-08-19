@@ -132,4 +132,4 @@ else wire();
 // Rendimiento es un observador independiente: si no carga, nubes/OCR/análisis continúan sin cambios.
 import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(() => {});
 // Persistencia independiente y fail-open: solo conserva el último diagnóstico en localStorage.
-import('./performance-persistence-v1.js?v=20260818-persist2').catch(() => {});
+import('./performance-persistence-v1.js?v=20260819-persist3').catch(() => {});
