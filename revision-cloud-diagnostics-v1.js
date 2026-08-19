@@ -24,17 +24,114 @@ function ensurePanel() {
   const anchor = q('#revisionCloudLocationBox') || q('#ocrDiagnosticsBox') || q('#batchStatus');
   if (anchor?.parentElement) anchor.parentElement.insertBefore(panel, anchor.nextSibling);
   else host.appendChild(panel);
-  q('#cloudDiagCopy')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(q('#cloudDiagLog')?.textContent || ''); } catch (_) {} });
+  q('#cloudDiagCopy')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(q('#cloudDiagLog')?.textContent || ''); } catch (_) {}
+  });
   q('#cloudDiagClear')?.addEventListener('click', () => window.__cloudDiagnosticsReset?.());
   return panel;
 }
-function ensureLocationBox() { let box=q('#revisionCloudLocationBox');if(box)return box;const status=q(STATUS);if(!status?.parentElement)return null;box=document.createElement('div');box.id='revisionCloudLocationBox';box.className='text-warning hidden';box.style.marginTop='10px';status.insertAdjacentElement('afterend',box);return box; }
-function cloudRows() { const batch=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];return batch.flatMap(item=>{if(!item||item.error)return[];const pages=Array.isArray(item.revisionClouds)?item.revisionClouds.filter(p=>Array.isArray(p?.clouds)&&p.clouds.length).map(p=>({page:Number(p.page),count:p.clouds.length})):[];const count=pages.reduce((n,p)=>n+p.count,0);return count?[{name:item.name||'(sin nombre)',count,pages}]:[];}); }
-function renderLocations() { if(!q(CHECKBOX)?.checked)return;const rows=cloudRows(),signature=JSON.stringify(rows);if(signature===lastSignature)return;lastSignature=signature;const box=ensureLocationBox();if(!box)return;if(!rows.length){box.classList.add('hidden');box.textContent='';return;}box.replaceChildren();const total=rows.reduce((n,r)=>n+r.count,0),title=document.createElement('strong');title.textContent=`☁️ Ubicación de ${total} nube${total===1?'':'s'} de revisión`;box.appendChild(title);for(const row of rows){const file=document.createElement('div');file.style.marginTop='7px';file.textContent=`📄 ${row.name}`;box.appendChild(file);for(const p of row.pages){const line=document.createElement('div');line.style.marginLeft='18px';line.textContent=`↳ Página ${p.page}: ${p.count} nube${p.count===1?'':'s'}`;box.appendChild(line);}}box.classList.remove('hidden'); }
-function startWatch(){lastSignature='';const box=ensureLocationBox();if(box){box.classList.add('hidden');box.textContent='';}if(timer)clearInterval(timer);let ticks=0;timer=setInterval(()=>{renderLocations();if(++ticks>=600){clearInterval(timer);timer=null;}},100);}
-function loadDetailed(){import('./revision-cloud-diagnostics-v2.js?v=20260815-strokewidth1').catch(err=>{const summary=q('#cloudDiagSummary'),log=q('#cloudDiagLog'),msg=err?.message||String(err);if(summary)summary.textContent='No se pudo cargar el diagnóstico detallado.';if(log)log.textContent=`cloud.diagnostic.loader.error | ${msg}`;});}
-function wire(){ensurePanel();ensureLocationBox();loadDetailed();q(ANALYZE)?.addEventListener('click',()=>{if(q(CHECKBOX)?.checked)startWatch();});document.addEventListener('change',e=>{if(!e.target?.matches?.(CHECKBOX))return;if(e.target.checked)startWatch();else{const box=ensureLocationBox();if(box){box.classList.add('hidden');box.textContent='';}}});}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
-import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(()=>{});
-import('./performance-persistence-v1.js?v=20260819-persist3').catch(()=>{});
-import('./apply-preflight-trace-v2.js?v=20260819-preflighttrace2').catch(()=>{});
+
+function ensureLocationBox() {
+  let box = q('#revisionCloudLocationBox');
+  if (box) return box;
+  const status = q(STATUS);
+  if (!status?.parentElement) return null;
+  box = document.createElement('div');
+  box.id = 'revisionCloudLocationBox';
+  box.className = 'text-warning hidden';
+  box.style.marginTop = '10px';
+  status.insertAdjacentElement('afterend', box);
+  return box;
+}
+
+function cloudRows() {
+  const batch = Array.isArray(window.__batchAnalysis) ? window.__batchAnalysis : [];
+  return batch.flatMap((item) => {
+    if (!item || item.error) return [];
+    const pages = Array.isArray(item.revisionClouds)
+      ? item.revisionClouds.filter((p) => Array.isArray(p?.clouds) && p.clouds.length).map((p) => ({ page: Number(p.page), count: p.clouds.length }))
+      : [];
+    const count = pages.reduce((n, p) => n + p.count, 0);
+    return count ? [{ name: item.name || '(sin nombre)', count, pages }] : [];
+  });
+}
+
+function renderLocations() {
+  if (!q(CHECKBOX)?.checked) return;
+  const rows = cloudRows();
+  const signature = JSON.stringify(rows);
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+  const box = ensureLocationBox();
+  if (!box) return;
+  if (!rows.length) {
+    box.classList.add('hidden');
+    box.textContent = '';
+    return;
+  }
+  box.replaceChildren();
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  const title = document.createElement('strong');
+  title.textContent = `☁️ Ubicación de ${total} nube${total === 1 ? '' : 's'} de revisión`;
+  box.appendChild(title);
+  for (const row of rows) {
+    const file = document.createElement('div');
+    file.style.marginTop = '7px';
+    file.textContent = `📄 ${row.name}`;
+    box.appendChild(file);
+    for (const p of row.pages) {
+      const line = document.createElement('div');
+      line.style.marginLeft = '18px';
+      line.textContent = `↳ Página ${p.page}: ${p.count} nube${p.count === 1 ? '' : 's'}`;
+      box.appendChild(line);
+    }
+  }
+  box.classList.remove('hidden');
+}
+
+function startWatch() {
+  lastSignature = '';
+  const box = ensureLocationBox();
+  if (box) { box.classList.add('hidden'); box.textContent = ''; }
+  if (timer) clearInterval(timer);
+  let ticks = 0;
+  timer = setInterval(() => {
+    renderLocations();
+    if (++ticks >= 600) { clearInterval(timer); timer = null; }
+  }, 100);
+}
+
+function loadDetailed() {
+  import('./revision-cloud-diagnostics-v2.js?v=20260815-strokewidth1').catch((err) => {
+    const summary = q('#cloudDiagSummary');
+    const log = q('#cloudDiagLog');
+    const msg = err?.message || String(err);
+    if (summary) summary.textContent = 'No se pudo cargar el diagnóstico detallado.';
+    if (log) log.textContent = `cloud.diagnostic.loader.error | ${msg}`;
+  });
+}
+
+function wire() {
+  ensurePanel();
+  ensureLocationBox();
+  loadDetailed();
+  q(ANALYZE)?.addEventListener('click', () => { if (q(CHECKBOX)?.checked) startWatch(); });
+  document.addEventListener('change', (e) => {
+    if (!e.target?.matches?.(CHECKBOX)) return;
+    if (e.target.checked) startWatch();
+    else {
+      const box = ensureLocationBox();
+      if (box) { box.classList.add('hidden'); box.textContent = ''; }
+    }
+  });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+else wire();
+
+// Rendimiento es un observador independiente: si no carga, nubes/OCR/análisis continúan sin cambios.
+import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(() => {});
+// Persistencia independiente y fail-open: solo conserva el último diagnóstico en localStorage.
+import('./performance-persistence-v1.js?v=20260819-persist3').catch(() => {});
+// Trace pasivo v2: no envuelve ni modifica el preflight; solo registra identidad/clic/perf en localStorage.
+import('./apply-preflight-trace-v2.js?v=20260819-preflighttrace2').catch(() => {});
