@@ -129,9 +129,6 @@ function wire() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
 else wire();
 
-// Rendimiento es un observador independiente: si no carga, nubes/OCR/análisis continúan sin cambios.
 import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(() => {});
-// Persistencia independiente y fail-open: solo conserva el último diagnóstico en localStorage.
 import('./performance-persistence-v1.js?v=20260819-persist3').catch(() => {});
-// Trace pasivo v2: no envuelve ni modifica el preflight; solo registra identidad/clic/perf en localStorage.
 import('./apply-preflight-trace-v2.js?v=20260819-preflighttrace2').catch(() => {});
