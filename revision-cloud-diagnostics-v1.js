@@ -13,4 +13,4 @@ function wire(){ensurePanel();ensureLocationBox();loadDetailed();q(ANALYZE)?.add
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
 import('./performance-diagnostics-v1.js?v=20260818-perfdiag2').catch(()=>{});
 import('./performance-persistence-v1.js?v=20260819-persist3').catch(()=>{});
-import('./apply-preflight-trace-v2.js?v=20260819-preflighttrace2').catch(()=>{});
+import('./apply-preflight-trace-v2.js?v=20260819-preflighttrace3').catch(()=>{});
