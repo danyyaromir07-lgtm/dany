@@ -21,7 +21,10 @@ function progressSet(done, total, label = '') {
   if (progressText) progressText.textContent = `${pct}% · ${done} / ${total}${label ? ` · ${label}` : ''}`;
 }
 function perf(action, stage, extra = {}) { try { window.__performanceDiagnostic?.({ scope: 'apply', action, stage, ...extra }); } catch (_) {} }
-function crumb(stage, extra = {}) { try { localStorage.setItem('pdf_tools_heavy_apply_breadcrumb_v2', JSON.stringify({ at: new Date().toISOString(), stage, ...extra })); } catch (_) {} }
+function crumb(stage, extra = {}) {
+  try { window.__applyPreflightTraceV2?.push?.(stage, extra); } catch (_) {}
+  try { localStorage.setItem('pdf_tools_heavy_apply_breadcrumb_v2', JSON.stringify({ at: new Date().toISOString(), stage, ...extra })); } catch (_) {}
+}
 
 function asBytes(data) {
   if (data instanceof Uint8Array) return new Uint8Array(data);
