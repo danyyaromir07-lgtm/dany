@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF Tools · prueba segura nube A31</title>
+</head>
+<body>
+  <p id="boot" style="font-family:system-ui;padding:20px">Cargando prueba aislada segura de nubes…</p>
+  <script>
+  (async()=>{
+    const boot=document.getElementById('boot');
+    try{
+      const response=await fetch('./index-shell-v10.html?v=20260819-v10-recovery-shell1',{cache:'no-store'});
+      if(!response.ok)throw new Error('No se pudo cargar la aplicación base: '+response.status);
+      let html=await response.text();
+      const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v12.js?v=20260819-incrementalguard1'}})+'</'+'script>';
+      const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
+      const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
+      if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
+      if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado.');
+      html=html.replace('</head>',marker+'</head>');
+      html=html.replace(signatureOld,signatureNew);
+      document.open();
+      document.write(html);
+      document.close();
+    }catch(error){
+      boot.textContent='ERROR AL CARGAR PRUEBA SEGURA: '+(error?.message||String(error));
+    }
+  })();
+  </script>
+</body>
+</html>
