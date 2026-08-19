@@ -5,6 +5,13 @@ function crumb(stage,extra={}){
 }
 crumb('loader fallback evaluado');
 export async function runFallback(){
+  if(document.querySelector('#batchRemoveSignatures')?.checked===true){
+    crumb('firma final · importando barrera');
+    const sig=await import('./signature-final-cleanup-v1.js?v=20260819-finalbarrier1');
+    if(typeof sig.cleanBatchSignaturesBeforeRunner!=='function')throw new Error('No se pudo cargar la barrera final de firmas.');
+    const result=await sig.cleanBatchSignaturesBeforeRunner();
+    crumb('firma final · verificada antes de runner',{files:result?.files??0,removed:result?.removed??0});
+  }
   crumb('loader fallback · importando runner');
   const mod=await import('./batch-apply-verified-heavy-flate-v3.js?v=20260819-heavyflate3-trace2');
   crumb('loader fallback · runner cargado');
