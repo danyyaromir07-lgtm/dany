@@ -2,12 +2,12 @@ import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js'
 
 const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[‐‑‒–—−]/g,'-').replace(/\s+/g,' ').trim().toLowerCase();
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
 const FLEX_SEP=/[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000‐‑‒–—−-]/u;
-const WS=new Set([0,9,10,12,13,32]);
-const DEL=new Set([40,41,60,62,91,93,123,125,47,37]);
+const WS=new Set([0,9,10,12,13,32]),DEL=new Set([40,41,60,62,91,93,123,125,47,37]);
 const CP1252_DECODE=new Map([[0x80,'€'],[0x82,'‚'],[0x83,'ƒ'],[0x84,'„'],[0x85,'…'],[0x86,'†'],[0x87,'‡'],[0x88,'ˆ'],[0x89,'‰'],[0x8A,'Š'],[0x8B,'‹'],[0x8C,'Œ'],[0x8E,'Ž'],[0x91,'‘'],[0x92,'’'],[0x93,'“'],[0x94,'”'],[0x95,'•'],[0x96,'–'],[0x97,'—'],[0x98,'˜'],[0x99,'™'],[0x9A,'š'],[0x9B,'›'],[0x9C,'œ'],[0x9E,'ž'],[0x9F,'Ÿ']]);
 const CP1252_ENCODE=new Map([...CP1252_DECODE].map(([b,ch])=>[ch,b]));
-const ws=x=>WS.has(x),del=x=>ws(x)||DEL.has(x),U=b=>b?.asUint8Array?.()||b,resolve=o=>{try{return o?.resolve?.()||o}catch(_){return o}};
+const U=b=>b?.asUint8Array?.()||b,ws=x=>WS.has(x),del=x=>ws(x)||DEL.has(x),resolve=o=>{try{return o?.resolve?.()||o}catch(_){return o}};
 function streamRef(o){try{if(o?.isStream?.())return o;const r=resolve(o);return r?.isStream?.()?r:o}catch(_){return o}}
 function ascii(bytes){const u=U(bytes);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode(...u.subarray(i,Math.min(u.length,i+0x8000)));return s}
 function wordEq(d,s,e,text){if(e-s!==text.length)return false;for(let i=0;i<text.length;i++)if(d[s+i]!==text.charCodeAt(i))return false;return true}
@@ -16,10 +16,9 @@ function scanHex(d,i,e){i++;while(i<e&&d[i]!==62)i++;return i<e?i+1:i}
 function scanArray(d,i,e){const start=i,items=[];let depth=1;i++;while(i<e&&depth){while(i<e&&ws(d[i]))i++;if(i>=e)break;if(d[i]===37){while(i<e&&d[i]!==10&&d[i]!==13)i++;continue}const st=i,b=d[i];if(b===40){i=scanLiteral(d,i,e);if(depth===1)items.push({type:'string',kind:'literal',start:st,end:i});continue}if(b===60&&d[i+1]!==60){i=scanHex(d,i,e);if(depth===1)items.push({type:'string',kind:'hex',start:st,end:i});continue}if(b===91){depth++;i++;continue}if(b===93){depth--;i++;continue}if(b===47){i++;while(i<e&&!del(d[i]))i++;continue}if(DEL.has(b)){i+=((b===60&&d[i+1]===60)||(b===62&&d[i+1]===62))?2:1;continue}i++;while(i<e&&!del(d[i]))i++}return{type:'array',start,end:i,items}}
 function hexBytes(raw){const s=(typeof raw==='string'?raw:ascii(raw)).replace(/\s+/g,''),h=s.length%2?s+'0':s,o=new Uint8Array(h.length/2);for(let i=0;i<o.length;i++)o[i]=parseInt(h.slice(i*2,i*2+2),16);return o}
 function literalBytes(d,t){const raw=d.subarray(t.start,t.end),out=[];for(let i=1;i<raw.length-1;i++){let x=raw[i];if(x!==92){out.push(x);continue}x=raw[++i];if(x===110)out.push(10);else if(x===114)out.push(13);else if(x===116)out.push(9);else if(x===98)out.push(8);else if(x===102)out.push(12);else if(x===40||x===41||x===92)out.push(x);else if(x>=48&&x<=55){let v=x-48;for(let q=0;q<2&&i+1<raw.length-1&&raw[i+1]>=48&&raw[i+1]<=55;q++){i++;v=v*8+raw[i]-48}out.push(v)}else if(x===10){}else if(x===13){if(raw[i+1]===10)i++}else out.push(x)}return new Uint8Array(out)}
-function decodeWinAnsiByte(b){return CP1252_DECODE.has(b)?CP1252_DECODE.get(b):String.fromCharCode(b)}
-function decodeSimpleToken(d,t){const bytes=t.kind==='hex'?hexBytes(d.subarray(t.start+1,t.end-1)):literalBytes(d,t);let s='';for(const b of bytes)s+=decodeWinAnsiByte(b);return s}
-function encodeWinAnsi(text){const out=[];for(const ch of String(text)){const cp=ch.codePointAt(0);if(CP1252_ENCODE.has(ch)){out.push(CP1252_ENCODE.get(ch));continue}if(cp>=0&&cp<=0x7f){out.push(cp);continue}if(cp>=0xa0&&cp<=0xff){out.push(cp);continue}throw new Error(`El carácter «${ch}» no es representable en WinAnsiEncoding.`)}return out}
-function encodeLiteral(text){const bytes=encodeWinAnsi(text),out=[40];for(const b of bytes){if(b===40||b===41||b===92)out.push(92);out.push(b)}out.push(41);return new Uint8Array(out)}
+function decodeSimpleToken(d,t){const bytes=t.kind==='hex'?hexBytes(d.subarray(t.start+1,t.end-1)):literalBytes(d,t);let s='';for(const b of bytes)s+=CP1252_DECODE.get(b)||String.fromCharCode(b);return s}
+function encodeWinAnsi(text){const out=[];for(const ch of String(text)){const cp=ch.codePointAt(0);if(CP1252_ENCODE.has(ch)){out.push(CP1252_ENCODE.get(ch));continue}if(cp<=0x7f||(cp>=0xa0&&cp<=0xff)){out.push(cp);continue}throw new Error(`El carácter «${ch}» no es representable en WinAnsiEncoding.`)}return out}
+function encodeLiteral(text){const out=[40];for(const b of encodeWinAnsi(text)){if(b===40||b===41||b===92)out.push(92);out.push(b)}out.push(41);return new Uint8Array(out)}
 function flexibleTextKey(s){let out='';for(const ch of String(s||''))if(!FLEX_SEP.test(ch))out+=ch;return out}
 function keyWithMap(s){let key='',starts=[],ends=[];for(let i=0;i<s.length;){const cp=s.codePointAt(i),ch=String.fromCodePoint(cp),j=i+ch.length;if(!FLEX_SEP.test(ch)){key+=ch;starts.push(i);ends.push(j)}i=j}return{key,starts,ends}}
 function findMatches(full,needle){const f=keyWithMap(full),target=flexibleTextKey(needle),out=[];if(!target||!f.key)return out;let p=0;while((p=f.key.indexOf(target,p))>=0){out.push({start:f.starts[p],end:f.ends[p+target.length-1]});p+=Math.max(1,target.length)}return out}
@@ -29,17 +28,86 @@ function editSimpleStream(bytes,needle,repl,page,maxHits){const{d,segs}=collectS
 function contentRefs(page){try{const co=page.getObject()?.get?.('Contents');if(!co)return[];return co?.isArray?.()?Array.from({length:Number(co.length||0)},(_,i)=>co.get(i)):[co]}catch(_){return[]}}
 function editSimpleWinAnsi(doc,target,replacement,maxHits){let count=0;for(let pi=0;pi<doc.countPages()&&count<maxHits;pi++){const page=doc.loadPage(pi);for(const ref of contentRefs(page)){if(count>=maxHits)break;const st=streamRef(ref);if(!st?.isStream?.())continue;const z=editSimpleStream(st.readStream(),target,replacement,page,maxHits-count);if(z.count){st.writeStream(z.bytes);count+=z.count}}}return count}
 
-function quadPoints(q){const pts=[q?.ul,q?.ur,q?.ll,q?.lr].filter(p=>p&&Number.isFinite(Number(p.x))&&Number.isFinite(Number(p.y)));return pts.length?pts.map(p=>[Number(p.x),Number(p.y)]):[]}
-function hitGeometry(hit){const quads=Array.isArray(hit)?hit.flatMap(quadPoints):[];if(!quads.length)return null;const xs=quads.map(p=>p[0]),ys=quads.map(p=>p[1]);const bbox=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];let dir=null;const q=Array.isArray(hit)&&hit[0];if(q?.ul&&q?.ur){const dx=Number(q.ur.x)-Number(q.ul.x),dy=Number(q.ur.y)-Number(q.ul.y);if(Math.hypot(dx,dy)>0.01)dir=[dx,dy]}return{bbox,dir}}
-function nearestRightAngle(dir){if(!dir)return 0;const angle=Math.atan2(-dir[1],dir[0])*180/Math.PI;return((Math.round(angle/90)*90%360)+360)%360}
+function quadPoints(q){
+  const pts=[q?.ul,q?.ur,q?.ll,q?.lr].filter(p=>p&&Number.isFinite(Number(p.x))&&Number.isFinite(Number(p.y)));
+  return pts.length?pts.map(p=>[Number(p.x),Number(p.y)]):[];
+}
+function hitGeometry(hit){
+  const quads=Array.isArray(hit)?hit.flatMap(quadPoints):[];
+  if(!quads.length)return null;
+  const xs=quads.map(p=>p[0]),ys=quads.map(p=>p[1]);
+  const bbox=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+  let dir=null;
+  const q=Array.isArray(hit)&&hit[0];
+  if(q?.ul&&q?.ur){const dx=Number(q.ur.x)-Number(q.ul.x),dy=Number(q.ur.y)-Number(q.ul.y);if(Math.hypot(dx,dy)>0.01)dir=[dx,dy];}
+  return {bbox,dir};
+}
+function nearestRightAngle(dir){
+  if(!dir)return 0;
+  const angle=Math.atan2(-dir[1],dir[0])*180/Math.PI;
+  const snapped=Math.round(angle/90)*90;
+  return ((snapped%360)+360)%360;
+}
 function fontAdvance(font,text){let u=0;for(const ch of String(text||'')){const gid=font.encodeCharacter(ch);u+=font.advanceGlyph(gid,0)}return u}
-function fitMetrics(font,text,raw,angle){const w=Math.max(1,raw[2]-raw[0]),h=Math.max(1,raw[3]-raw[1]),major=(angle===90||angle===270)?h:w,minor=(angle===90||angle===270)?w:h,advance=Math.max(0.01,fontAdvance(font,text));let size=Math.max(3,Math.min(minor*.90,major*.92/advance));if(!Number.isFinite(size))size=Math.max(3,minor*.9);return{size:clamp(size,3,minor*1.05)}}
-function addFontResource(doc,page,name='FTextFallback'){const obj=page.getObject();let res=obj.get('Resources');if(!res||!res.isDictionary?.()){res=doc.newDictionary();obj.put('Resources',res)}let fonts=res.get('Font');if(!fonts||!fonts.isDictionary?.()){fonts=doc.newDictionary();res.put('Font',fonts)}const existing=fonts.get(name);if(!existing||existing.isNull?.())fonts.put(name,doc.addSimpleFont(new mupdf.Font('Helvetica'),'Latin'))}
+function fitMetrics(font,text,raw,angle){
+  const w=Math.max(1,raw[2]-raw[0]),h=Math.max(1,raw[3]-raw[1]);
+  const major=(angle===90||angle===270)?h:w,minor=(angle===90||angle===270)?w:h;
+  const advance=Math.max(0.01,fontAdvance(font,text));
+  let size=Math.max(3,Math.min(minor*0.90,major*0.92/advance));
+  if(!Number.isFinite(size))size=Math.max(3,minor*0.9);
+  return {size:clamp(size,3,minor*1.05)};
+}
+function addFontResource(doc,page,name='FTextFallback'){
+  const obj=page.getObject();
+  let res=obj.get('Resources');
+  if(!res||!res.isDictionary?.()){res=doc.newDictionary();obj.put('Resources',res)}
+  let fonts=res.get('Font');
+  if(!fonts||!fonts.isDictionary?.()){fonts=doc.newDictionary();res.put('Font',fonts)}
+  const existing=fonts.get(name);
+  if(!existing||existing.isNull?.())fonts.put(name,doc.addSimpleFont(new mupdf.Font('Helvetica'),'Latin'));
+}
 function asciiBytes(s){return new TextEncoder().encode(s)}
 function pdfEscapeBytes(text){const out=[];for(const ch of String(text||'')){const c=ch.codePointAt(0);let b=c===0x20AC?0x80:c>=0xA0&&c<=0xFF?c:c>=0&&c<=0x7F?c:0x3F;if(b===0x28||b===0x29||b===0x5C)out.push(0x5C);out.push(b)}return new Uint8Array(out)}
-function makeContent(doc,page,raw,text,angle,size){const H=page.getBounds()[3],rad=angle*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad);let x=raw[0],y=H-raw[3];if(angle===180||angle===270){x=raw[2];y=H-raw[1]}return new Uint8Array([...asciiBytes(`q BT /FTextFallback ${size.toFixed(3)} Tf ${cs.toFixed(6)} ${sn.toFixed(6)} ${(-sn).toFixed(6)} ${cs.toFixed(6)} ${x.toFixed(3)} ${y.toFixed(3)} Tm (`),...pdfEscapeBytes(text),...asciiBytes(') Tj ET Q')])}
-function appendContent(doc,page,content){const obj=page.getObject(),stream=doc.addStream(content,{}),contents=obj.get('Contents');if(!contents||contents.isNull?.()){obj.put('Contents',stream);return}if(contents.isArray?.()){contents.push(stream);return}const arr=doc.newArray();arr.push(contents);arr.push(stream);obj.put('Contents',arr)}
+function makeContent(doc,page,raw,text,angle,size){
+  const H=page.getBounds()[3];
+  const rad=angle*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad);
+  let x=raw[0],y=H-raw[3];
+  if(angle===90){x=raw[0];y=H-raw[3]}
+  else if(angle===180){x=raw[2];y=H-raw[1]}
+  else if(angle===270){x=raw[2];y=H-raw[1]}
+  return asciiBytes(`q BT /FTextFallback ${size.toFixed(3)} Tf ${cs.toFixed(6)} ${sn.toFixed(6)} ${(-sn).toFixed(6)} ${cs.toFixed(6)} ${x.toFixed(3)} ${y.toFixed(3)} Tm (`).constructor===Uint8Array
+    ? new Uint8Array([...asciiBytes(`q BT /FTextFallback ${size.toFixed(3)} Tf ${cs.toFixed(6)} ${sn.toFixed(6)} ${(-sn).toFixed(6)} ${cs.toFixed(6)} ${x.toFixed(3)} ${y.toFixed(3)} Tm (`),...pdfEscapeBytes(text),...asciiBytes(') Tj ET Q')])
+    : new Uint8Array();
+}
+function appendContent(doc,page,content){
+  const obj=page.getObject(),stream=doc.addStream(content,{}),contents=obj.get('Contents');
+  if(!contents||contents.isNull?.()){obj.put('Contents',stream);return}
+  if(contents.isArray?.()){contents.push(stream);return}
+  const arr=doc.newArray();arr.push(contents);arr.push(stream);obj.put('Contents',arr);
+}
 function applyRedactions(page,boxes){for(const box of boxes){const red=page.createAnnotation('Redact');red.setRect(box);try{red.setBorderWidth(0)}catch(_){}red.update()}page.applyRedactions(false,0);page.update()}
-function geometricFallback(doc,target,replacement,maxHits){let count=0;const wanted=String(target||'').trim();if(!wanted)return 0;for(let pi=0;pi<doc.countPages()&&count<maxHits;pi++){const page=doc.loadPage(pi);let hits=[];try{hits=page.search(wanted,Math.min(50,maxHits-count))||[]}catch(_){hits=[]}if(!hits.length)continue;const items=[];for(const hit of hits){const g=hitGeometry(hit);if(!g)continue;let angle=nearestRightAngle(g.dir);const raw=g.bbox,w=raw[2]-raw[0],h=raw[3]-raw[1];if(Math.max(w,h)>0&&Math.min(w,h)/Math.max(w,h)<.45&&!g.dir)angle=h>w?90:0;const font=new mupdf.Font('Helvetica'),{size}=fitMetrics(font,replacement,raw,angle);items.push({page,raw,text:replacement,angle,size})}if(!items.length)continue;applyRedactions(page,items.map(x=>x.raw));addFontResource(doc,page);for(const item of items){appendContent(doc,item.page,makeContent(doc,item.page,item.raw,item.text,item.angle,item.size));count++}}return count}
 
-export function editTextByPageSearch(doc,target,replacement,maxHits=50){let count=0;const wanted=String(target||'').trim();if(!wanted||maxHits<=0)return 0;try{count+=editSimpleWinAnsi(doc,wanted,replacement,maxHits)}catch(error){console.warn('[text-winansi-direct] edición directa omitida:',error?.message||String(error))}if(count>=maxHits)return count;count+=geometricFallback(doc,wanted,replacement,maxHits-count);return count}
+export function editTextByPageSearch(doc,target,replacement,maxHits=50){
+  let count=0;const wanted=String(target||'').trim();if(!wanted)return 0;
+  try{count+=editSimpleWinAnsi(doc,wanted,replacement,maxHits)}catch(error){console.warn('[text-winansi-direct] edición directa omitida:',error?.message||String(error))}
+  if(count>=maxHits)return count;
+  for(let pi=0;pi<doc.countPages()&&count<maxHits;pi++){
+    const page=doc.loadPage(pi);let hits=[];
+    try{hits=page.search(wanted,Math.min(50,maxHits-count))||[]}catch(_){hits=[]}
+    if(!hits.length)continue;
+    const items=[];
+    for(const hit of hits){
+      const g=hitGeometry(hit);if(!g)continue;
+      let angle=nearestRightAngle(g.dir);
+      const raw=g.bbox;const w=raw[2]-raw[0],h=raw[3]-raw[1];
+      if(Math.max(w,h)>0 && Math.min(w,h)/Math.max(w,h)<0.45 && !g.dir){angle=h>w?90:0}
+      const font=new mupdf.Font('Helvetica');const {size}=fitMetrics(font,replacement,raw,angle);
+      items.push({page,raw,text:replacement,angle,size});
+    }
+    if(!items.length)continue;
+    applyRedactions(page,items.map(x=>x.raw));
+    addFontResource(doc,page);
+    for(const item of items){appendContent(doc,item.page,makeContent(doc,item.page,item.raw,item.text,item.angle,item.size));count++}
+  }
+  return count;
+}
