@@ -1,4 +1,4 @@
-import './revision-cloud-vector-fallback-v1.js?v=20260815-vectorcloud-uniondensity1';
+import './revision-cloud-vector-fallback-v3.js?v=20260820-sync1';
 import './revision-cloud-multicloud-v1.js?v=20260815-multicloud1';
 import { removeDetectedRevisionCloudsByExactFamily } from './revision-cloud-manual-force-v2.js?v=20260818-curvedgray2';
 
