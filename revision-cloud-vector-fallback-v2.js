@@ -4,7 +4,7 @@ const SUMMARY='#batchSummary';
 const EPS=1e-6;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let mupdfPromise=null;
-const VERSION='union-density-2+grid-perf1';
+const VERSION='union-density-2+sweep-perf1';
 const now=()=>performance?.now?.()??Date.now();
 
 function q(s){return document.querySelector(s);}
@@ -42,19 +42,20 @@ function collectFamilies(mupdf,page){
 }
 
 /* Exact replacement for the old O(n²) flood scan.
-   Two strokes are unioned iff rectGap <= gapLimit; grid cells only reduce candidate pairs. */
+   Sweep-line only removes impossible x-separated pairs; the final edge test is still rectGap <= gapLimit. */
 function connectedComponents(strokes,gapLimit){
   const n=strokes.length;if(!n)return[];
-  const parent=Int32Array.from({length:n},(_,i)=>i),rank=new Uint8Array(n);
+  const parent=Int32Array.from({length:n},(_,i)=>i),rank=new Uint8Array(n),order=Array.from({length:n},(_,i)=>i).sort((a,b)=>strokes[a].bbox[0]-strokes[b].bbox[0]);
   const find=x=>{let r=x;while(parent[r]!==r)r=parent[r];while(parent[x]!==x){const p=parent[x];parent[x]=r;x=p;}return r;};
   const union=(a,b)=>{let ra=find(a),rb=find(b);if(ra===rb)return;if(rank[ra]<rank[rb]){const t=ra;ra=rb;rb=t;}parent[rb]=ra;if(rank[ra]===rank[rb])rank[ra]++;};
-  const cell=Math.max(16,Number(gapLimit||0)*2),grid=new Map();
-  const cellKey=(x,y)=>`${x},${y}`;
-  for(let i=0;i<n;i++){
-    const r=strokes[i].bbox,x0=Math.floor((r[0]-gapLimit)/cell),x1=Math.floor((r[2]+gapLimit)/cell),y0=Math.floor((r[1]-gapLimit)/cell),y1=Math.floor((r[3]+gapLimit)/cell),candidates=new Set();
-    for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const a=grid.get(cellKey(x,y));if(a)for(const j of a)candidates.add(j);}
-    for(const j of candidates)if(rectGap(r,strokes[j].bbox)<=gapLimit)union(i,j);
-    for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const k=cellKey(x,y),a=grid.get(k);if(a)a.push(i);else grid.set(k,[i]);}
+  let active=[];
+  for(const i of order){
+    const r=strokes[i].bbox,minX=r[0]-gapLimit,next=[];
+    for(const j of active){
+      const b=strokes[j].bbox;if(b[2]<minX)continue;next.push(j);
+      const dy=Math.max(0,Math.max(r[1],b[1])-Math.min(r[3],b[3]));if(dy<=gapLimit&&rectGap(r,b)<=gapLimit)union(i,j);
+    }
+    next.push(i);active=next;
   }
   const map=new Map();for(let i=0;i<n;i++){const r=find(i);if(!map.has(r))map.set(r,[]);map.get(r).push(strokes[i]);}
   return [...map.values()].sort((a,b)=>b.length-a.length);
@@ -93,14 +94,14 @@ export async function detectVectorCloudFallback(data,context={}){
       const pageMs=Math.round((now()-pt)*10)/10;debugPages.push({page:i+1,groups:groups.size,candidates:candidates.length,families,ms:pageMs});
       if(context.file){
         diag({stage:'cloud.fallback.real.page',detail:`detector real · familias=${groups.size} · candidatas=${candidates.length}`,file:context.file,page:i+1,candidates:candidates.length});
-        diag({stage:'cloud.perf.vector.page',detail:'vector-fallback-perf-v2',file:context.file,page:i+1,reason:`${pageMs} ms · familias=${groups.size}`});
+        diag({stage:'cloud.perf.vector.page',detail:'vector-fallback-perf-v2-sweep',file:context.file,page:i+1,reason:`${pageMs} ms · familias=${groups.size}`});
         for(const f of families.filter(x=>x.strokes>=20&&x.strokes<=1200))diag({stage:f.accepted?'cloud.fallback.real.accept':'cloud.fallback.real.reject',detail:f.accepted?'familia aceptada por detector real':'familia rechazada por detector real',file:context.file,page:i+1,strokes:f.strokes,rgb:f.rgb,lineWidth:f.lineWidth,bbox:f.bbox,reason:f.reason,components:f.components,main:f.main,fraction:f.fraction,density:f.density,rawDensity:f.rawDensity,aspect:f.aspect,outside:f.outside});
       }
       if(candidates.length===1){const c=candidates[0];out.push({page:i+1,clouds:[{bbox:c.bbox,source:'vector-family',exactRGB:c.rgb,exactLineWidth:c.lineWidth,vectorFamilyKey:c.key,vectorStrokeCount:c.strokeCount}]});}
     }
   }finally{doc.destroy();}
   out.debugPages=debugPages;
-  if(context.file)diag({stage:'cloud.perf.vector.file',detail:'vector-fallback-perf-v2',file:context.file,reason:`${Math.round((now()-t0)*10)/10} ms`});
+  if(context.file)diag({stage:'cloud.perf.vector.file',detail:'vector-fallback-perf-v2-sweep',file:context.file,reason:`${Math.round((now()-t0)*10)/10} ms`});
   return out;
 }
 
@@ -136,7 +137,7 @@ async function runFallbackAfterRaster(){
   finally{
     const elapsed=Math.round((now()-started)*10)/10;
     window.__revisionCloudVectorFallbackDebug={added,version:VERSION,debug,batch:batch.map(x=>({name:x?.name,count:x?.revisionCloudCount||0,vector:!!x?.revisionCloudVectorFallback,error:x?.revisionCloudVectorError||null})),status,elapsedMs:elapsed,error};
-    diag({stage:'cloud.fallback.done',detail:'vector-fallback-perf-v2',reason:`estado=${status} · ${elapsed} ms · añadidas=${added}`});
+    diag({stage:'cloud.fallback.done',detail:'vector-fallback-perf-v2-sweep',reason:`estado=${status} · ${elapsed} ms · añadidas=${added}`});
   }
 }
 
