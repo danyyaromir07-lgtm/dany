@@ -25,12 +25,16 @@
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
       const cloudIntegrationOld='revision-cloud-stream-integration-v1.js?v=20260818-curvedgray2';
       const cloudIntegrationNew='revision-cloud-stream-integration-v5.js?v=20260820-dynamicvector3';
+      const cloudDiagOld='<script type="module" src="revision-cloud-diagnostics-v1.js?v=20260819-preflightprobe1"></'+'script>';
+      const cloudDiagWithVector=cloudDiagOld+'<script type="module" src="revision-cloud-vector-fallback-v3.js?v=20260820-sync1"></'+'script>';
       if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
       if(!html.includes(cloudIntegrationOld))throw new Error('No encontré el loader de nubes esperado en la aplicación base.');
+      if(!html.includes(cloudDiagOld))throw new Error('No encontré el diagnóstico de nubes esperado en la aplicación base.');
       html=html.replace('</head>',marker+'</head>');
       html=html.replace(signatureOld,signatureNew);
       html=html.replace(cloudIntegrationOld,cloudIntegrationNew);
+      html=html.replace(cloudDiagOld,cloudDiagWithVector);
       document.open();
       document.write(html);
       document.close();
