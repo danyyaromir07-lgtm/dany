@@ -48,9 +48,12 @@ async function run(before){
   window.__revisionCloudRedCycleDebug={version:1,refined,skipped,errors,baseFinished,batch:batch.map(x=>({name:x?.name,count:Number(x?.revisionCloudCount||0),redCycle:!!x?.revisionCloudRedCycleRefined,error:x?.revisionCloudRedCycleError||null}))};
   if(refined)refresh(batch);
 }
+async function launch(before){
+  try{await run(before);}finally{window.__revisionCloudRedCycleVersion=Number(window.__revisionCloudRedCycleVersion||0)+1;}
+}
 function wire(){
   const button=q('#batchAnalyze');if(!button)return;
-  button.addEventListener('click',()=>{const before=window.__revisionCloudMultiDebug;run(before).catch(e=>console.error('[cloud-redcurve]',e));});
+  button.addEventListener('click',()=>{const before=window.__revisionCloudMultiDebug;launch(before).catch(e=>console.error('[cloud-redcurve]',e));});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
 if(typeof window!=='undefined')window.__revisionCloudMultiV2={version:'2+red-curved-cycle1'};
