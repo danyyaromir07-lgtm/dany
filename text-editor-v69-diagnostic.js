@@ -33,9 +33,15 @@ function log(line){
 }
 export function editDoc(doc,find,replace){
   const p=phase(),beforeOld=searchCount(doc,find),beforeNew=searchCount(doc,replace);
-  const count=Number(baseEditDoc(doc,find,replace)||0);
-  const afterOld=searchCount(doc,find),afterNew=searchCount(doc,replace);
-  log(`${p} DIRECT «${find}» → «${replace}» | count=${count} | old ${beforeOld}→${afterOld} | new ${beforeNew}→${afterNew} | v68=${window.__textEditorV68?.version||'?'}`);
-  return count;
+  try{
+    const count=Number(baseEditDoc(doc,find,replace)||0);
+    const afterOld=searchCount(doc,find),afterNew=searchCount(doc,replace);
+    log(`${p} DIRECT «${find}» → «${replace}» | count=${count} | old ${beforeOld}→${afterOld} | new ${beforeNew}→${afterNew} | v68=${window.__textEditorV68?.version||'?'}`);
+    return count;
+  }catch(error){
+    const afterOld=searchCount(doc,find),afterNew=searchCount(doc,replace);
+    log(`${p} DIRECT ERROR «${find}» → «${replace}» | error=${error?.message||String(error)} | old ${beforeOld}→${afterOld} | new ${beforeNew}→${afterNew} | v68=${window.__textEditorV68?.version||'?'}`);
+    throw error;
+  }
 }
-if(typeof window!=='undefined')window.__textEditorV69={version:'69+route-diagnostic1'};
+if(typeof window!=='undefined')window.__textEditorV69={version:'69+route-diagnostic2'};
