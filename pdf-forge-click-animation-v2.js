@@ -1,75 +1,97 @@
-// PDF Forge image-sequence animation. Visual only; PDF behavior is untouched.
+// PDF Forge spark-sequence overlay. Visual only; PDF behavior is untouched.
 (function(){
-  const BOUND='data-pdf-forge-animation-v4';
-  const ANIM='./assets/pdf-forge-spark-sequence.gif?v=20260822-spark1';
-  const CYCLE_MS=1100;
+  const BOUND='data-pdf-forge-animation-v5';
+  const ANIM='./assets/pdf-forge-spark-sequence.gif?v=20260822-spark2';
+  const CYCLE_MS=1150;
 
   function bind(){
     const zone=document.querySelector('#analysisTool .batch-dropzone');
     const brand=zone?.querySelector('.pdf-forge-upload-brand');
-    const img=brand?.querySelector('img');
-    if(!zone||!brand||!img||zone.hasAttribute(BOUND)) return false;
+    const base=brand?.querySelector('img');
+    if(!zone||!brand||!base||zone.hasAttribute(BOUND)) return false;
     zone.setAttribute(BOUND,'1');
 
-    const idle=img.currentSrc||img.src;
-    const pre=new Image();
-    pre.src=ANIM;
+    brand.style.position='relative';
+
+    // Keep the original icon permanently in place. The animation is a second image
+    // layered on top, so a failed/reloading animation can never make the icon vanish.
+    const overlay=document.createElement('img');
+    overlay.alt='';
+    overlay.setAttribute('aria-hidden','true');
+    Object.assign(overlay.style,{
+      position:'absolute',
+      inset:'0',
+      width:'100%',
+      height:'100%',
+      objectFit:'cover',
+      borderRadius:'inherit',
+      opacity:'0',
+      pointerEvents:'none',
+      zIndex:'2'
+    });
+    brand.appendChild(overlay);
+
+    // Preload the animation once. The click version gets a cache-buster so the GIF
+    // always restarts from frame one.
+    const preload=new Image();
+    preload.src=ANIM;
+
     let timer=null;
     let depth=0;
     let dragging=false;
 
-    function stopTimer(){
+    function clearTimer(){
       if(timer){clearTimeout(timer);timer=null;}
     }
 
-    function restore(){
-      stopTimer();
-      img.src=idle;
+    function hideOverlay(){
+      clearTimer();
+      overlay.style.opacity='0';
+      overlay.removeAttribute('src');
     }
 
-    function restartAnimation(keepRunning){
-      stopTimer();
-      img.removeAttribute('src');
-      void img.offsetWidth;
-      requestAnimationFrame(()=>{
-        img.src=ANIM+'&r='+Date.now();
-        if(!keepRunning){
-          timer=setTimeout(()=>{if(!dragging) img.src=idle;},CYCLE_MS);
-        }
-      });
+    function playOnce(){
+      clearTimer();
+      overlay.style.opacity='0';
+      overlay.src=ANIM+'&r='+Date.now();
+      requestAnimationFrame(()=>{overlay.style.opacity='1';});
+      timer=setTimeout(()=>{
+        if(!dragging) hideOverlay();
+      },CYCLE_MS);
+    }
+
+    function startDrag(){
+      clearTimer();
+      dragging=true;
+      overlay.src=ANIM+'&drag='+Date.now();
+      overlay.style.opacity='1';
     }
 
     zone.addEventListener('click',()=>{
-      if(!dragging) restartAnimation(false);
+      if(!dragging) playOnce();
     });
 
     zone.addEventListener('dragenter',()=>{
       depth++;
-      if(depth===1){
-        dragging=true;
-        restartAnimation(true);
-      }
+      if(depth===1) startDrag();
     });
 
     zone.addEventListener('dragover',()=>{
-      if(!dragging){
-        dragging=true;
-        restartAnimation(true);
-      }
+      if(!dragging) startDrag();
     });
 
     zone.addEventListener('dragleave',()=>{
       depth=Math.max(0,depth-1);
       if(depth===0){
         dragging=false;
-        restore();
+        hideOverlay();
       }
     });
 
     zone.addEventListener('drop',()=>{
       depth=0;
       dragging=false;
-      restartAnimation(false);
+      playOnce();
     });
 
     return true;
