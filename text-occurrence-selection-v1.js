@@ -1,122 +1,20 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 import { detectSelectableWinAnsi } from './text-winansi-selective-v1.js?v=20260821-selective1';
+import { detectSelectableToUnicode } from './text-tounicode-selective-v1.js?v=20260821-tounicode1';
 
-const q=s=>document.querySelector(s);
-const OPTION='#batchSelectTextOccurrences';
+const q=s=>document.querySelector(s),OPTION='#batchSelectTextOccurrences';
 let hydrating=false;
-
-function option(){
-  let box=q(OPTION);
-  if(box)return box;
-  const anchor=q('#batchEnableOCR')?.closest('.option-box')||q('#batchRemoveComments')?.closest('.option-box');
-  if(!anchor)return null;
-  const host=document.createElement('div');
-  host.className='option-box';
-  host.style.marginTop='10px';
-  host.innerHTML='<label><input id="batchSelectTextOccurrences" type="checkbox"><span>☑ Elegir coincidencias de texto PDF</span></label><small>Opcional. Desactivado conserva exactamente el modo estable “cambiar todas”. Al activarlo podrás marcar cada coincidencia de texto PDF por separado.</small>';
-  anchor.parentElement?.insertBefore(host,anchor.nextElementSibling);
-  box=host.querySelector(OPTION);
-  box?.addEventListener('change',()=>{ if(box.checked) hydrate().catch(showError); else clearSelectionMode(); });
-  return box;
-}
+function option(){let box=q(OPTION);if(box)return box;const anchor=q('#batchEnableOCR')?.closest('.option-box')||q('#batchRemoveComments')?.closest('.option-box');if(!anchor)return null;const host=document.createElement('div');host.className='option-box';host.style.marginTop='10px';host.innerHTML='<label><input id="batchSelectTextOccurrences" type="checkbox"><span>☑ Elegir coincidencias de texto PDF</span></label><small>Opcional. Desactivado conserva exactamente el modo estable “cambiar todas”. Al activarlo podrás marcar cada coincidencia de texto PDF por separado.</small>';anchor.parentElement?.insertBefore(host,anchor.nextElementSibling);box=host.querySelector(OPTION);box?.addEventListener('change',()=>{if(box.checked)hydrate().catch(showError);else clearSelectionMode()});return box}
 function active(){return q(OPTION)?.checked===true}
 function escText(x){return String(x??'').replace(/\s+/g,' ').trim()}
 function analysis(){return Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[]}
 function selectedCount(rule){return rule?.selectiveText?.enabled&&rule.selectiveText.supported!==false?rule.selectiveText.selectedIds.length:0}
 function selectionFor(rule){return rule?.selectiveText?.enabled?rule.selectiveText:null}
 function showError(err){const s=q('#batchStatus');if(s)s.textContent='Selección individual: '+(err?.message||String(err))}
-function renderRuleChoices(itemIndex,ruleIndex,rule){
-  const host=q(`#textOccurrenceChoice-${itemIndex}-${ruleIndex}`);
-  if(!host)return;
-  host.textContent='';
-  const state=selectionFor(rule);
-  if(!state)return;
-  if(state.supported===false){
-    const warn=document.createElement('div');
-    warn.className='text-warning';
-    warn.textContent='⚠ Esta regla no puede aislarse con prueba estructural WinAnsi; por seguridad no se aplicará en modo selectivo.';
-    host.appendChild(warn); return;
-  }
-  const title=document.createElement('div');
-  title.style.fontWeight='600'; title.style.marginBottom='6px';
-  title.textContent=`«${rule.find}» → «${rule.replace}» · ${state.selectedIds.length}/${state.occurrences.length} seleccionadas`;
-  host.appendChild(title);
-  state.occurrences.forEach((o,i)=>{
-    const label=document.createElement('label');
-    label.style.display='flex'; label.style.gap='8px'; label.style.alignItems='flex-start'; label.style.margin='4px 0';
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=state.selectedIds.includes(o.id);
-    cb.addEventListener('change',()=>{
-      const set=new Set(state.selectedIds);
-      if(cb.checked)set.add(o.id);else set.delete(o.id);
-      state.selectedIds=state.occurrences.filter(x=>set.has(x.id)).map(x=>x.id);
-      renderRuleChoices(itemIndex,ruleIndex,rule);
-      syncApplySafety();
-    });
-    const text=document.createElement('span');
-    const context=[escText(o.before),escText(o.match),escText(o.after)].filter(Boolean).join(' · ');
-    text.textContent=`Página ${o.page} · coincidencia ${i+1}${context?` · …${context}…`:''}`;
-    label.append(cb,text); host.appendChild(label);
-  });
-}
-function renderChoices(){
-  if(!active())return;
-  analysis().forEach((a,ai)=>{
-    if(a?.error)return;
-    const row=q(`#batchTable .batch-result:nth-of-type(${ai+2})`);
-    if(!row)return;
-    let panel=row.querySelector('.text-occurrence-select-panel');
-    if(!panel){panel=document.createElement('div');panel.className='text-occurrence-select-panel';panel.style.gridColumn='1 / -1';panel.style.marginTop='8px';panel.style.padding='10px';panel.style.border='1px solid rgba(127,127,127,.25)';panel.style.borderRadius='8px';row.appendChild(panel)}
-    panel.textContent='';
-    (a.counts||[]).forEach((r,ri)=>{
-      if(Number(r.count||0)<=0)return;
-      const section=document.createElement('div');section.id=`textOccurrenceChoice-${ai}-${ri}`;section.style.margin='6px 0';panel.appendChild(section);
-      renderRuleChoices(ai,ri,r);
-    });
-  });
-}
-async function hydrate(){
-  if(hydrating||!active())return; hydrating=true;
-  try{
-    for(const a of analysis()){
-      if(a?.error||!a.data)continue;
-      let doc=null;
-      try{
-        doc=mupdf.PDFDocument.openDocument(new Uint8Array(a.data),'application/pdf');
-        for(const r of a.counts||[]){
-          if(Number(r.count||0)<=0)continue;
-          const occurrences=detectSelectableWinAnsi(doc,r.find);
-          const structurallyComplete=occurrences.length===Number(r.count||0);
-          const previous=new Set(Array.isArray(r.selectiveText?.selectedIds)?r.selectiveText.selectedIds:[]);
-          r.selectiveText={
-            enabled:true,
-            supported:structurallyComplete,
-            occurrences,
-            selectedIds:structurallyComplete?(previous.size?occurrences.filter(o=>previous.has(o.id)).map(o=>o.id):occurrences.map(o=>o.id)):[]
-          };
-        }
-      }finally{try{doc?.destroy()}catch(_){}}
-    }
-    renderChoices(); syncApplySafety();
-  }finally{hydrating=false}
-}
-function clearSelectionMode(){
-  for(const a of analysis())for(const r of a?.counts||[])delete r.selectiveText;
-  document.querySelectorAll('.text-occurrence-select-panel').forEach(x=>x.remove());
-  syncApplySafety();
-}
-function syncApplySafety(){
-  const apply=q('#batchApply');
-  if(!apply)return;
-  if(!active())return;
-  const unsupported=analysis().some(a=>!a?.error&&(a.counts||[]).some(r=>Number(r.count||0)>0&&r.selectiveText?.enabled&&r.selectiveText.supported===false));
-  if(unsupported)apply.disabled=true;
-  else{
-    const hasSelected=analysis().some(a=>!a?.error&&(a.counts||[]).some(r=>selectedCount(r)>0));
-    const otherOps=q('#batchRemoveComments')?.checked===true||q('#batchRemoveRevisionClouds')?.checked===true||q('#batchRemoveSignatures')?.checked===true||q('#batchRemoveLinks')?.checked===true;
-    if(hasSelected||otherOps)apply.disabled=false;
-  }
-}
-const observer=new MutationObserver(()=>{option();if(active())setTimeout(()=>hydrate().catch(showError),0)});
-observer.observe(document.body,{childList:true,subtree:true});
-option();
-window.__textOccurrenceSelectionV1={active,hydrate,selectedCount,selectionFor,version:'1+structural-winansi-optin'};
+function detectFamily(doc,rule){const expected=Number(rule.count||0),win=detectSelectableWinAnsi(doc,rule.find);if(win.length===expected)return{family:'winansi',occurrences:win};const uni=detectSelectableToUnicode(doc,rule.find);if(uni.length===expected)return{family:'tounicode',occurrences:uni};return{family:null,occurrences:win.length?win:uni}}
+function renderRuleChoices(ai,ri,rule){const host=q(`#textOccurrenceChoice-${ai}-${ri}`);if(!host)return;host.textContent='';const state=selectionFor(rule);if(!state)return;if(state.supported===false){const warn=document.createElement('div');warn.className='text-warning';warn.textContent='⚠ Esta regla no puede aislarse con ninguna familia estructural segura (WinAnsi/ToUnicode); por seguridad no se aplicará en modo selectivo.';host.appendChild(warn);return}const title=document.createElement('div');title.style.fontWeight='600';title.style.marginBottom='6px';title.textContent=`«${rule.find}» → «${rule.replace}» · ${state.selectedIds.length}/${state.occurrences.length} seleccionadas`;host.appendChild(title);state.occurrences.forEach((o,i)=>{const label=document.createElement('label');label.style.display='flex';label.style.gap='8px';label.style.alignItems='flex-start';label.style.margin='4px 0';const cb=document.createElement('input');cb.type='checkbox';cb.checked=state.selectedIds.includes(o.id);cb.addEventListener('change',()=>{const set=new Set(state.selectedIds);if(cb.checked)set.add(o.id);else set.delete(o.id);state.selectedIds=state.occurrences.filter(x=>set.has(x.id)).map(x=>x.id);renderRuleChoices(ai,ri,rule);syncApplySafety()});const text=document.createElement('span'),context=[escText(o.before),escText(o.match),escText(o.after)].filter(Boolean).join(' · ');text.textContent=`Página ${o.page} · coincidencia ${i+1}${context?` · …${context}…`:''}`;label.append(cb,text);host.appendChild(label)})}
+function renderChoices(){if(!active())return;analysis().forEach((a,ai)=>{if(a?.error)return;const row=q(`#batchTable .batch-result:nth-of-type(${ai+2})`);if(!row)return;let panel=row.querySelector('.text-occurrence-select-panel');if(!panel){panel=document.createElement('div');panel.className='text-occurrence-select-panel';panel.style.gridColumn='1 / -1';panel.style.marginTop='8px';panel.style.padding='10px';panel.style.border='1px solid rgba(127,127,127,.25)';panel.style.borderRadius='8px';row.appendChild(panel)}panel.textContent='';(a.counts||[]).forEach((r,ri)=>{if(Number(r.count||0)<=0)return;const section=document.createElement('div');section.id=`textOccurrenceChoice-${ai}-${ri}`;section.style.margin='6px 0';panel.appendChild(section);renderRuleChoices(ai,ri,r)})})}
+async function hydrate(){if(hydrating||!active())return;hydrating=true;try{for(const a of analysis()){if(a?.error||!a.data)continue;let doc=null;try{doc=mupdf.PDFDocument.openDocument(new Uint8Array(a.data),'application/pdf');for(const r of a.counts||[]){if(Number(r.count||0)<=0)continue;const detected=detectFamily(doc,r),complete=!!detected.family,previous=new Set(Array.isArray(r.selectiveText?.selectedIds)?r.selectiveText.selectedIds:[]);r.selectiveText={enabled:true,supported:complete,family:detected.family,occurrences:detected.occurrences,selectedIds:complete?(previous.size?detected.occurrences.filter(o=>previous.has(o.id)).map(o=>o.id):detected.occurrences.map(o=>o.id)):[]}}}finally{try{doc?.destroy()}catch(_){}}}renderChoices();syncApplySafety()}finally{hydrating=false}}
+function clearSelectionMode(){for(const a of analysis())for(const r of a?.counts||[])delete r.selectiveText;document.querySelectorAll('.text-occurrence-select-panel').forEach(x=>x.remove());syncApplySafety()}
+function syncApplySafety(){const apply=q('#batchApply');if(!apply||!active())return;const unsupported=analysis().some(a=>!a?.error&&(a.counts||[]).some(r=>Number(r.count||0)>0&&r.selectiveText?.enabled&&r.selectiveText.supported===false));if(unsupported)apply.disabled=true;else{const hasSelected=analysis().some(a=>!a?.error&&(a.counts||[]).some(r=>selectedCount(r)>0)),otherOps=q('#batchRemoveComments')?.checked===true||q('#batchRemoveRevisionClouds')?.checked===true||q('#batchRemoveSignatures')?.checked===true||q('#batchRemoveLinks')?.checked===true;if(hasSelected||otherOps)apply.disabled=false}}
+const observer=new MutationObserver(()=>{option();if(active())setTimeout(()=>hydrate().catch(showError),0)});observer.observe(document.body,{childList:true,subtree:true});option();window.__textOccurrenceSelectionV1={active,hydrate,selectedCount,selectionFor,version:'1+structural-winansi-tounicode-optin'};
