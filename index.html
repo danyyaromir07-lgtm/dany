@@ -11,7 +11,7 @@
   (async()=>{
     const boot=document.getElementById('boot');
     try{
-      const response=await fetch('./index-shell-v10.html?v=20260819-v10-recovery-shell1',{cache:'no-store'});
+      const response=await fetch('./index-shell-v10.html?v=20260821-shell-direct1',{cache:'no-store'});
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
       let html=await response.text();
       const marker='<script type="importmap">'+JSON.stringify({imports:{
@@ -32,6 +32,7 @@
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
       html=html.replace('</head>',marker+'</head>');
       html=html.replace(signatureOld,signatureNew);
+      html=html.replaceAll('batch-apply-fallback.js?v=20260819-loaderboundary3','batch-apply-fallback.js?v=20260821-shell-direct1');
       document.open();
       document.write(html);
       document.close();
