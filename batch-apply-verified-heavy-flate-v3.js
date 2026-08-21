@@ -1,7 +1,7 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
-import { editDoc } from './text-editor-v67.js?v=20260821-pdfnull1';
+import { editDoc } from './text-editor-v68.js?v=20260821-apply-explicit1';
 import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
 import { editHeavyTextFlate } from './text-editor-heavy-flate-v2.js?v=20260819-heavyflate1';
 
