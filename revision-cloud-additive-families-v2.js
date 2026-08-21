@@ -2,7 +2,7 @@
 // Stable Family A/B implementation runs unchanged. Family C is independent:
 // a dedicated OCG whose suffix begins with an explicit red stroke color and contains
 // only a repetitive Bezier-stroke sequence. The prefix of the OCG is preserved.
-import { detectAdditiveRevisionCloudFamilies as detectV1, removeAdditiveRevisionCloudFamilies as removeV1 } from './revision-cloud-additive-families-v1.js?v=20260821-additive1';
+import { detectAdditiveRevisionCloudFamilies as detectV1, removeAdditiveRevisionCloudFamilies as removeV1 } from './revision-cloud-additive-families-v1.js?v=20260821-additive-base-c1';
 
 const SRC='vector-red-ocg-bezier-sequence';
 const EPS=1e-6, NUM=/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
