@@ -1,6 +1,7 @@
 // Text-only verification wrapper for editors that may mutate the PDF while reporting zero edits.
 // It never invents edits: a recovered count requires the old text to decrease and the replacement text to increase.
-import { editDoc as baseEditDoc } from './text-editor-v67.js?v=20260821-pdfnull1';
+// Use an internal v67 URL that is intentionally not redirected by the production import map.
+import { editDoc as baseEditDoc } from './text-editor-v67.js?v=20260821-v68base2';
 
 function searchCount(doc,text){
   const needle=String(text||'').trim();
@@ -28,4 +29,4 @@ export function editDoc(doc,find,replace){
   return Math.min(oldRemoved,newAdded);
 }
 
-if(typeof window!=='undefined')window.__textEditorV68={version:'68+verified-counter1'};
+if(typeof window!=='undefined')window.__textEditorV68={version:'68+verified-counter2'};
