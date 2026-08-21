@@ -2,7 +2,7 @@
 // It never invents edits: a recovered count requires the old text to decrease and the replacement text to increase.
 // Use an internal v67 URL that is intentionally not redirected by the production import map.
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
-import { editDoc as baseEditDoc } from './text-editor-v67.js?v=20260821-subengine-diagnostic1';
+import { editDoc as baseEditDoc } from './text-editor-v67.js?v=20260821-v68base-clean1';
 
 function searchCount(doc,text){
   const needle=String(text||'').trim();
@@ -44,4 +44,4 @@ export function editDoc(doc,find,replace){
   return verifiedCountAfterReopen(doc,find,replace,beforeOld,beforeNew);
 }
 
-if(typeof window!=='undefined')window.__textEditorV68={version:'68+verified-reopen3+subengine-diagnostic1'};
+if(typeof window!=='undefined')window.__textEditorV68={version:'68+verified-reopen3'};
