@@ -15,11 +15,12 @@
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
       let html=await response.text();
       const marker='<script type="importmap">'+JSON.stringify({imports:{
-        './revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v15.js?v=20260821-redcurve-rescue1',
-        './revision-cloud-multicloud-v1.js?v=20260815-multicloud1':'./revision-cloud-multicloud-v2.js?v=20260821-redcurve1',
+        './revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v16.js?v=20260821-additive1',
+        './revision-cloud-multicloud-v1.js?v=20260815-multicloud1':'./revision-cloud-multicloud-v3.js?v=20260821-additive1',
         './revision-cloud-stream-removal-v4.js?v=20260815-cloudstream-multi2':'./revision-cloud-stream-removal-v4.js?v=20260820-batchcloud1',
         './revision-cloud-manual-multicloud-v4.js?v=20260817-smalldensity1':'./revision-cloud-manual-multicloud-v4.js?v=20260819-manualfuse2',
-        './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1':'./text-pdf-search-fallback-v1.js?v=20260821-winansi2'
+        './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1':'./text-pdf-search-fallback-v1.js?v=20260821-winansi2',
+        './analysis-completion-coordinator-v1.js?v=20260817-completion2':'./analysis-completion-coordinator-v2.js?v=20260821-additive1'
       }})+'</'+'script>';
       const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
