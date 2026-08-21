@@ -66,6 +66,7 @@ function scanBody(body,mode,entryRGB){
     if(w==='c'&&mode==='curved'&&path&&nums.length>=6){for(const k of[-6,-4,-2])add(tx([nums.at(k),nums.at(k+1)],ctm));path.curves++;clear();continue}
     if((w==='v'||w==='y')&&mode==='curved'&&path&&nums.length>=4){for(const k of[-4,-2])add(tx([nums.at(k),nums.at(k+1)],ctm));path.curves++;clear();continue}
     if(w==='S'&&path){paths.push(path);path=null;clear();continue}
+    // no fill, text, image, clipping, closepath or unrelated graphics are allowed in these families
     bad=true;clear();
   }
   if(path||gst.length)bad=true;
@@ -78,7 +79,7 @@ function cycleProof(paths,mode){
   else{if(paths.filter(p=>p.curves>=2).length/paths.length<.90||median(details)<2)return null}
   let box=null;for(const p of paths)box=union(box,p.bbox);const W=box[2]-box[0],H=box[3]-box[1],minDim=Math.min(W,H);if(!(minDim>20))return null;
   const chords=paths.map(p=>dist(p.start,p.end)).filter(x=>x>EPS),med=median(chords);if(!Number.isFinite(med))return null;
-  const tol=Math.max(.05,Math.min(.75,med*.015)),grid=new Map(),nodes=[];
+  const tolCap=mode==='curved'?1.5:.75,tol=Math.max(.05,Math.min(tolCap,med*.025)),grid=new Map(),nodes=[];
   const cell=p=>[Math.floor(p[0]/tol),Math.floor(p[1]/tol)];
   function nodeFor(p){
     const [cx,cy]=cell(p);let best=-1,bd=Infinity;
@@ -101,6 +102,7 @@ function evaluateBlock(text,b){
   if(b.nested)return null;const body=text.slice(b.bodyStart,b.bodyEnd);
   if(b.kind==='BMC'){
     const s=scanBody(body,'polygon',b.entryRGB);if(s.bad||s.inline||!s.redSeen)return null;const p=cycleProof(s.paths,'polygon');if(!p)return null;
+    // Dedicated BMC polygon family must set exact red itself; do not trust an inherited color-only block.
     if((s.ops.get('RG')||0)<1)return null;
     return{source:SRC_POLY,mode:'polygon-bmc',...p,bodyStart:b.bodyStart,bodyEnd:b.bodyEnd};
   }
