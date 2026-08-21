@@ -35,6 +35,8 @@
       html=html.replace('</head>',marker+'</head>');
       html=html.replace(signatureOld,signatureNew);
       html=html.replaceAll('batch-apply-fallback.js?v=20260819-loaderboundary3','batch-apply-fallback.js?v=20260821-shell-direct1');
+      const canonicalApply='<script>(function(){document.addEventListener("click",async function(e){const b=e.target?.closest?.("#batchApply");if(!b)return;e.preventDefault();e.stopImmediatePropagation();const s=document.getElementById("batchStatus");if(s)s.textContent="Iniciando aplicación canónica…";try{if(typeof window.__prepareBatchAnnotationOperations==="function")await window.__prepareBatchAnnotationOperations();const m=await import("./batch-apply-fallback.js?v=20260821-canonical-capture1");if(typeof m.runFallback!=="function")throw new Error("El ejecutor canónico no exporta runFallback.");await m.runFallback()}catch(err){console.error(err);if(s)s.textContent="ERROR AL APLICAR: "+(err&&err.message?err.message:String(err));}},true)})();</'+'script>';
+      html=html.replace('</body>',canonicalApply+'</body>');
       document.open();
       document.write(html);
       document.close();
