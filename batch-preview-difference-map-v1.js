@@ -99,7 +99,7 @@ async function buildAndShow(idx,{ensurePreview=false}={}){
   }catch(err){console.error('[cloud-difference-map]',err);if(status)status.textContent='No se pudo generar el mapa de diferencias: '+(err?.message||String(err));}
 }
 function bindViewerModeButtons(){
-  for(const [id,mode] of [['#previewOriginalBtn','original'],['#previewResultBtn','result']]){const b=q(id);if(!b||b.dataset.diffModeBound)return;b.dataset.diffModeBound='1';b.addEventListener('click',()=>setButtonState(mode));}
+  for(const [id,mode] of [['#previewOriginalBtn','original'],['#previewResultBtn','result']]){const b=q(id);if(!b||b.dataset.diffModeBound)continue;b.dataset.diffModeBound='1';b.addEventListener('click',()=>setButtonState(mode));}
 }
 function addViewerButton(){
   const host=q('.preview-card-head .preview-controls');if(!host)return;
