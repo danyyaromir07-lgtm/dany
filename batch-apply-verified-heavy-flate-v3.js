@@ -1,6 +1,6 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
-import { editFreeTextDetailed } from './adaptive-engine-v1.js?v=20260812-309';
+import { editFreeTextDetailed, normalize } from './adaptive-engine-v1.js?v=20260812-309';
 import { editDoc } from './text-editor-v68.js?v=20260821-apply-explicit1';
 import { editTextByPageSearch } from './text-pdf-search-fallback-v1.js?v=20260813-text-fallback1';
 import { editHeavyTextFlate } from './text-editor-heavy-flate-v2.js?v=20260819-heavyflate1';
@@ -38,6 +38,46 @@ function savePdf(doc) {
 }
 function expectedPdfTextEdits(item) { return (item?.counts || []).reduce((sum, rule) => sum + Math.max(0, Number(rule?.count || 0)), 0); }
 function isHeavySource(source) { return Number(source?.byteLength || source?.length || 0) >= HEAVY_FILE_BYTES; }
+function normalizedRuleText(value) { return normalize(String(value || '')).replace(/[‐‑‒–—−]/g, '-').replace(/\s*[-]\s*/g, '-').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function countNormalizedNeedleInDoc(doc, needle) {
+  const target = normalizedRuleText(needle);
+  if (!target) return 0;
+  let total = 0;
+  for (let pi = 0; pi < doc.countPages(); pi++) {
+    const page = doc.loadPage(pi);
+    let lines = [];
+    try { lines = JSON.parse(page.toStructuredText('preserve-spans').asJSON()).blocks.flatMap((b) => b.type === 'text' ? b.lines.map((l) => l.text) : []); } catch (_) { return null; }
+    for (const line of lines) {
+      const text = normalizedRuleText(line);
+      let at = 0;
+      while ((at = text.indexOf(target, at)) >= 0) { total++; at += Math.max(1, target.length); }
+    }
+  }
+  return total;
+}
+function postVerifyOldTextGone(bytes, item) {
+  const rules = (item?.counts || []).filter((rule) => Math.max(0, Number(rule?.count || 0)) > 0 && String(rule?.find || '').trim());
+  if (!rules.length) return { verified: true, remaining: 0 };
+  for (const rule of rules) {
+    const find = normalizedRuleText(rule.find), replacement = normalizedRuleText(rule.replace);
+    if (!find || replacement.includes(find)) return { verified: false, reason: `regla no verificable por ausencia: «${rule.find}»` };
+  }
+  let doc = null;
+  try {
+    doc = mupdf.PDFDocument.openDocument(new Uint8Array(bytes), 'application/pdf');
+    let remaining = 0;
+    for (const rule of rules) {
+      const count = countNormalizedNeedleInDoc(doc, rule.find);
+      if (count == null) return { verified: false, reason: `no se pudo releer texto estructurado para «${rule.find}»` };
+      remaining += count;
+    }
+    return { verified: true, remaining };
+  } catch (error) {
+    return { verified: false, reason: error?.message || String(error) };
+  } finally {
+    try { doc?.destroy(); } catch (_) {}
+  }
+}
 
 async function applyTextRule(doc, rule, expected, fileName, diagnostics, prefix = '', heavy = false) {
   let applied = 0;
@@ -132,7 +172,18 @@ async function processItemWithRetry(item, source, applyVectorOCR, diagnostics) {
       }
     }
   }
-  return { ...result, expectedPdfText: expected, unresolvedPdfText: Math.max(0, expected - result.pdfTextEdits) };
+
+  let unresolved = Math.max(0, expected - result.pdfTextEdits), postVerified = false;
+  if (unresolved > 0) {
+    const check = postVerifyOldTextGone(result.bytes, item);
+    if (check.verified && check.remaining === 0) {
+      postVerified = true;
+      unresolved = 0;
+      diagnostics.push(`${item.name}: ✓ verificación post-Apply: el texto antiguo ya no existe; se descarta el falso pendiente del contador`);
+    } else if (check.verified) diagnostics.push(`${item.name}: verificación post-Apply conserva revisión: quedan ${check.remaining} coincidencia${check.remaining === 1 ? '' : 's'} del texto antiguo`);
+    else diagnostics.push(`${item.name}: verificación post-Apply no concluyente; se conserva revisión${check.reason ? ` (${check.reason})` : ''}`);
+  }
+  return { ...result, expectedPdfText: expected, unresolvedPdfText: unresolved, postVerified };
 }
 
 export async function runFallback() {
@@ -165,6 +216,7 @@ export async function runFallback() {
         item.batchApplyExpectedText = result.expectedPdfText;
         item.batchApplyAppliedText = result.pdfTextEdits;
         item.batchApplyUnresolvedText = result.unresolvedPdfText;
+        item.batchApplyPostVerified = result.postVerified === true;
         if (result.unresolvedPdfText > 0) {
           unresolvedFiles++; unresolvedNames.push(item.name);
           diagnostics.push(`${item.name}: ⚠️ NO VERIFICADO · texto PDF esperado=${result.expectedPdfText}, aplicado=${result.pdfTextEdits}`);
