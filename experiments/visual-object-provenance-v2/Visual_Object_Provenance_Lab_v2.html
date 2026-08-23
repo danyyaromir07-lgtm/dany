@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visual Object Provenance Lab v2</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f4f7fb}
+*{box-sizing:border-box}body{margin:0}.shell{max-width:1500px;margin:auto;padding:22px}
+.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.hero h1{margin:0;font-size:25px}.hero p{margin:6px 0;color:#667085}
+.badge{padding:8px 12px;border-radius:999px;background:#fff3cd;border:1px solid #ffe08a;font-size:13px}
+.card{background:#fff;border:1px solid #e1e7ef;border-radius:14px;padding:15px;box-shadow:0 2px 10px rgba(0,0,0,.035)}
+.controls{display:grid;grid-template-columns:minmax(250px,1fr) 95px 120px auto auto auto auto;gap:10px;align-items:end}
+label{font-size:13px;color:#667085;display:flex;flex-direction:column;gap:5px}input,select,button{font:inherit}
+input,select{border:1px solid #cdd5df;border-radius:9px;padding:10px;background:#fff}
+button{border:0;border-radius:9px;padding:11px 14px;background:#2368e8;color:#fff;font-weight:700;cursor:pointer}
+button.secondary{background:#eef2f7;color:#243043}button:disabled{opacity:.45;cursor:not-allowed}
+#status{margin-top:12px;padding:10px 12px;border-radius:9px;background:#eef2f7}
+#status[data-kind=ok]{background:#e8f7ee;color:#15673a}#status[data-kind=warn]{background:#fff5d9;color:#765100}#status[data-kind=bad]{background:#ffeaed;color:#991f2b}
+.note{font-size:13px;color:#667085;line-height:1.45;margin-top:10px}.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(360px,1fr);gap:16px;margin-top:16px}
+.viewer{position:relative;overflow:auto;max-height:78vh;background:#1d2330;border-radius:10px;padding:8px}.stack{position:relative;display:inline-block}.stack canvas{display:block}
+.overlay{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}.panel h3{margin:0 0 10px}.metric{border:1px solid #e1e7ef;border-radius:10px;padding:10px;margin-bottom:10px}
+.metric small{color:#667085}.kv{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:13px}.log{white-space:pre-wrap;background:#111827;color:#d9e2ef;border-radius:10px;padding:10px;max-height:300px;overflow:auto;font:12px ui-monospace,monospace}
+.ok{color:#15803d}.warn{color:#a16207}.bad{color:#b42318}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.brushPreview{width:18px;height:18px;border-radius:50%;background:#2368e8;opacity:.35;display:inline-block}
+@media(max-width:980px){.controls{grid-template-columns:1fr 90px 110px auto}.grid{grid-template-columns:1fr}.hero{flex-direction:column}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="hero">
+    <div><h1>🖌️ Visual Object Provenance Lab v2</h1>
+    <p>Tú pintas los píxeles objetivo. El motor intenta explicar esos píxeles con spans PDF exactos.</p></div>
+    <div class="badge">LAB AISLADO · NO CONECTADO A PDF TOOLS</div>
+  </div>
+
+  <section class="card" style="margin-top:16px">
+    <div class="controls">
+      <label>PDF<input id="pdf" type="file" accept="application/pdf,.pdf"></label>
+      <label>Página<input id="page" type="number" min="1" value="1"></label>
+      <label>Pincel<select id="brush"><option value="8">8 px</option><option value="14" selected>14 px</option><option value="22">22 px</option><option value="32">32 px</option></select></label>
+      <button id="load">Cargar</button>
+      <button id="analyze" class="secondary" disabled>Analizar máscara</button>
+      <button id="simulate" class="secondary" disabled>Simular</button>
+      <button id="download" disabled>Descargar experimental</button>
+    </div>
+    <div class="toolbar">
+      <button id="clear" class="secondary" disabled>Limpiar máscara</button>
+      <span class="brushPreview"></span><span style="font-size:13px;color:#667085">Pinta SOLO el contorno/objeto que quieres quitar. No pintes el contenido interior.</span>
+    </div>
+    <div id="status">Carga un PDF y pinta encima del objeto que quieres eliminar.</div>
+    <div class="note"><strong>Regla:</strong> no se usa color, “familia de nube”, forma ni borde rectangular. La máscara pintada por ti es el objetivo. La simulación se rechaza si produce cambios significativos fuera de esa máscara.</div>
+  </section>
+
+  <div class="grid">
+    <section class="card"><div class="viewer"><div class="stack"><canvas id="pageCanvas"></canvas><canvas id="overlay" class="overlay"></canvas></div></div></section>
+    <aside class="card panel">
+      <h3>Máscara</h3><div id="maskInfo" class="metric"><small>Sin máscara.</small></div>
+      <h3>Provenance</h3><div id="provInfo" class="metric"><small>Sin análisis.</small></div>
+      <h3>Simulación</h3><div id="simInfo" class="metric"><small>Sin simulación.</small></div>
+      <h3>Diagnóstico</h3><pre id="log" class="log"></pre>
+    </aside>
+  </div>
+</main>
+
+<script type="module">
+const MUPDF_URL='https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
+const MAX_RENDER_PIXELS=5_000_000;
+const WS=new Set([0,9,10,12,13,32]),DEL=new Set([40,41,60,62,91,93,123,125,47,37]);
+const NUM=/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+const q=s=>document.querySelector(s);
+let mupdf=null,state=null,painting=false,last=null,simulation=null;
+
+function log(msg,obj){const e=q('#log');const line=`${new Date().toLocaleTimeString()} · ${msg}${obj?` · ${JSON.stringify(obj)}`:''}`;e.textContent=(e.textContent?e.textContent+'\n':'')+line;e.scrollTop=e.scrollHeight}
+function status(msg,kind=''){const e=q('#status');e.textContent=msg;e.dataset.kind=kind}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function union(a,b){return a?[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[2],b[2]),Math.max(a[3],b[3])]:b.slice()}
+function resolve(o){try{return o?.resolve?.()||o}catch(_){return o}}
+function streamRef(o){try{if(o?.isStream?.())return o;const r=resolve(o);return r?.isStream?.()?r:null}catch(_){return null}}
+function contentStreams(page){try{const c=page.getObject()?.get?.('Contents');if(!c)return[];const r=resolve(c);if(r?.isArray?.())return Array.from({length:Number(r.length||0)},(_,i)=>streamRef(r.get(i)||c.get(i))).filter(Boolean);const s=streamRef(c);return s?[s]:[]}catch(_){return[]}}
+function bytesToText(buf){const b=buf?.asUint8Array?buf.asUint8Array():buf;let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode(...b.subarray(i,Math.min(b.length,i+0x8000)));return s}
+function textToBytes(s){const b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i)&255;return b}
+function scanLiteral(t,i){i++;let d=1;while(i<t.length&&d){const c=t.charCodeAt(i);if(c===92){i+=2;continue}if(c===40)d++;else if(c===41)d--;i++}return i}
+function scanHex(t,i){i++;while(i<t.length&&t.charCodeAt(i)!==62)i++;return i<t.length?i+1:i}
+function scanArray(t,i){let d=1;i++;while(i<t.length&&d){const c=t.charCodeAt(i);if(c===37){while(i<t.length&&!/[\r\n]/.test(t[i]))i++;continue}if(c===40){i=scanLiteral(t,i);continue}if(c===60&&t.charCodeAt(i+1)!==60){i=scanHex(t,i);continue}if(c===91){d++;i++;continue}if(c===93){d--;i++;continue}i++}return i}
+function nextToken(t,i){while(i<t.length){const c=t.charCodeAt(i);if(WS.has(c)){i++;continue}if(c===37){while(i<t.length&&!/[\r\n]/.test(t[i]))i++;continue}break}if(i>=t.length)return null;const s=i,c=t.charCodeAt(i);if(c===40)return{type:'skip',start:s,end:scanLiteral(t,i)};if(c===60&&t.charCodeAt(i+1)!==60)return{type:'skip',start:s,end:scanHex(t,i)};if(c===91)return{type:'skip',start:s,end:scanArray(t,i)};if(c===47){i++;while(i<t.length&&!WS.has(t.charCodeAt(i))&&!DEL.has(t.charCodeAt(i)))i++;return{type:'name',start:s,end:i,value:t.slice(s+1,i)}}if(c===60&&t.charCodeAt(i+1)===60)return{type:'delim',start:s,end:i+2,value:'<<'};if(c===62&&t.charCodeAt(i+1)===62)return{type:'delim',start:s,end:i+2,value:'>>'};if(DEL.has(c))return{type:'delim',start:s,end:i+1,value:t[i]};i++;while(i<t.length&&!WS.has(t.charCodeAt(i))&&!DEL.has(t.charCodeAt(i)))i++;return{type:'word',start:s,end:i,value:t.slice(s,i)}}
+function mul(a,b){return[a[0]*b[0]+a[1]*b[2],a[0]*b[1]+a[1]*b[3],a[2]*b[0]+a[3]*b[2],a[2]*b[1]+a[3]*b[3],a[4]*b[0]+a[5]*b[2]+b[4],a[4]*b[1]+a[5]*b[3]+b[5]]}
+function tx(p,m){return[p[0]*m[0]+p[1]*m[2]+m[4],p[0]*m[1]+p[1]*m[3]+m[5]]}
+function parsePageSequence(texts){let rgb=[0,0,0],ctm=[1,0,0,1,0,0],stack=[],path=null,nums=[];const spans=[],excluded=[],unsafe=[];const clear=()=>nums=[];const add=p=>{if(path){path.bbox=union(path.bbox,[p[0],p[1],p[0],p[1]]);path.end=p}};for(let si=0;si<texts.length;si++){const t=texts[si];let i=0;while(i<t.length){const tok=nextToken(t,i);if(!tok)break;i=tok.end;if(tok.type==='skip'||tok.type==='name'||tok.type==='delim')continue;const w=tok.value;if(NUM.test(w)){nums.push(Number(w));continue}if(w==='BI'){unsafe.push({reason:'inline-image',stream:si,at:tok.start});clear();continue}if(w==='q'){stack.push({ctm:ctm.slice(),rgb:rgb.slice()});clear();continue}if(w==='Q'){if(stack.length){const s=stack.pop();ctm=s.ctm;rgb=s.rgb}else unsafe.push({reason:'graphics-stack-underflow',stream:si,at:tok.start});clear();continue}if(w==='cm'&&nums.length>=6){ctm=mul(nums.slice(-6),ctm);clear();continue}if(w==='RG'&&nums.length>=3){rgb=nums.slice(-3).map(Number);clear();continue}if(w==='G'&&nums.length){const g=Number(nums.at(-1));rgb=[g,g,g];clear();continue}if(w==='K'&&nums.length>=4){const[c,m,y,k]=nums.slice(-4);rgb=[1-Math.min(1,c+k),1-Math.min(1,m+k),1-Math.min(1,y+k)];clear();continue}if(w==='m'&&nums.length>=2){const p=tx(nums.slice(-2),ctm);path={startStream:si,startByte:tok.start,bbox:[p[0],p[1],p[0],p[1]],start:p,end:p,segments:0,rgb:rgb.slice()};clear();continue}if(w==='l'&&path&&nums.length>=2){add(tx(nums.slice(-2),ctm));path.segments++;clear();continue}if(w==='c'&&path&&nums.length>=6){for(const k of[-6,-4,-2])add(tx([nums.at(k),nums.at(k+1)],ctm));path.segments++;clear();continue}if((w==='v'||w==='y')&&path&&nums.length>=4){for(const k of[-4,-2])add(tx([nums.at(k),nums.at(k+1)],ctm));path.segments++;clear();continue}if(w==='h'&&path){add(path.start);path.segments++;clear();continue}if((w==='S'||w==='s')&&path){if(path.startStream===si)spans.push({streamIndex:si,start:path.startByte,end:tok.end,bbox:path.bbox,segments:path.segments,rgb:path.rgb});else excluded.push({reason:'cross-stream-path',startStream:path.startStream,endStream:si,bbox:path.bbox});path=null;clear();continue}if(['f','F','f*','B','B*','b','b*','Tj','TJ','Do','sh'].includes(w)){path=null;clear();continue}clear()}}if(stack.length)unsafe.push({reason:'graphics-stack-unclosed',depth:stack.length});if(path)unsafe.push({reason:'unfinished-path',startStream:path.startStream,start:path.startByte});return{spans,excluded,unsafe}}
+function renderRGBA(pix){const w=pix.getWidth(),h=pix.getHeight(),c=pix.getNumberOfComponents(),s=pix.getPixels(),d=new Uint8ClampedArray(w*h*4);for(let i=0,j=0;i<w*h;i++,j+=c){d[i*4]=s[j];d[i*4+1]=s[j+1];d[i*4+2]=s[j+2];d[i*4+3]=255}return{w,h,data:d}}
+function drawPix(pix,canvas){const r=renderRGBA(pix);canvas.width=r.w;canvas.height=r.h;canvas.getContext('2d').putImageData(new ImageData(r.data,r.w,r.h),0,0);return r}
+function geometry(page,pix,scale){const bounds=Array.from(page.getBounds()).map(Number);let crop=bounds.slice();try{const o=page.getObject(),cb=o?.get?.('CropBox')||o?.get?.('MediaBox'),r=resolve(cb);if(r?.isArray?.()&&Number(r.length)>=4)crop=[0,1,2,3].map(i=>Number(resolve(r.get(i))))}catch(_){}let rot=0;try{const n=Number(resolve(page.getObject()?.get?.('Rotate')));if(Number.isFinite(n))rot=((n%360)+360)%360}catch(_){}return{bounds,crop,rot,scale,w:pix.getWidth(),h:pix.getHeight()}}
+function rawToPix(x,y,g){const[x0,y0,x1,y1]=g.crop;let u,v;if(g.rot===90){u=y-y0;v=x-x0}else if(g.rot===180){u=x1-x;v=y-y0}else if(g.rot===270){u=y1-y;v=x1-x}else{u=x-x0;v=y1-y}return[u*g.scale,v*g.scale]}
+function rawRectToPix(r,g){const pts=[[r[0],r[1]],[r[2],r[1]],[r[2],r[3]],[r[0],r[3]]].map(p=>rawToPix(p[0],p[1],g));return[Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1])),Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))]}
+function maskPixels(){const c=q('#overlay'),ctx=c.getContext('2d'),d=ctx.getImageData(0,0,c.width,c.height).data,m=new Uint8Array(c.width*c.height);let n=0,x0=c.width,y0=c.height,x1=-1,y1=-1;for(let i=0;i<m.length;i++){if(d[i*4+3]>20){m[i]=1;n++;const x=i%c.width,y=(i/c.width)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}}return{mask:m,count:n,bbox:n?[x0,y0,x1+1,y1+1]:null,w:c.width,h:c.height}}
+function bboxHitsMask(b,m,pad=1){let x0=clamp(Math.floor(b[0])-pad,0,m.w-1),y0=clamp(Math.floor(b[1])-pad,0,m.h-1),x1=clamp(Math.ceil(b[2])+pad,0,m.w-1),y1=clamp(Math.ceil(b[3])+pad,0,m.h-1);for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)if(m.mask[y*m.w+x])return true;return false}
+function analyzeMask(){if(!state)return;const m=maskPixels();if(!m.count)return status('Pinta primero el objeto.','warn');const candidates=[];for(const s of state.parsed.spans){const pb=rawRectToPix(s.bbox,state.g);if(bboxHitsMask(pb,m,2))candidates.push({...s,pixBox:pb})}const blocked=state.parsed.excluded.filter(e=>bboxHitsMask(rawRectToPix(e.bbox,state.g),m,2));state.analysis={mask:m,candidates,blocked,safe:state.parsed.unsafe.length===0&&blocked.length===0&&candidates.length>0};q('#maskInfo').innerHTML=`<div class="kv"><span>píxeles pintados</span><b>${m.count}</b><span>bbox máscara</span><b>${m.bbox?.map(Math.round).join(', ')}</b></div>`;q('#provInfo').innerHTML=`<div class="kv"><span>strokes candidatos</span><b>${candidates.length}</b><span>streams</span><b>${new Set(candidates.map(x=>x.streamIndex)).size}</b><span>cross-stream tocados</span><b>${blocked.length}</b><span>riesgos parser</span><b>${state.parsed.unsafe.length}</b></div><small>${state.analysis.safe?'✅ simulable':'⚠️ bloqueado'}</small>`;log('máscara→provenance',{paintedPixels:m.count,maskBBox:m.bbox,candidateStrokes:candidates.length,streams:new Set(candidates.map(x=>x.streamIndex)).size,crossBlocked:blocked.length,pageUnsafe:state.parsed.unsafe});q('#simulate').disabled=!state.analysis.safe;q('#download').disabled=true;simulation=null;status(state.analysis.safe?`Máscara lista: ${candidates.length} stroke(s) candidatos. Ahora prueba el render contrafactual.`:`Máscara bloqueada: ${blocked.length} path(s) cross-stream · ${state.parsed.unsafe.length} riesgo(s) parser.`,state.analysis.safe?'ok':'warn')}
+function diffAgainstMask(before,after,m){if(before.w!==after.w||before.h!==after.h)return{ok:false,reason:'render-size-mismatch'};let changed=0,inMask=0,outMask=0;const changedMask=new Uint8Array(m.mask.length);for(let i=0;i<m.mask.length;i++){const p=i*4,d=Math.max(Math.abs(before.data[p]-after.data[p]),Math.abs(before.data[p+1]-after.data[p+1]),Math.abs(before.data[p+2]-after.data[p+2]));if(d<12)continue;changed++;changedMask[i]=1;if(m.mask[i])inMask++;else outMask++}let paintedChanged=0;for(let i=0;i<m.mask.length;i++)if(m.mask[i]&&changedMask[i])paintedChanged++;const targetCoverage=paintedChanged/Math.max(1,m.count),outsideRatio=outMask/Math.max(1,changed);return{changed,inMask,outMask,targetCoverage,outsideRatio,ok:changed>0&&outMask===0&&targetCoverage>=0.15}}
+async function simulate(){if(!state?.analysis?.safe)return status('No hay análisis simulable.','bad');status('Revalidando y generando contrafactual…');const fresh=parsePageSequence(state.streams.map(s=>bytesToText(s.readStream())));if(fresh.unsafe.length)return status('Revalidación falló: parser inseguro.','bad');for(const t of state.analysis.candidates){const n=fresh.spans.filter(s=>s.streamIndex===t.streamIndex&&s.start===t.start&&s.end===t.end).length;if(n!==1)return status(`Span no único tras revalidación: stream ${t.streamIndex}.`,'bad')}const doc=mupdf.PDFDocument.openDocument(state.bytes,'application/pdf'),page=doc.loadPage(state.pageNo-1),streams=contentStreams(page),texts=streams.map(s=>bytesToText(s.readStream())),by=new Map();for(const t of state.analysis.candidates){if(!by.has(t.streamIndex))by.set(t.streamIndex,[]);by.get(t.streamIndex).push(t)}for(const[si,arr]of by){let text=texts[si];for(const t of [...arr].sort((a,b)=>b.start-a.start))text=text.slice(0,t.start)+'\n'+text.slice(t.end);streams[si].writeStream(textToBytes(text))}const buf=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes'),out=buf?.asUint8Array?new Uint8Array(buf.asUint8Array()):new Uint8Array(buf);doc.destroy();const vd=mupdf.PDFDocument.openDocument(out,'application/pdf'),vp=vd.loadPage(state.pageNo-1),pix=vp.toPixmap(mupdf.Matrix.scale(state.g.scale,state.g.scale),mupdf.ColorSpace.DeviceRGB,false,true),after=renderRGBA(pix),diff=diffAgainstMask(state.render,after,state.analysis.mask);vd.destroy();q('#simInfo').innerHTML=`<div class="kv"><span>píxeles cambiados</span><b>${diff.changed}</b><span>dentro de máscara</span><b>${diff.inMask}</b><span>fuera de máscara</span><b>${diff.outMask}</b><span>cobertura objetivo</span><b>${(diff.targetCoverage*100).toFixed(1)}%</b></div><small>${diff.ok?'✅ aprobado':'⛔ rechazado'}</small>`;log('contrafactual diff',diff);if(!diff.ok){simulation=null;q('#download').disabled=true;return status(`Simulación RECHAZADA: cobertura ${(diff.targetCoverage*100).toFixed(1)}% · fuera=${diff.outMask}.`,'bad')}simulation=out;q('#download').disabled=false;status(`Simulación aprobada: cobertura ${(diff.targetCoverage*100).toFixed(1)}% y 0 píxeles fuera de la máscara.`,'ok')}
+async function loadPdf(){const f=q('#pdf').files?.[0];if(!f)return status('Selecciona un PDF.','bad');q('#log').textContent='';q('#analyze').disabled=true;q('#simulate').disabled=true;q('#download').disabled=true;q('#clear').disabled=true;simulation=null;status('Cargando MuPDF…');if(!mupdf)mupdf=await import(MUPDF_URL);const bytes=new Uint8Array(await f.arrayBuffer()),doc=mupdf.PDFDocument.openDocument(bytes,'application/pdf'),pages=doc.countPages(),pageNo=clamp(Number(q('#page').value||1),1,pages),page=doc.loadPage(pageNo-1),b=page.getBounds(),pw=Math.max(1,b[2]-b[0]),ph=Math.max(1,b[3]-b[1]),scale=Math.min(1.25,Math.sqrt(MAX_RENDER_PIXELS/(pw*ph))),pix=page.toPixmap(mupdf.Matrix.scale(scale,scale),mupdf.ColorSpace.DeviceRGB,false,true),render=drawPix(pix,q('#pageCanvas')),ov=q('#overlay');ov.width=render.w;ov.height=render.h;ov.getContext('2d').clearRect(0,0,ov.width,ov.height);const streams=contentStreams(page),texts=streams.map(s=>bytesToText(s.readStream())),parsed=parsePageSequence(texts),g=geometry(page,pix,scale);state={f,bytes,doc,pageNo,page,streams,texts,parsed,g,render};q('#clear').disabled=false;q('#analyze').disabled=false;q('#maskInfo').innerHTML='<small>Pinta el objeto y pulsa “Analizar máscara”.</small>';q('#provInfo').innerHTML='<small>Sin análisis.</small>';q('#simInfo').innerHTML='<small>Sin simulación.</small>';log('página cargada',{pages,page:pageNo,streams:streams.length,strokes:parsed.spans.length,crossStreamPaths:parsed.excluded.length,pageUnsafe:parsed.unsafe,geometry:g});status('PDF cargado. Pinta SOLO los trazos que quieres eliminar.','ok')}
+function ppos(ev){const c=q('#overlay'),r=c.getBoundingClientRect();return[(ev.clientX-r.left)*(c.width/r.width),(ev.clientY-r.top)*(c.height/r.height)]}
+function dab(a,b){const c=q('#overlay'),ctx=c.getContext('2d'),r=Number(q('#brush').value||14);ctx.save();ctx.strokeStyle='rgba(35,104,232,.42)';ctx.fillStyle='rgba(35,104,232,.42)';ctx.lineWidth=r*2;ctx.lineCap='round';ctx.lineJoin='round';if(b){ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}else{ctx.beginPath();ctx.arc(a[0],a[1],r,0,Math.PI*2);ctx.fill()}ctx.restore()}
+q('#overlay').addEventListener('pointerdown',e=>{if(!state)return;painting=true;last=ppos(e);dab(last);q('#overlay').setPointerCapture(e.pointerId)});q('#overlay').addEventListener('pointermove',e=>{if(!painting)return;const p=ppos(e);dab(last,p);last=p});q('#overlay').addEventListener('pointerup',()=>{painting=false;last=null;q('#simulate').disabled=true;q('#download').disabled=true;simulation=null;status('Máscara actualizada. Pulsa “Analizar máscara”.')});q('#clear').addEventListener('click',()=>{const c=q('#overlay');c.getContext('2d').clearRect(0,0,c.width,c.height);state.analysis=null;simulation=null;q('#simulate').disabled=true;q('#download').disabled=true;q('#maskInfo').innerHTML='<small>Máscara limpia.</small>';q('#provInfo').innerHTML='<small>Sin análisis.</small>';q('#simInfo').innerHTML='<small>Sin simulación.</small>';status('Máscara limpia. Pinta de nuevo.')});q('#load').addEventListener('click',()=>loadPdf().catch(e=>{console.error(e);status(`Error: ${e.message||e}`,'bad');log('error',{message:e.message||String(e)})}));q('#analyze').addEventListener('click',analyzeMask);q('#simulate').addEventListener('click',()=>simulate().catch(e=>{console.error(e);status(`Error de simulación: ${e.message||e}`,'bad');log('error simulación',{message:e.message||String(e)})}));q('#download').addEventListener('click',()=>{if(!simulation||!state)return;const a=document.createElement('a'),base=state.f.name.replace(/\.pdf$/i,'');a.href=URL.createObjectURL(new Blob([simulation],{type:'application/pdf'}));a.download=`${base}_visual_object_lab.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000)});
+</script>
+</body>
+</html>
