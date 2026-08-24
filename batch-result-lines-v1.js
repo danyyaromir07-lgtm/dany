@@ -30,6 +30,7 @@ function ensureStyle() {
       overflow-wrap: anywhere;
     }
     #batchTable .batch-no-matches {
+      color: #b42318;
       font-weight: 700;
     }
     #batchTable .batch-result-actions {
