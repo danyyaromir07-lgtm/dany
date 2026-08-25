@@ -3,6 +3,7 @@
 // v11 adds one strict non-terminal multi-loop Bezier cloud block family.
 // Safety: exact red stroke; isolated contiguous path block; every path is m + exactly 2 or 3 cubic c + S;
 // no fills, text, images or straight-line-only paths; high path count prevents overlap with the v10 single-loop family.
+// For non-terminal blocks the RG color operator is deliberately preserved; only the proven Bezier path body is removed.
 import {
   detectAdditiveRevisionCloudFamilies as detectV10,
   removeAdditiveRevisionCloudFamilies as removeV10
@@ -34,7 +35,7 @@ function readBlock(text,bodyStart){
   const next=tail.slice(used).trimStart();if(!next||/^(?:m|c|l|S)\b/.test(next))return null;
   return{end:bodyStart+used,pathCount,curveCount,bbox};
 }
-function scanStream(text,refIndex){const out=[];RED.lastIndex=0;let m;while((m=RED.exec(text))){const start=m.index+(m[0].startsWith('\n')?1:0),p=readBlock(text,RED.lastIndex);if(p)out.push({source:SRC,refIndex,start,...p})}return out}
+function scanStream(text,refIndex){const out=[];RED.lastIndex=0;let m;while((m=RED.exec(text))){const bodyStart=RED.lastIndex,p=readBlock(text,bodyStart);if(p)out.push({source:SRC,refIndex,start:bodyStart,...p})}return out}
 function scanPage(page){const streams=[],candidates=[];for(const ref of refs(page)){let text;try{text=toText(ref.readStream())}catch(_){continue}const refIndex=streams.length;streams.push({ref,text});candidates.push(...scanStream(text,refIndex))}return{streams,candidates}}
 function pub(c){return{bbox:c.bbox,source:SRC,exactRGB:[1,0,0],vectorAdditiveFamilyProof:true,vectorAdditiveFamilyMode:'red-multiloop-bezier-block-v1',vectorAdditiveFamilyPathCount:c.pathCount,vectorAdditiveFamilyCurveCount:c.curveCount}}
 function merge(a,b){const map=new Map();for(const p of [...(a||[]),...(b||[])]){const n=Number(p?.page||0);if(!n)continue;if(!map.has(n))map.set(n,[]);map.get(n).push(...(p.clouds||[]))}return[...map].map(([page,clouds])=>({page,clouds})).sort((x,y)=>x.page-y.page)}
