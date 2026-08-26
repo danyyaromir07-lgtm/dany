@@ -33,11 +33,12 @@
         './batch-apply-fallback.js?v=20260819-loaderboundary3':'./batch-apply-fallback.js?v=20260821-explicitv68-loader3',
         './analysis-completion-coordinator-v1.js?v=20260817-completion2':'./analysis-completion-coordinator-v2.js?v=20260821-additive1'
       }})+'</'+'script>';
+      const applyPreloads='<link rel="modulepreload" href="./batch-apply-fallback.js?v=20260821-canonical-capture1"><link rel="modulepreload" href="./text-editor-v68.js?v=20260821-subengine-diagnostic1"><link rel="modulepreload" href="./text-editor-v67-direct-v6.js?v=20260826-structural1"><link rel="modulepreload" href="./text-editor-v65-safe-font-fallback-v6-structural.js?v=20260826-structural1">';
       const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
       if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
-      html=html.replace('</head>',marker+'</head>');
+      html=html.replace('</head>',marker+applyPreloads+'</head>');
       html=html.replace(signatureOld,signatureNew);
       html=html.replaceAll('batch-apply-fallback.js?v=20260819-loaderboundary3','batch-apply-fallback.js?v=20260821-shell-direct1');
       html=html.replaceAll('batch-analysis-v1.js?v=20260813-classify1','batch-analysis-v1.js?v=20260826-flexhyphen-direct1');
