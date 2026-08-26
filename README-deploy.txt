@@ -1,1 +1,1 @@
-Static Pages fallback is prepared.
+GitHub Pages deployment from main.
