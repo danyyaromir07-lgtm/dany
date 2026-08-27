@@ -7,7 +7,7 @@ import { editDoc } from './text-editor-v68.js?v=20260821-apply-explicit1';
 const asBytes=data=>data instanceof Uint8Array?new Uint8Array(data):new Uint8Array(data||0);
 const save=doc=>{const b=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');return b?.asUint8Array?new Uint8Array(b.asUint8Array()):new Uint8Array(b)};
 
-async function prepareEmptyRules(list){
+export async function prepareEmptyRules(list){
   const backups=[];let total=0;
   for(const item of list||[]){
     if(item?.error||!item?.data||!Array.isArray(item.counts))continue;
@@ -35,7 +35,7 @@ async function prepareEmptyRules(list){
   }
   return{backups,total};
 }
-function restore(backups){for(const b of backups||[]){b.item.data=b.data;for(const x of b.counts)x.r.count=x.count}}
+export function restoreEmptyRules(backups){for(const b of backups||[]){b.item.data=b.data;for(const x of b.counts)x.r.count=x.count}}
 
 export async function runFallback(){
   const list=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];
@@ -50,5 +50,5 @@ export async function runFallback(){
     if(stat&&prepared.total){const n=Number(stat.textContent||0);if(Number.isFinite(n))stat.textContent=String(n+prepared.total)}
     window.__emptyReplacementApply={version:1,prepared:prepared.total,complete:true};
     return result;
-  }finally{restore(prepared.backups)}
+  }finally{restoreEmptyRules(prepared.backups)}
 }
