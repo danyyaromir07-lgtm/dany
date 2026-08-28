@@ -1,0 +1,25 @@
+// Additive empty-replacement fallback that mirrors flexible analysis normalization across Tj literals.
+// It removes only the exact normalized match span, even when the match crosses literal boundaries.
+import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
+import { editDoc as editV12 } from './text-editor-v67-direct-v12.js?v=20260828-fillsignobject1';
+
+const FLEX=/[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000‐‑‒–—−-]/u;
+const U=b=>b?.asUint8Array?.()||b;
+const bytes=b=>{const u=U(b);return u instanceof Uint8Array?new Uint8Array(u):new Uint8Array(u||0)};
+const A=b=>{const u=U(b);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode(...u.subarray(i,Math.min(u.length,i+0x8000)));return s};
+const ascii=s=>new TextEncoder().encode(String(s));
+const resolve=o=>{try{return o?.resolve?.()||o}catch(_){return o}};
+function streamRef(o){try{if(o?.isStream?.())return o;const r=resolve(o);return r?.isStream?.()?r:null}catch(_){return null}}
+function allStreams(doc){const out=[];let n=0;try{n=Number(doc.countObjects?.()||0)}catch(_){return out}for(let xref=1;xref<n;xref++){let st=null;try{st=streamRef(doc.newIndirect(xref,0))}catch(_){continue}if(st)out.push(st)}return out}
+function scanLiteral(s,i){let dep=1,j=i+1;while(j<s.length&&dep){if(s[j]==='\\'){j++;if(j<s.length&&s[j]==='\r'){j++;if(s[j]==='\n')j++}else if(j<s.length&&s[j]==='\n')j++;else j++;continue}if(s[j]==='(')dep++;else if(s[j]===')')dep--;j++}return dep===0?j:-1}
+function literalMap(raw,tokenStart,tokenIndex){const chars=[];for(let i=1;i<raw.length-1;){let rs=i,c=raw.charCodeAt(i)&255,emit=null;if(c!==92){emit=new TextDecoder('windows-1252').decode(new Uint8Array([c]));i++}else{const slash=i;i++;if(i>=raw.length-1)break;c=raw.charCodeAt(i)&255;if(c===13){i++;if(i<raw.length-1&&raw.charCodeAt(i)===10)i++;continue}if(c===10){i++;continue}if(c===110){emit='\n';i++}else if(c===114){emit='\r';i++}else if(c===116){emit='\t';i++}else if(c===98){emit='\b';i++}else if(c===102){emit='\f';i++}else if(c===40||c===41||c===92){emit=String.fromCharCode(c);i++}else if(c>=48&&c<=55){let v=c-48;i++;for(let q=0;q<2&&i<raw.length-1;q++){const d=raw.charCodeAt(i)&255;if(d<48||d>55)break;v=v*8+d-48;i++}emit=new TextDecoder('windows-1252').decode(new Uint8Array([v&255]))}else{emit=new TextDecoder('windows-1252').decode(new Uint8Array([c]));i++}rs=slash}if(emit!=null)chars.push({ch:emit,start:tokenStart+rs,end:tokenStart+i,tokenIndex})}return chars}
+function tjLiterals(text){const out=[];let i=0,idx=0;while(i<text.length){if(text[i]!=='('){i++;continue}const end=scanLiteral(text,i);if(end<0)break;let j=end;while(j<text.length&&/\s/.test(text[j]))j++;if(text.slice(j,j+2)==='Tj')out.push({start:i,end,chars:literalMap(text.slice(i,end),i,idx++)});i=end}return out}
+function buildKey(tokens){let key='',map=[];for(const t of tokens)for(const c of t.chars)if(!FLEX.test(c.ch)){key+=c.ch;map.push(c)}return{key,map}}
+function targetKey(s){let out='';for(const ch of String(s||''))if(!FLEX.test(ch))out+=ch;return out}
+function rangesForMatch(map,start,len){const byToken=new Map();for(let i=start;i<start+len;i++){const m=map[i];if(!m)continue;const cur=byToken.get(m.tokenIndex);if(!cur)byToken.set(m.tokenIndex,[m.start,m.end]);else{cur[0]=Math.min(cur[0],m.start);cur[1]=Math.max(cur[1],m.end)}}return [...byToken.values()]}
+function patch(text,ranges){ranges.sort((a,b)=>b[0]-a[0]);let out=text;for(const [s,e] of ranges)out=out.slice(0,s)+out.slice(e);return out}
+function inspect(doc,find,apply=false){const tk=targetKey(find);if(!tk)return 0;let total=0;const writes=[];for(const st of allStreams(doc)){let text='';try{text=A(st.readStream())}catch(_){continue}if(!text.includes('Tj'))continue;const toks=tjLiterals(text);if(!toks.length)continue;const km=buildKey(toks);let p=0,ranges=[];while((p=km.key.indexOf(tk,p))>=0){total++;if(apply)ranges.push(...rangesForMatch(km.map,p,tk.length));p+=Math.max(1,tk.length)}if(apply&&ranges.length)writes.push({st,text:patch(text,ranges)})}if(apply)for(const w of writes)w.st.writeStream(ascii(w.text));return total}
+function snapshot(doc){return bytes(doc.saveToBuffer('garbage=0,compress=yes,appearance=yes'))}
+function trial(pristine,find){let d=null,re=null;try{d=mupdf.PDFDocument.openDocument(pristine,'application/pdf');const old=inspect(d,find,false);if(!old)return 0;const n=inspect(d,find,true);if(n!==old)return 0;re=mupdf.PDFDocument.openDocument(snapshot(d),'application/pdf');const after=inspect(re,find,false);return n>0&&old-after===n?n:0}catch(_){return 0}finally{try{re?.destroy()}catch(_){}try{d?.destroy()}catch(_){}}}
+export function editDoc(doc,find,replace){const first=Number(editV12(doc,find,replace)||0);if(first>0||String(replace??'')!=='')return first;if(!String(find||'').trim())return 0;let pristine;try{pristine=snapshot(doc)}catch(_){return 0}const expected=trial(pristine,find);if(expected<=0)return 0;try{const real=inspect(doc,find,true);return real===expected?real:0}catch(_){return 0}}
+if(typeof window!=='undefined')window.__textEditorEmptyFlexV14={version:'v14-flex-tj-empty1'};
