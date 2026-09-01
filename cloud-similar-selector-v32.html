@@ -1,0 +1,25 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v32</title></head><body><script type="module">
+const origFetch=window.fetch;
+window.fetch=async function(input,init){
+  const u=String(input);
+  if(u.includes('cloud-similar-selector-v24.html')){
+    const rr=await origFetch(input,init), txt=await rr.text();
+    let x=txt;
+    const marker="if(path&&(op==='S'||op==='s'))";
+    const reset="if(['n','f','F','f*','B','B*','b','b*'].includes(op))path=null;clear()";
+    if(x.includes(marker)&&x.includes(reset)){
+      x=x.replace(marker,"if(path&&['S','s','B','B*','b','b*'].includes(op))")
+         .replace(reset,"if(['n','f','F','f*'].includes(op))path=null;clear()");
+    }
+    const close='</script>';
+    const diag=`\nfunction __diagForms(page){const out={forms:0,strokes:0,names:[],error:''};try{const po=resolve(page.getObject()),res=resolve(po?.get?.('Resources')),root=resolve(res?.get?.('XObject'));if(!root)return out;const seen=new Set();const walk=(dict,depth)=>{if(!dict||depth>4)return;try{dict.forEach((value,key)=>{const o=resolve(value);if(!o)return;let id='';try{id=String(o)}catch(_){}if(id&&seen.has(id))return;if(id)seen.add(id);let sub='';try{sub=String(resolve(o.get?.('Subtype')))}catch(_){}if(sub.includes('Form')&&o.isStream?.()){out.forms++;out.names.push(String(key));try{const text=latin(o.readStream()),ss=scan(text);out.strokes+=ss.length}catch(_){}try{const rr=resolve(o.get?.('Resources')),xx=resolve(rr?.get?.('XObject'));if(xx)walk(xx,depth+1)}catch(_){}}})}catch(e){out.error=e?.message||String(e)}};walk(root,0)}catch(e){out.error=e?.message||String(e)}return out}\nconst __diagBtn=document.createElement('button');__diagBtn.id='diagx';__diagBtn.textContent='Diagnóstico estructura';document.querySelector('.top')?.appendChild(__diagBtn);__diagBtn.addEventListener('click',()=>{try{if(!doc){status.textContent='Abre un PDF primero.';return}const p=doc.loadPage(0),d=__diagForms(p);p.destroy?.();status.textContent=(status.textContent?status.textContent+' · ':'')+'DIAG XObject: forms='+d.forms+' · trazos='+d.strokes+(d.names.length?' · '+d.names.slice(0,8).join(', '):'')+(d.error?' · error='+d.error:'')}catch(e){status.textContent=(status.textContent?status.textContent+' · ':'')+'DIAG XObject falló: '+e.message}});\n`;
+    if(x.includes(close)) x=x.replace(close,diag+close);
+    x=x.replace(/Selector de nubes v24/g,'Selector de nubes v32');
+    return new Response(x,{status:rr.status,statusText:rr.statusText,headers:rr.headers});
+  }
+  return origFetch(input,init);
+};
+const r=await origFetch('./cloud-similar-selector-v25.html?v=20260901-visualfirst1',{cache:'no-store'});let h=await r.text();
+h=h.replace(/Selector de nubes v25/g,'Selector de nubes v32').replace('v25 · selección visual primero; mapeo estructural después.','v32 · selección estable + diagnóstico XObject independiente.');
+document.open();document.write(h);document.close();
+</script></body></html>
