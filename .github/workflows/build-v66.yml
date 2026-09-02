@@ -1,0 +1,112 @@
+name: build-v66
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.ref == 'refs/heads/candidate/v66-single-serialization'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/v66-single-serialization
+      - name: Generate and validate v66
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          core=Path('cloud-similar-selector-v65-core.html').read_text()
+          core=core.replace('Selector de nubes v65 · verificación con copia control','Selector de nubes v66 · copia directa y verificación exacta')
+          core=core.replace('v65 · interfaz profesional · multirruta · verificación contra copia control serializada.','v66 · interfaz profesional · multirruta · copia directa de bytes · verificación exacta.')
+          core=core.replace('let doc=null,handle=null,baseUrl=null,detailUrl=null,','let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,')
+          old="async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile();try{doc?.destroy?.()}catch(_){}doc=mupdf.PDFDocument.openDocument(new Uint8Array(await f.arrayBuffer()),'application/pdf');handle=h;pending=false;await renderPage()}"
+          new="async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile(),bytes=new Uint8Array(await f.arrayBuffer());try{doc?.destroy?.()}catch(_){}activeBytes=bytes;doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');handle=h;pending=false;await renderPage()}"
+          assert old in core
+          core=core.replace(old,new)
+          a=core.index('async function removeGroup(){')
+          b=core.index("$('#open').addEventListener",a)
+          new_remove=r'''async function removeGroup(){
+ if(!doc||!model||!activeBytes||!selectionMapSafe||!visualSelected.length)return;
+ if(model.incomplete){status.textContent='Borrado bloqueado: el recorrido de streams internos quedó incompleto.';return}
+ const beforeVisual=classicVisual.length,beforeStruct=model.strokes.length,selectedVisual=visualSelected.length;
+ const expected=new Map();for(const v of classicVisual){if(visualSelected.includes(v))continue;const k=sig(v);expected.set(k,(expected.get(k)||0)+1)}
+ const bagOK=a=>{if(a.length!==beforeVisual-selectedVisual)return false;const b=new Map();for(const v of a){const k=sig(v);b.set(k,(b.get(k)||0)+1)}if(b.size!==expected.size)return false;for(const[k,n]of expected)if(b.get(k)!==n)return false;return true};
+ const routes=[],keys=new Set();for(const r of [structSelected,...selectionAlternatives]){if(!r||r.length!==selectedVisual)continue;const idx=r.map(x=>model.strokes.indexOf(x));if(idx.some(i=>i<0)||new Set(idx).size!==idx.length)continue;const k=idx.join(',');if(keys.has(k))continue;keys.add(k);routes.push(idx)}
+ if(!routes.length){status.textContent='Borrado bloqueado: no hay correspondencias estructurales completas para la selección azul.';return}
+ const outBase=new Uint8Array(activeBytes),lastStage={message:'ninguna correspondencia superó la verificación exacta'};
+ async function attempt(selectedIdx,number){let work=null,wp=null,check=null,cp=null;try{
+   work=mupdf.PDFDocument.openDocument(outBase,'application/pdf');wp=work.loadPage(0);
+   const baselineVisual=collectVisual(wp),wm=deepModel(wp);
+   if(baselineVisual.length!==beforeVisual)throw new Error('la copia directa no reproduce el mismo número de trazos visuales ('+beforeVisual+' → '+baselineVisual.length+')');
+   if(!wm||wm.incomplete||wm.strokes.length!==beforeStruct)throw new Error('el modelo profundo de la copia directa no coincide con el modelo activo');
+   const targets=selectedIdx.map(i=>wm.strokes[i]);if(targets.some(x=>!x||x.editable===false))throw new Error('hay operadores candidatos no editables con seguridad');
+   const selectedBySource=new Map(),allBySource=new Map();for(const t of targets)(selectedBySource.get(t.sourceKey)||selectedBySource.set(t.sourceKey,[]).get(t.sourceKey)).push(t);for(const q of wm.strokes)(allBySource.get(q.sourceKey)||allBySource.set(q.sourceKey,[]).get(q.sourceKey)).push(q);for(const[k,a]of selectedBySource){const all=allBySource.get(k)||[];if(a.length!==all.length)throw new Error('XObject compartido: un operador candidato también produce geometría no seleccionada')}
+   const edits=new Map();for(const t of targets){const k=deepKey(t.sourceRef)+'|'+t.start+'|'+t.end;if(!edits.has(k))edits.set(k,{ref:t.sourceRef,refKey:deepKey(t.sourceRef),start:t.start,end:t.end})}
+   const byRef=new Map();for(const e of edits.values())(byRef.get(e.refKey)||byRef.set(e.refKey,{ref:e.ref,ranges:[]}).get(e.refKey)).ranges.push([e.start,e.end]);
+   let touched=0;for(const g of byRef.values()){
+     const original=latin(g.ref.readStream());let expectedText=original;
+     for(const[a,b]of g.ranges.sort((A,B)=>B[0]-A[0])){if(a<0||b>expectedText.length||a>=b)throw new Error('rango local inválido en stream interno');expectedText=expectedText.slice(0,a)+expectedText.slice(b)}
+     g.ref.writeStream(raw(expectedText));
+     const reread=latin(g.ref.readStream());if(reread!==expectedText)throw new Error('la edición del stream no coincide byte por byte con original menos operadores seleccionados');
+     touched++
+   }
+   if(!touched)throw new Error('no se encontró ningún stream editable');
+   wp.destroy?.();wp=work.loadPage(0);const previewVisual=collectVisual(wp),previewModel=deepModel(wp);
+   if(!previewModel||previewModel.incomplete||previewModel.strokes.length!==beforeStruct-selectedIdx.length)throw new Error('la vista previa estructural no equivale a original menos operadores seleccionados');
+   if(!bagOK(previewVisual))throw new Error('antes de guardar, la geometría editada no coincide exactamente con original menos azul');
+   const outBuf=work.saveToBuffer('garbage=4,compress=yes,appearance=yes'),out=new Uint8Array(U(outBuf));wp.destroy?.();wp=null;work.destroy();work=null;
+   check=mupdf.PDFDocument.openDocument(out,'application/pdf');cp=check.loadPage(0);const afterVisual=collectVisual(cp),am=deepModel(cp);
+   if(!am||am.incomplete||am.strokes.length!==beforeStruct-selectedIdx.length)throw new Error('después de guardar, el modelo estructural cambió inesperadamente');
+   if(!bagOK(afterVisual))throw new Error('después de guardar, la geometría ya no coincide exactamente con original menos azul');
+   return{out,touched,number}
+ }finally{try{cp?.destroy?.()}catch(_){}try{check?.destroy?.()}catch(_){}try{wp?.destroy?.()}catch(_){}try{work?.destroy?.()}catch(_){}}}
+ for(let i=0;i<routes.length;i++){status.textContent='Verificando eliminación exacta · correspondencia '+(i+1)+'/'+routes.length+' · '+selectedVisual+' trazos azules…';try{const ok=await attempt(routes[i],i+1);if(ok){activeBytes=ok.out;doc.destroy();doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+selectedVisual+' trazos azules · correspondencia '+ok.number+'/'+routes.length+' · '+ok.touched+' stream(s). Puedes continuar o guardar.';return}}catch(e){lastStage.message=e.message}}
+ status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) · '+lastStage.message
+}
+'''
+          core=core[:a]+new_remove+core[b:]
+          oldsave="const b=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');await w.write(new Uint8Array(U(b)));"
+          newsave="if(!activeBytes)throw new Error('No hay una copia activa del PDF para guardar.');await w.write(activeBytes);"
+          assert oldsave in core
+          core=core.replace(oldsave,newsave)
+          Path('cloud-similar-selector-v66-core.html').write_text(core)
+          wrap=Path('cloud-similar-selector-v65.html').read_text()
+          wrap=wrap.replace('Selector de nubes v65 · verificación con copia control','Selector de nubes v66 · copia directa + metadatos')
+          wrap=wrap.replace('cloud-similar-selector-v65-core.html?v=20260902-control1','cloud-similar-selector-v66-core.html?v=20260902-direct1')
+          wrap=wrap.replace("console.error('v62 batch hooks'","console.error('v66 batch hooks'")
+          wrap=wrap.replace('.fileName{font-weight:700!important}', '.fileName{font-weight:700!important}.fileInfo{min-width:0;display:grid;gap:4px}.fileMeta{font-size:11px;color:#8298ae;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}')
+          wrap=wrap.replace("let entries=[],activeIndex=-1,queuedHandle=null,child=null,childDoc=null,saveObserver=null,nativeChildPicker=null,switchSerial=0;", "let entries=[],activeIndex=-1,queuedHandle=null,child=null,childDoc=null,saveObserver=null,nativeChildPicker=null,switchSerial=0;const mupdfMetaPromise=import('https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js');const fmtBytes=n=>{if(!Number.isFinite(n))return'—';const u=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return(v>=100||i===0?Math.round(v):v.toFixed(1))+' '+u[i]};")
+          oldrender="const name=document.createElement('span');name.className='fileName';name.textContent=entry.name;const state=document.createElement('span');state.className='fileState '+stateClass(entry.state);state.textContent=entry.state;row.append(name,state);"
+          newrender="const info=document.createElement('span');info.className='fileInfo';const name=document.createElement('span');name.className='fileName';name.textContent=entry.name;const meta=document.createElement('span');meta.className='fileMeta';meta.textContent=(entry.pages==null?'… páginas':entry.pages+' página'+(entry.pages===1?'':'s'))+' · '+fmtBytes(entry.size);info.append(name,meta);const state=document.createElement('span');state.className='fileState '+stateClass(entry.state);state.textContent=entry.state;row.append(info,state);"
+          assert oldrender in wrap
+          wrap=wrap.replace(oldrender,newrender)
+          oldbadge="const n=String(name||'—');badge.textContent='Archivo: '+n;badge.title=n"
+          newbadge="const n=String(name||'—'),e=activeIndex>=0?entries[activeIndex]:null,m=e?(' · '+(e.pages==null?'… pág.':e.pages+' pág.')+' · '+fmtBytes(e.size)):'';badge.textContent='Archivo: '+n+m;badge.title=n+m"
+          assert oldbadge in wrap
+          wrap=wrap.replace(oldbadge,newbadge)
+          oldbatch="entries=handles.map(h=>({handle:h,name:h.name||'PDF sin nombre',state:'Sin abrir'}));activeIndex=-1;queuedHandle=null;searchEl.value='';renderList();await activate(0)"
+          newbatch="entries=handles.map(h=>({handle:h,name:h.name||'PDF sin nombre',state:'Sin abrir',size:null,pages:null}));activeIndex=-1;queuedHandle=null;searchEl.value='';renderList();await activate(0);hydrateMetadata()"
+          assert oldbatch in wrap
+          wrap=wrap.replace(oldbatch,newbatch)
+          marker="batchBtn.addEventListener('click',loadBatch);"
+          meta_func="async function hydrateMetadata(){let mupdf=null;try{mupdf=await mupdfMetaPromise}catch(_){return}for(let i=0;i<entries.length;i++){const e=entries[i];try{const f=await e.handle.getFile();e.size=f.size;const bytes=new Uint8Array(await f.arrayBuffer()),d=mupdf.PDFDocument.openDocument(bytes,'application/pdf');e.pages=Number(d.countPages?.()||0);d.destroy?.()}catch(_){e.pages=e.pages??null}renderList();if(i===activeIndex)setChildFileName(e.name)}}\n"
+          wrap=wrap.replace(marker,meta_func+marker)
+          Path('cloud-similar-selector-v66.html').write_text(wrap)
+          scripts=re.findall(r'<script type="module">(.*?)</script>',core,re.S);assert len(scripts)==1
+          Path('/tmp/v66.mjs').write_text(scripts[0])
+          plain=re.findall(r'<script>(.*?)</script>',wrap,re.S);assert plain
+          Path('/tmp/v66-wrapper.js').write_text('\n'.join(plain))
+          assert 'activeBytes=ok.out' in core and 'await w.write(activeBytes)' in core
+          assert 'antes de guardar' in core and 'después de guardar' in core
+          assert 'hydrateMetadata' in wrap and 'countPages' in wrap and 'fmtBytes' in wrap
+          assert 'cloud-similar-selector-v66-core.html?v=20260902-direct1' in wrap
+          PY
+          node --check /tmp/v66.mjs
+          node --check /tmp/v66-wrapper.js
+          rm .github/workflows/build-v66.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloud-similar-selector-v66-core.html cloud-similar-selector-v66.html .github/workflows/build-v66.yml
+          git commit -m "Add v66 direct-byte deletion and PDF metadata"
+          git push origin HEAD:candidate/v66-single-serialization
