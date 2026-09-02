@@ -1,0 +1,19 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v58 · selección estable v56</title></head><body><script type="module">
+const r=await fetch('./cloud-similar-selector-v51-core.html?v=20260902-multistream-safe2',{cache:'no-store'});
+let src=await r.text();
+const marker="h=h.slice(0,rma)+rm+h.slice(rmb);";
+if(!src.includes(marker))throw new Error('v58: no pude localizar el punto posterior al borrado v51.');
+const patch=`
+const v58OldSave="$('#save').addEventListener('click',async()=>{if(!handle||!pending||!doc)return;try{const b=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes'),w=await handle.createWritable();await w.write(new Uint8Array(U(b)));await w.close();pending=false;setButtons();status.textContent='Cambios guardados sobre el archivo original.'}catch(e){status.textContent='Error al guardar: '+e.message}});";
+const v58NewSave="$('#save').addEventListener('click',async()=>{if(!handle||!pending||!doc)return;let w=null;try{w=await handle.createWritable();const b=doc.saveToBuffer('garbage=4,compress=yes,appearance=yes');await w.write(new Uint8Array(U(b)));await w.close();w=null;pending=false;setButtons();status.textContent='Cambios guardados sobre el archivo original.'}catch(e){try{await w?.abort?.()}catch(_){}status.textContent='Error al guardar: '+e.message}});";
+if(!h.includes(v58OldSave))throw new Error('v58: no pude localizar el guardado estable.');
+h=h.replace(v58OldSave,v58NewSave);
+const v58Click="overlay.addEventListener('click',chooseClassic);";
+if(!h.includes(v58Click))throw new Error('v58: no pude localizar el enlace del selector clásico.');
+const v58Translator=\`function v58Compatible(v,s){if(colorDist(v.rgb,s.rgb)>.035)return false;const wt=Math.max(.06,Math.abs(Number(v.width||0))*.22);if(Math.abs(Number(s.width||0)-Number(v.width||0))>wt)return false;if((v.curves>0)!==(s.curves>0)||(v.lines>0)!==(s.lines>0))return false;const tol=Math.max(2,Math.ceil(Number(v.segs||0)*.45));return Math.abs(Number(s.segs||0)-Number(v.segs||0))<=tol}\nfunction v58MapBlue(){if(!visualSelected.length)return;if(!model?.strokes?.length){structSelected=[];selectionMapSafe=false;setButtons();status.textContent='Selección azul conservada · borrado bloqueado: no hay operadores estructurales.';return}let mapped=[];const used=new Set();if(classicVisual.length===model.strokes.length){for(const v of visualSelected){const i=classicVisual.indexOf(v),s=i>=0?model.strokes[i]:null;if(!s||used.has(s)){mapped=[];break}used.add(s);mapped.push(s)}}else{for(const v of visualSelected){const vv=classicVisual.filter(x=>v58Compatible(v,x)),ss=model.strokes.filter(x=>v58Compatible(v,x));if(!vv.length||vv.length!==ss.length){mapped=[];break}const i=vv.indexOf(v),s=i>=0?ss[i]:null;if(!s||used.has(s)){mapped=[];break}used.add(s);mapped.push(s)}}if(mapped.length!==visualSelected.length){structSelected=[];selectionMapSafe=false;setButtons();status.textContent='Selección azul conservada · resaltados='+visualSelected.length+' · operadores=0 · borrado bloqueado: no existe traducción ordinal local 1:1 completa y única.';return}structSelected=mapped;selectionMapSafe=true;setButtons();const mode=classicVisual.length===model.strokes.length?'ordinal global 1:1':'ordinal local 1:1';status.textContent=status.textContent.replace(/ · LISTO PARA ELIMINAR(?: GRUPO)?| · borrado bloqueado:[^·]*/g,'')+' · v58 mapeo='+mode+' · operadores='+structSelected.length+' · LISTO PARA ELIMINAR'}\`;
+h=h.replace(v58Click,v58Translator+'\\n'+"overlay.addEventListener('click',e=>{chooseClassic(e);v58MapBlue()});");
+`;
+src=src.replace(marker,marker+JSON.stringify(patch).slice(1,-1));
+src=src.replace(/Selector de nubes v51/g,'Selector de nubes v58');
+document.open();document.write(src);document.close();
+</script></body></html>
