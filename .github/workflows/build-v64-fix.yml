@@ -1,0 +1,54 @@
+name: build-v64-fix
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.ref == 'refs/heads/candidate/v64-multiroute-transaction'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/v64-multiroute-transaction
+      - name: Fix generator, build and validate v64
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          y=Path('.github/workflows/build-v64.yml').read_text()
+          marker="cat > /tmp/build_v64.py <<'PY'\n"
+          a=y.index(marker)+len(marker)
+          b=y.index("\n          PY",a)
+          lines=y[a:b].splitlines()
+          code='\n'.join((line[10:] if line.startswith('          ') else line) for line in lines)
+          bad="status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) y ninguna pasó la verificación geométrica exacta · '+lastError}\\n}\\n\"\"\""
+          good="status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) y ninguna pasó la verificación geométrica exacta · '+lastError}\\n\"\"\""
+          assert bad in code
+          code=code.replace(bad,good)
+          Path('/tmp/build_v64.py').write_text(code)
+          PY
+          python /tmp/build_v64.py
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          core=Path('cloud-similar-selector-v64-core.html').read_text()
+          scripts=re.findall(r'<script type="module">(.*?)</script>',core,re.S)
+          assert len(scripts)==1
+          Path('/tmp/v64.mjs').write_text(scripts[0])
+          wrap=Path('cloud-similar-selector-v64.html').read_text()
+          plain=re.findall(r'<script>(.*?)</script>',wrap,re.S)
+          assert plain
+          Path('/tmp/v64-wrapper.js').write_text('\n'.join(plain))
+          assert 'selectionAlternatives' in core
+          assert 'spatialRoute' in core
+          assert 'se probaron ' in core
+          assert 'cloud-similar-selector-v64-core.html?v=20260902-multiroute1' in wrap
+          PY
+          node --check /tmp/v64.mjs
+          node --check /tmp/v64-wrapper.js
+          rm .github/workflows/build-v64.yml .github/workflows/build-v64-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloud-similar-selector-v64-core.html cloud-similar-selector-v64.html .github/workflows/build-v64.yml .github/workflows/build-v64-fix.yml
+          git commit -m "Add v64 transactional multi-route deletion"
+          git push origin HEAD:candidate/v64-multiroute-transaction
