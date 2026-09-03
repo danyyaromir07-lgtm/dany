@@ -1,0 +1,44 @@
+name: Safe selector performance cache
+on:
+  push:
+    branches:
+      - candidate/selector-idle-cache
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-idle-cache
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply safe cache patch
+        run: python3 tmp-safe-perf-cache.py
+      - name: Syntax and invariant checks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text(encoding='utf-8')
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1),encoding='utf-8')
+          assert 'function strokeIndexOf' in s
+          assert 'new Set(visualSelected)' in s
+          assert 'function mapBlue(vs,blocked=[])' in s
+          assert 'bagOK' in s
+          assert 'strokeEditRanges' in s
+          assert 'Búsqueda causal dirigida' in s
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Cache exact lookup indexes without changing mapping' || exit 0
+          git push origin HEAD:candidate/selector-idle-cache
