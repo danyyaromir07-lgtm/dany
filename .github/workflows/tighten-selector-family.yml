@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           import re
           s=Path('selector-nubes-multistream-core.html').read_text()
-          m=re.search(r'<script type="module">(.*)</script>',s,re.S)
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
           if not m: raise SystemExit('module script not found')
           js=m.group(1)
           js=re.sub(r"^import \* as mupdf from .*?;\s*", "const mupdf={};\n", js, count=1)
