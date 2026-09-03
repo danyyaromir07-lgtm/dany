@@ -87,7 +87,7 @@ async function mapBlueResponsive(vs,blocked=[]){
  if(!vs.length)return{items:[],alternatives:[],mode:'sin selección'};
  const used=new Set(blocked),m=model.strokes.length,n=Math.max(1,classicVisual.length);
  if(m<vs.length+used.size)return{items:[],alternatives:[],mode:'menos operadores estructurales que trazos azules'};
- if(m<6000&&vs.length<220){await uiYield();return mapBlue(vs,blocked)}
+ const classicWork=m*vs.length;if(classicWork<=12_000_000){await uiYield();return mapBlue(vs,blocked)}
  const ix=buildStructIndex(),passes=[48,112,240],lastProgress={t:0};
  async function pulse(text,force=false){const now=performance.now();if(force||now-lastProgress.t>=120){lastProgress.t=now;status.textContent=text;await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)))}}
  for(let pi=0;pi<passes.length;pi++){
