@@ -1,0 +1,55 @@
+name: Adaptive selector routing
+on:
+  push:
+    branches:
+      - candidate/selector-adaptive-routing
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-adaptive-routing
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch adaptive routing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text(encoding='utf-8')
+          old="if(m<6000&&vs.length<220){await uiYield();return mapBlue(vs,blocked)}"
+          new="const classicWork=m*vs.length;if(classicWork<=12_000_000){await uiYield();return mapBlue(vs,blocked)}"
+          if old not in s:
+              raise SystemExit('adaptive routing target not found')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Syntax and invariant checks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text(encoding='utf-8')
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/adaptive.mjs').write_text(m.group(1),encoding='utf-8')
+          assert 'classicWork=m*vs.length' in s
+          assert 'classicWork<=12_000_000' in s
+          assert 'buildStructIndex' in s
+          assert 'Búsqueda causal dirigida' in s
+          assert 'bagOK' in s
+          assert 'strokeEditRanges' in s
+          PY
+          node --check /tmp/adaptive.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Route medium PDFs through proven classic mapper' || exit 0
+          git push origin HEAD:candidate/selector-adaptive-routing
