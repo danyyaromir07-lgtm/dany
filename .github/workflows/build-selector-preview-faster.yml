@@ -1,0 +1,42 @@
+name: Build selector preview faster
+on:
+  push:
+    branches:
+      - candidate/selector-preview-faster
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch generated pages
+        run: python tmp-build-preview-faster.py
+      - name: Syntax check module script
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text(encoding='utf-8')
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m, 'module script missing'
+          Path('/tmp/selector-preview-faster.mjs').write_text(m.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/selector-preview-faster.mjs
+      - name: Verify optimizations
+        run: |
+          grep -q 'maxPixels=2_000_000' selector-nubes-multistream-core.html
+          grep -q 'requestIdleCallback(()=>scheduleSharp(80)' selector-nubes-multistream-core.html
+          grep -q 'getMupdfMeta' selector-fast.html
+          grep -q 'timeout:6000' selector-fast.html
+          grep -q 'previewfast2' selector-fast.html
+      - name: Commit generated files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html selector-fast.html
+          git commit -m 'Reduce preview startup cost for heavy PDFs' || exit 0
+          git push
