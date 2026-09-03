@@ -1,0 +1,25 @@
+name: build-selector-responsive-delete
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-adaptive-k
+      - name: Generate responsive exact delete viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-responsive-delete.py
+          node --check /tmp/selector-nubes-fluido.mjs
+          grep -q 'monotónica fluida' selector-nubes-fluido-core.html
+          grep -q 'await mapBlueResponsive' selector-nubes-fluido-core.html
+          grep -q 'selector-nubes-fluido-core.html?v=20260903-fluiddelete1' selector-nubes-fluido.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-fluido-core.html selector-nubes-fluido.html
+          git commit -m 'Keep large delete mapping responsive'
+          git push origin HEAD:candidate/selector-adaptive-k
