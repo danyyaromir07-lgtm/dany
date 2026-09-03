@@ -1,0 +1,52 @@
+name: build-selector-globalmap2
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-globalmap2
+      - name: Generate broader global mapping viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp selector-nubes-global-core.html selector-nubes-global2-core.html
+          cp selector-nubes-global.html selector-nubes-global2.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-global2-core.html')
+          s=p.read_text()
+          s=s.replace('function spatialRoutes(vs,blocked=[],maxRoutes=12){','function spatialRoutes(vs,blocked=[],maxRoutes=24){',1)
+          s=s.replace('const used=new Set(blocked),m=model.strokes.length,K=56,lists=[];','const used=new Set(blocked),m=model.strokes.length,K=160,lists=[];',1)
+          old="if(!Number.isFinite(c)||c>2.6)continue;best.push({idx:si,s:st,score:c})"
+          new="if(!Number.isFinite(c))continue;best.push({idx:si,s:st,score:c})"
+          assert old in s
+          s=s.replace(old,new,1)
+          s=s.replace('spatialRoutes(vs,blocked,12)','spatialRoutes(vs,blocked,24)',1)
+          s=s.replace("mode:'multirruta global '+alternatives.length+' · principal='+principal+' · '+vs.length+'/'+vs.length","mode:'multirruta global amplia '+alternatives.length+' · principal='+principal+' · '+vs.length+'/'+vs.length",1)
+          p.write_text(s)
+          p=Path('selector-nubes-global2.html')
+          s=p.read_text()
+          s=s.replace('./selector-nubes-global-core.html?v=20260903-global1','./selector-nubes-global2-core.html?v=20260903-global2',1)
+          s=s.replace('Selector de nubes · mapeo global','Selector de nubes · mapeo global amplio',1)
+          p.write_text(s)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for f in ['selector-nubes-global2-core.html','selector-nubes-global2.html']:
+              for i,x in enumerate(re.findall(r'<script(?:\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+                  Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
+          PY
+          for f in /tmp/selector-nubes-global2-*.mjs; do node --check "$f"; done
+          grep -q 'K=160' selector-nubes-global2-core.html
+          grep -q 'maxRoutes=24' selector-nubes-global2-core.html
+          grep -q 'multirruta global amplia' selector-nubes-global2-core.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-global2-core.html selector-nubes-global2.html
+          git commit -m 'Add broader global mapping alternatives'
+          git push origin HEAD:candidate/selector-globalmap2
