@@ -1,0 +1,25 @@
+name: build-selector-instance-cow
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-instance-cow
+      - name: Generate exact instance-isolation viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-instance-cow.py
+          for f in /tmp/selector-nubes-instancia-*.mjs; do node --check "$f"; done
+          grep -q 'isolateInstanceStroke' selector-nubes-instancia-core.html
+          grep -q 'COPY-ON-WRITE' selector-nubes-instancia-core.html
+          grep -q 'selector-nubes-instancia-core.html?v=20260903-instance1' selector-nubes-instancia.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-instancia-core.html selector-nubes-instancia.html
+          git commit -m 'Isolate shared XObject instances for exact blue deletion'
+          git push origin HEAD:candidate/selector-instance-cow
