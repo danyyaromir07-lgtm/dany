@@ -1,0 +1,27 @@
+name: build-selector-causal-all
+on:
+  push:
+    branches: [candidate/selector-causal-all]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-causal-all
+      - name: Generate causal exact selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-causal-all.py
+          node --check /tmp/selector-nubes-causal.mjs
+          grep -q "async function buildCausalRoute(){return buildCausalRouteSmall()}" selector-nubes-causal-core.html
+          grep -q "causalHardLimit=2200" selector-nubes-causal-core.html
+          grep -q "selector-nubes-causal-core.html?v=20260903-causalall1" selector-nubes-causal.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-core.html selector-nubes-causal.html
+          git commit -m 'Use empirical causal mapping for large selections'
+          git push origin HEAD:candidate/selector-causal-all
