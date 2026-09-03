@@ -1,0 +1,48 @@
+name: build-selector-hd-whitefill
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-hd-whitefill
+      - name: Generate white-filled HD viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp selector-nubes-hd-persistente-core.html selector-nubes-hd-limpio-core.html
+          cp selector-nubes-hd-persistente.html selector-nubes-hd-limpio.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-hd-limpio-core.html')
+          s=p.read_text()
+          old="const pix=new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB,bbox,false);let dev=null;try{dev=new mupdf.DrawDevice(mupdf.Matrix.identity,pix);"
+          new="const pix=new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB,bbox,false);pix.clear(255);let dev=null;try{dev=new mupdf.DrawDevice(mupdf.Matrix.identity,pix);"
+          assert old in s, 'HD pixmap constructor not found'
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          p=Path('selector-nubes-hd-limpio.html')
+          s=p.read_text()
+          old='./selector-nubes-hd-persistente-core.html?v=20260903-racefix1'
+          assert old in s, 'wrapper core ref not found'
+          s=s.replace(old,'./selector-nubes-hd-limpio-core.html?v=20260903-whitefill1',1)
+          s=s.replace('Selector de nubes · HD persistente','Selector de nubes · HD limpio',1)
+          p.write_text(s)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for f in ['selector-nubes-hd-limpio-core.html','selector-nubes-hd-limpio.html']:
+              for i,x in enumerate(re.findall(r'<script(?:\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+                  Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
+          PY
+          for f in /tmp/selector-nubes-hd-limpio-*.mjs; do node --check "$f"; done
+          grep -q 'pix.clear(255)' selector-nubes-hd-limpio-core.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-hd-limpio-core.html selector-nubes-hd-limpio.html
+          git commit -m 'Add white-initialized HD preview'
+          git push origin HEAD:candidate/selector-hd-whitefill
