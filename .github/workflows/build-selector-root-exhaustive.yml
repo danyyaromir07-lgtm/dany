@@ -1,0 +1,24 @@
+name: build-selector-root-exhaustive
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-root-exhaustive
+      - name: Generate exact root exhaustive viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-root-exhaustive.py
+          node --check /tmp/selector-nubes-exacto.mjs
+          grep -q 'ROOT-CAUSAL-EXHAUSTIVO' selector-nubes-exacto-core.html
+          grep -q 'selector-nubes-exacto-core.html?v=20260903-rootall1' selector-nubes-exacto.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-exacto-core.html selector-nubes-exacto.html
+          git commit -m 'Search root operators exhaustively for exact blue deletion'
+          git push origin HEAD:candidate/selector-root-exhaustive
