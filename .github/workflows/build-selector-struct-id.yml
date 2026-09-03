@@ -1,0 +1,27 @@
+name: build-selector-struct-id
+on:
+  push:
+    branches: [candidate/selector-struct-id]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-struct-id
+      - name: Generate structural identity viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-struct-id.py
+          node --check /tmp/selector-nubes-identidad.mjs
+          grep -q 'function structStableKey' selector-nubes-identidad-core.html
+          grep -q 'remapStructTargets(activeTargets,wm)' selector-nubes-identidad-core.html
+          grep -q 'selector-nubes-identidad-core.html?v=20260903-structid1' selector-nubes-identidad.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-identidad-core.html selector-nubes-identidad.html
+          git commit -m 'Remap delete routes by stable structural identity'
+          git push origin HEAD:candidate/selector-struct-id
