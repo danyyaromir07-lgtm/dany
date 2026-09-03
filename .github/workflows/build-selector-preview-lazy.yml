@@ -1,0 +1,43 @@
+name: Build selector preview lazy
+on:
+  push:
+    branches: [candidate/selector-preview-lazy]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply preview optimizations
+        run: python tmp-build-preview-lazy.py
+      - name: Validate JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          w=Path('selector-fast.html').read_text()
+          m2=re.search(r'<script>(.*?)</script>',w,re.S)
+          assert m2
+          Path('/tmp/wrapper.js').write_text(m2.group(1))
+          assert 'Vista previa lista · preparando selección de arcos' in s
+          assert 'construyendo modelo estructural solo ahora' in s
+          assert 'annotateVisualComponents(classicVisual)' not in s
+          assert 'hydrateActivePageCount' in w
+          PY
+          node --check /tmp/core.mjs
+          node --check /tmp/wrapper.js
+      - name: Commit generated files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html selector-fast.html
+          git commit -m 'Show PDF preview before heavy analysis' || exit 0
+          git push
