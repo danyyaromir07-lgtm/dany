@@ -1,0 +1,24 @@
+name: build-selector-adaptive-k
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-adaptive-k
+      - name: Generate adaptive exact-blue viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-adaptive-k.py
+          node --check /tmp/selector-nubes-adaptativo.mjs
+          grep -q 'Math.ceil(vs.length\*1.2)+32' selector-nubes-adaptativo-core.html
+          grep -q 'selector-nubes-adaptativo-core.html?v=20260903-adaptive1' selector-nubes-adaptativo.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-adaptativo-core.html selector-nubes-adaptativo.html
+          git commit -m 'Make structural candidate pool adaptive to large selections'
+          git push origin HEAD:candidate/selector-adaptive-k
