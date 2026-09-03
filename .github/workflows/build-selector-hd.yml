@@ -1,0 +1,89 @@
+name: build-selector-hd
+on:
+  push:
+    branches: [candidate/selector-hd-tiles]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-hd-tiles
+      - name: Generate HiDPI preview variant
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+
+          core_src = Path('cloud-similar-selector-v68-core.html')
+          wrap_src = Path('selector-nubes.html')
+          assert core_src.exists() and wrap_src.exists()
+          core = core_src.read_text()
+          wrap = wrap_src.read_text()
+
+          # New files only. Existing public selector remains untouched.
+          wrap = wrap.replace('./cloud-similar-selector-v68-core.html?v=20260903-raster1', './selector-nubes-hd-core.html')
+          wrap = wrap.replace('Selector de nubes v68 · guardado incremental + metadatos', 'Selector de nubes · preview HiDPI')
+
+          css = '''<style id="hd-tile-css">
+          .detailTiles{position:absolute;inset:0;z-index:8;pointer-events:none;overflow:hidden}
+          .detailTile{position:absolute;display:block;max-width:none;max-height:none;pointer-events:none;image-rendering:auto;transform:none!important}
+          </style>'''
+          core = core.replace('</head>', css + '</head>', 1)
+          needle = '<img id="detail" class="detail" alt=""><canvas id="overlay" class="overlay"></canvas>'
+          repl = '<img id="detail" class="detail" alt=""><div id="detailTiles" class="detailTiles"></div><canvas id="overlay" class="overlay"></canvas>'
+          assert needle in core
+          core = core.replace(needle, repl, 1)
+
+          old_const = "const viewport=$('#viewport'),stage=$('#stage'),img=$('#page'),detail=$('#detail'),overlay=$('#overlay'),status=$('#status');"
+          new_const = "const viewport=$('#viewport'),stage=$('#stage'),img=$('#page'),detail=$('#detail'),detailTiles=$('#detailTiles'),overlay=$('#overlay'),status=$('#status');"
+          assert old_const in core
+          core = core.replace(old_const, new_const, 1)
+
+          old_schedule = "function scheduleSharp(delay=180){clearTimeout(sharpTimer);if(!doc||rendering)return;sharpTimer=setTimeout(()=>{if(doc&&!rendering)renderVisibleSharp()},delay)}"
+          new_schedule = "function scheduleSharp(delay=135){clearTimeout(sharpTimer);if(!doc)return;const run=()=>{if(!doc)return;if(rendering){sharpTimer=setTimeout(run,80);return}renderVisibleSharp()};sharpTimer=setTimeout(run,delay)}"
+          assert old_schedule in core
+          core = core.replace(old_schedule, new_schedule, 1)
+
+          old_clear = "function clearDetail(){detail.removeAttribute('src');detail.style.display='none';if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}"
+          new_clear = "const hdTileCache=new Map(),HD_CACHE_MAX=8;let hdGeneration=0;function hdCacheGet(k){const v=hdTileCache.get(k);if(!v)return null;hdTileCache.delete(k);hdTileCache.set(k,v);return v}function hdCachePut(k,url){if(hdTileCache.has(k)){const old=hdTileCache.get(k);if(old!==url)URL.revokeObjectURL(old);hdTileCache.delete(k)}hdTileCache.set(k,url);while(hdTileCache.size>HD_CACHE_MAX){const first=hdTileCache.keys().next().value,old=hdTileCache.get(first);hdTileCache.delete(first);try{URL.revokeObjectURL(old)}catch(_){}}}function clearDetail(){hdGeneration++;detail.removeAttribute('src');detail.style.display='none';detailTiles.replaceChildren();if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}"
+          assert old_clear in core
+          core = core.replace(old_clear, new_clear, 1)
+
+          new_render = r'''async function renderVisibleSharp(){if(!doc||rendering)return;rendering=true;const generation=++hdGeneration;try{const[x0,y0,x1,y1]=visibleBaseRect();if(x1<=x0||y1<=y0)throw new Error('La página está fuera del visor.');const p=doc.loadPage(0);try{const dpr=Math.min(2.5,window.devicePixelRatio||1),sharpness=1.45,ptW=Math.max(.001,(x1-x0)/baseRs),ptH=Math.max(.001,(y1-y0)/baseRs),areaPt=ptW*ptH,maxTotalPixels=18_000_000,desiredRs=baseRs*zoom*dpr*sharpness,useRs=Math.max(.55,Math.min(desiredRs,Math.sqrt(maxTotalPixels/Math.max(1,areaPt)))),tileMaxPx=2200,tileStepPt=tileMaxPx/useRs,px0=pageBounds[0]+x0/baseRs,py0=pageBounds[1]+y0/baseRs,px1=pageBounds[0]+x1/baseRs,py1=pageBounds[1]+y1/baseRs,ix0=Math.floor((px0-pageBounds[0])/tileStepPt),iy0=Math.floor((py0-pageBounds[1])/tileStepPt),ix1=Math.ceil((px1-pageBounds[0])/tileStepPt),iy1=Math.ceil((py1-pageBounds[1])/tileStepPt),frag=document.createDocumentFragment();let tiles=0;for(let iy=iy0;iy<iy1;iy++){for(let ix=ix0;ix<ix1;ix++){if(generation!==hdGeneration)return;let tx0=Math.max(px0,pageBounds[0]+ix*tileStepPt),ty0=Math.max(py0,pageBounds[1]+iy*tileStepPt),tx1=Math.min(px1,pageBounds[0]+(ix+1)*tileStepPt),ty1=Math.min(py1,pageBounds[1]+(iy+1)*tileStepPt);if(tx1<=tx0||ty1<=ty0)continue;const bbox=[Math.floor(tx0*useRs),Math.floor(ty0*useRs),Math.ceil(tx1*useRs),Math.ceil(ty1*useRs)],rw=bbox[2]-bbox[0],rh=bbox[3]-bbox[1];if(rw<=0||rh<=0)continue;const key=[useRs.toFixed(3),bbox.join(',')].join('|');let url=hdCacheGet(key);if(!url){const pix=new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB,bbox,false);let dev=null;try{dev=new mupdf.DrawDevice(mupdf.Matrix.identity,pix);p.run(dev,mupdf.Matrix.scale(useRs,useRs));try{dev.close?.()}catch(_){}const png=pix.asPNG();url=URL.createObjectURL(new Blob([png],{type:'image/png'}));hdCachePut(key,url)}finally{try{dev?.destroy?.()}catch(_){}try{pix.destroy?.()}catch(_){}}}if(generation!==hdGeneration)return;const ax0=bbox[0]/useRs,ay0=bbox[1]/useRs,aw=rw/useRs,ah=rh/useRs,t=document.createElement('img');t.className='detailTile';t.src=url;t.alt='';t.style.left=(panX+(ax0-pageBounds[0])*baseRs*zoom)+'px';t.style.top=(panY+(ay0-pageBounds[1])*baseRs*zoom)+'px';t.style.width=(aw*baseRs*zoom)+'px';t.style.height=(ah*baseRs*zoom)+'px';frag.appendChild(t);tiles++}}if(generation!==hdGeneration)return;detailTiles.replaceChildren(frag);drawSelection();if(!visualSelected.length)status.textContent='Preview HiDPI actualizado · '+tiles+' tile(s) · zoom '+Math.round(zoom*100)+'%.'}finally{try{p.destroy?.()}catch(_){}}}catch(e){if(generation===hdGeneration){detailTiles.replaceChildren();if(!visualSelected.length)status.textContent='No pude renderizar el preview HiDPI: '+e.message}}finally{rendering=false;setButtons()}}'''
+
+          pattern = r"async function renderVisibleSharp\(\)\{.*?\}\nasync function renderPage\(\)\{"
+          m = re.search(pattern, core, flags=re.S)
+          assert m, 'renderVisibleSharp block not found'
+          core = core[:m.start()] + new_render + "\nasync function renderPage(){" + core[m.end():]
+
+          # Keep functional core unchanged outside renderer-related symbols.
+          Path('selector-nubes-hd-core.html').write_text(core)
+          Path('selector-nubes-hd.html').write_text(wrap)
+
+          # Syntax-check scripts extracted from both files.
+          for fn in ['selector-nubes-hd-core.html','selector-nubes-hd.html']:
+              txt=Path(fn).read_text()
+              scripts=re.findall(r'<script(?:\s+type="module")?>(.*?)</script>',txt,re.S)
+              for i,s in enumerate(scripts):
+                  # Node cannot resolve browser import; syntax only via --check still accepts import in .mjs.
+                  p=Path(f'/tmp/{Path(fn).stem}-{i}.mjs'); p.write_text(s)
+                  subprocess.run(['node','--check',str(p)],check=True)
+          assert 'function chooseClassic' in core
+          assert 'async function removeGroup' in core
+          assert "const saveModes=['incremental','']" in core
+          assert 'detailPixelBudget=28_000_000' in core
+          assert 'hdTileCache' in core and 'HD_CACHE_MAX=8' in core
+          assert 'maxTotalPixels=18_000_000' in core and 'tileMaxPx=2200' in core
+          assert './selector-nubes-hd-core.html' in wrap
+          PY
+          git config user.name "danyyaromir07-lgtm"
+          git config user.email "dany.yaromir07@gmail.com"
+          git add selector-nubes-hd-core.html selector-nubes-hd.html
+          git commit -m "Add HiDPI tiled preview variant"
+          git rm .github/workflows/build-selector-hd.yml
+          git commit -m "Remove temporary HiDPI build workflow"
+          git push origin HEAD:candidate/selector-hd-tiles
