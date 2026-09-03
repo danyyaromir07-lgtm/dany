@@ -205,8 +205,8 @@ async function buildCausalRouteSmall(){
   if(initialMissing){
    const missingTargets=[];for(const k of missing.keys()){const a=visualBySig.get(k)||[];if(a.length)missingTargets.push(a[0])}
    const ranked=[];for(let idx=0;idx<cm.strokes.length;idx++){if(testedSet.has(idx))continue;const st=cm.strokes[idx];if(!st||st.editable===false)continue;let c=Infinity;for(const v of missingTargets)c=Math.min(c,alignCost(v,st));ranked.push({idx,c:Number.isFinite(c)?c:1e99});if(idx%48===0){status.textContent='Preparando búsqueda causal exhaustiva · '+idx+'/'+cm.strokes.length+' operadores revisados…';await uiYield()}}
-   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length;
-   for(let q=0;q<ranked.length;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal exhaustiva '+(q+1)+'/'+totalUnique+' operadores únicos');if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
+   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length,causalBudget=Math.min(totalUnique,Math.max(96,Math.min(320,initialMissing*32)));
+   for(let q=0;q<causalBudget;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal dirigida '+(q+1)+'/'+causalBudget+' mejores de '+totalUnique);if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
   }
   missing=deficits();let missingCount=[...missing.values()].reduce((a,b)=>a+b,0);const chosen=[],used=new Set();for(const[k,n]of need){const a=(bySig.get(k)||[]).filter(i=>!used.has(i));const take=Math.min(n,a.length);for(let q=0;q<take;q++){chosen.push(a[q]);used.add(a[q])}}
   const annotationPlans=[];let annotationTests=0,annotationCount=0,widgetCount=0;
