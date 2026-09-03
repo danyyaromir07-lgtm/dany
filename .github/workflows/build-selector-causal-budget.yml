@@ -1,0 +1,47 @@
+name: Build selector causal budget
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-preview-faster
+      - name: Patch bounded causal fallback
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old="""   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length;
+   for(let q=0;q<ranked.length;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal exhaustiva '+(q+1)+'/'+totalUnique+' operadores únicos');if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
+"""
+          new="""   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length,causalBudget=Math.min(totalUnique,Math.max(96,Math.min(320,initialMissing*32)));
+   for(let q=0;q<causalBudget;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal dirigida '+(q+1)+'/'+causalBudget+' mejores de '+totalUnique);if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
+"""
+          if old not in s:
+              raise SystemExit('target causal loop not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Syntax check
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/core.mjs').write_text(s[a:b])
+          assert 'causalBudget=Math.min(totalUnique' in s
+          assert 'Búsqueda causal dirigida' in s
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Bound exhaustive causal fallback on huge PDFs" || exit 0
+          git push origin HEAD:candidate/selector-preview-faster
