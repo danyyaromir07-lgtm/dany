@@ -1,0 +1,56 @@
+from pathlib import Path
+import re
+p=Path('selector-nubes-causal-core.html')
+# The workflow copies the diagnostic version first.
+s=p.read_text()
+old="const outBase=new Uint8Array(activeBytes),errors=[];let firstMismatchDiagnostic='';async function attempt(selectedIdx,number,saveMode)"
+helper="""const outBase=new Uint8Array(activeBytes),errors=[];let firstMismatchDiagnostic='',causalDiagnostic='';
+async function buildCausalRoute(){
+ const pool=[],poolSet=new Set();for(const rr of routes)for(const ii of rr)if(!poolSet.has(ii)){poolSet.add(ii);pool.push(ii)}
+ if(selectedVisual>600)throw new Error('selección demasiado grande para resolución causal acotada ('+selectedVisual+')');
+ if(pool.length>700)throw new Error('la unión causal supera el límite seguro de 700 operadores ('+pool.length+')');
+ let cw=null,cp=null;try{
+  cw=mupdf.PDFDocument.openDocument(outBase,'application/pdf');cp=cw.loadPage(0);const base=collectVisual(cp),baseSigs=base.map(sig),cm=deepModel(cp);
+  if(base.length!==beforeVisual||!cm||cm.incomplete||cm.strokes.length!==beforeStruct)throw new Error('la copia causal no reproduce el modelo base');
+  const baseBag=new Map();for(const k of baseSigs)baseBag.set(k,(baseBag.get(k)||0)+1);
+  const need=new Map();for(const oi of selectedOrdinals){const k=baseSigs[oi];need.set(k,(need.get(k)||0)+1)}
+  const bySig=new Map();let tested=0,oneToOne=0;
+  for(const idx of pool){
+   const t=cm.strokes[idx];if(!t||t.editable===false)continue;const original=latin(t.sourceRef.readStream());if(t.start<0||t.end>original.length||t.start>=t.end)continue;
+   try{
+    t.sourceRef.writeStream(raw(original.slice(0,t.start)+original.slice(t.end)));
+    try{cp?.destroy?.()}catch(_){}cp=cw.loadPage(0);const av=collectVisual(cp),ab=new Map();for(const v of av){const k=sig(v);ab.set(k,(ab.get(k)||0)+1)}
+    let removed=[],added=0;for(const[k,n]of baseBag){const d=Math.max(0,n-(ab.get(k)||0));for(let q=0;q<d;q++)removed.push(k)}for(const[k,n]of ab)added+=Math.max(0,n-(baseBag.get(k)||0));
+    if(removed.length===1&&added===0){oneToOne++;const k=removed[0];if(need.has(k))(bySig.get(k)||bySig.set(k,[]).get(k)).push(idx)}
+   }finally{
+    t.sourceRef.writeStream(raw(original));try{cp?.destroy?.()}catch(_){}cp=cw.loadPage(0)
+   }
+   tested++;if(tested%12===0)status.textContent='Resolución causal · '+tested+'/'+pool.length+' operadores probados · coincidencias 1:1='+oneToOne+'…';
+  }
+  const chosen=[],used=new Set(),missing=[];for(const[k,n]of need){const a=(bySig.get(k)||[]).filter(i=>!used.has(i));if(a.length<n){missing.push(n-a.length);continue}for(let q=0;q<n;q++){chosen.push(a[q]);used.add(a[q])}}
+  const missingCount=missing.reduce((a,b)=>a+b,0);causalDiagnostic='pool='+pool.length+' · probados='+tested+' · operadores 1:1='+oneToOne+' · cubiertos='+(selectedVisual-missingCount)+'/'+selectedVisual;
+  if(missingCount)throw new Error('la unión de las rutas conocidas no contiene operadores causales para '+missingCount+' trazo(s) azul(es) · '+causalDiagnostic);
+  if(chosen.length!==selectedVisual||new Set(chosen).size!==chosen.length)throw new Error('la ruta causal no quedó 1:1');
+  return chosen;
+ }finally{try{cp?.destroy?.()}catch(_){}try{cw?.destroy?.()}catch(_){}}
+}
+async function attempt(selectedIdx,number,saveMode)"""
+assert old in s
+s=s.replace(old,helper,1)
+old="const saveModes=['incremental',''];for(let i=0;i<routes.length;i++)for(let sm=0;sm<saveModes.length;sm++){"
+new="try{status.textContent='Construyendo correspondencia causal desde '+routes.length+' rutas candidatas…';const causal=await buildCausalRoute();if(causal){const ck=causal.join(',');if(!keys.has(ck)){keys.add(ck);routes.unshift(causal)}causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'RUTA CAUSAL COMPLETA'}}catch(e){causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'causal no completa: '+e.message}const saveModes=['incremental',''];for(let i=0;i<routes.length;i++)for(let sm=0;sm<saveModes.length;sm++){"
+assert old in s
+s=s.replace(old,new,1)
+old="+(firstMismatchDiagnostic?' · DIAGNÓSTICO: '+firstMismatchDiagnostic:'')"
+new="+(causalDiagnostic?' · CAUSAL: '+causalDiagnostic:'')+(firstMismatchDiagnostic?' · DIAGNÓSTICO: '+firstMismatchDiagnostic:'')"
+assert old in s
+s=s.replace(old,new,1)
+p.write_text(s)
+p=Path('selector-nubes-causal.html')
+s=p.read_text()
+s=s.replace('./selector-nubes-diagnostico-core.html?v=20260903-diag1','./selector-nubes-causal-core.html?v=20260903-causal1',1)
+s=s.replace('Selector de nubes · diagnóstico exacto','Selector de nubes · resolución causal',1)
+p.write_text(s)
+for f in ['selector-nubes-causal-core.html','selector-nubes-causal.html']:
+    for i,x in enumerate(re.findall(r'<script(?:\\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+        Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
