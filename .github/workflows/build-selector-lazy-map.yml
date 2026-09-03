@@ -1,0 +1,25 @@
+name: build-selector-lazy-map
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-adaptive-k
+      - name: Generate lazy mapping viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-lazy-map.py
+          node --check /tmp/selector-nubes-rapido.mjs
+          grep -q 'correspondencia estructural se calculará al pulsar Eliminar' selector-nubes-rapido-core.html
+          grep -q 'Preparando borrado exacto' selector-nubes-rapido-core.html
+          grep -q 'selector-nubes-rapido-core.html?v=20260903-lazymap1' selector-nubes-rapido.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-rapido-core.html selector-nubes-rapido.html
+          git commit -m 'Defer structural mapping until deletion'
+          git push origin HEAD:candidate/selector-adaptive-k
