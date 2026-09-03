@@ -7,36 +7,52 @@ permissions:
   contents: write
 jobs:
   build:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-preview-faster
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Patch generated pages
-        run: python tmp-build-preview-faster.py
-      - name: Syntax check module script
+      - name: Bound causal fallback
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old="""   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length;
+   for(let q=0;q<ranked.length;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal exhaustiva '+(q+1)+'/'+totalUnique+' operadores únicos');if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
+"""
+          new="""   ranked.sort((a,b)=>a.c-b.c);const totalUnique=ranked.length,causalBudget=Math.min(totalUnique,Math.max(96,Math.min(320,initialMissing*32)));
+   for(let q=0;q<causalBudget;q++){missing=deficits();if(!missing.size)break;const beforeTested=tested;await testIdx(ranked[q].idx,'Búsqueda causal dirigida '+(q+1)+'/'+causalBudget+' mejores de '+totalUnique);if(tested>beforeTested)expanded++;if(q%6===0)await uiYield()}
+"""
+          if old not in s:
+              if 'Búsqueda causal dirigida' not in s:
+                  raise SystemExit('target causal loop not found')
+          else:
+              s=s.replace(old,new,1)
+              p.write_text(s)
+          PY
+      - name: Syntax check
+        run: |
+          python3 - <<'PY'
           from pathlib import Path
           import re
-          s=Path('selector-nubes-multistream-core.html').read_text(encoding='utf-8')
+          s=Path('selector-nubes-multistream-core.html').read_text()
           m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
-          assert m, 'module script missing'
-          Path('/tmp/selector-preview-faster.mjs').write_text(m.group(1),encoding='utf-8')
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          assert 'Búsqueda causal dirigida' in s
+          assert 'causalBudget=Math.min(totalUnique' in s
+          assert 'maxPixels=2_000_000' in s
           PY
-          node --check /tmp/selector-preview-faster.mjs
-      - name: Verify optimizations
+          node --check /tmp/core.mjs
+      - name: Commit core
         run: |
-          grep -q 'maxPixels=2_000_000' selector-nubes-multistream-core.html
-          grep -q 'requestIdleCallback(()=>scheduleSharp(80)' selector-nubes-multistream-core.html
-          grep -q 'getMupdfMeta' selector-fast.html
-          grep -q 'timeout:6000' selector-fast.html
-          grep -q 'previewfast2' selector-fast.html
-      - name: Commit generated files
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add selector-nubes-multistream-core.html selector-fast.html
-          git commit -m 'Reduce preview startup cost for heavy PDFs' || exit 0
-          git push
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Bound causal fallback on huge PDFs' || exit 0
+          git push origin HEAD:candidate/selector-preview-faster
