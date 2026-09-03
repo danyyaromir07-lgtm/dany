@@ -1,0 +1,25 @@
+name: build-selector-global-async
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-fluid-v2
+      - name: Generate async global mapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-global-async.py
+          node --check /tmp/selector-nubes-global-fluido.mjs
+          grep -q 'asignación global fluida' selector-nubes-global-fluido-core.html
+          grep -q 'mapeo global' selector-nubes-global-fluido-core.html
+          grep -q 'selector-nubes-global-fluido-core.html?v=20260903-globalasync1' selector-nubes-global-fluido.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-global-fluido-core.html selector-nubes-global-fluido.html
+          git commit -m 'Use responsive global assignment for large selections'
+          git push origin HEAD:candidate/selector-fluid-v2
