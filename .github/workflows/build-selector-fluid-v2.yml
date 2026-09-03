@@ -1,0 +1,24 @@
+name: build-selector-fluid-v2
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-fluid-v2
+      - name: Generate fluid delete v2 viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-fluid-v2.py
+          node --check /tmp/selector-nubes-fluido-v2.mjs
+          grep -q 'await uiYield()' selector-nubes-fluido-v2-core.html
+          grep -q 'selector-nubes-fluido-v2-core.html?v=20260903-fluiddelete2' selector-nubes-fluido-v2.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-fluido-v2-core.html selector-nubes-fluido-v2.html
+          git commit -m 'Yield during causal exact-delete probes'
+          git push origin HEAD:candidate/selector-fluid-v2
