@@ -1,0 +1,27 @@
+name: build-selector-causal-unique
+on:
+  push:
+    branches: [candidate/selector-causal-unique]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-causal-unique
+      - name: Generate unique causal selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-causal-unique.py
+          node --check /tmp/selector-nubes-causal-total.mjs
+          grep -q 'Búsqueda causal exhaustiva' selector-nubes-causal-total-core.html
+          grep -q 'ampliadas únicas' selector-nubes-causal-total-core.html
+          grep -q 'selector-nubes-causal-total-core.html?v=20260903-causalunique1' selector-nubes-causal-total.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-total-core.html selector-nubes-causal-total.html
+          git commit -m 'Expand causal search by unique operators'
+          git push origin HEAD:candidate/selector-causal-unique
