@@ -123,16 +123,16 @@ async function renderPage(){
  clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;analysisReady=false;setButtons();
  const p=doc.loadPage(0);pageBounds=p.getBounds();pageW=pageBounds[2]-pageBounds[0];pageH=pageBounds[3]-pageBounds[1];
  status.textContent='Abriendo vista previa…';
- const dpr=Math.min(2,window.devicePixelRatio||1),maxDim=2600,maxPixels=5_000_000,base=Math.min(1.55*dpr,maxDim/Math.max(pageW,pageH),Math.sqrt(maxPixels/Math.max(1,pageW*pageH)));baseRs=Math.max(.45,base);
+ const dpr=Math.min(2,window.devicePixelRatio||1),maxDim=1900,maxPixels=2_000_000,base=Math.min(1.20*dpr,maxDim/Math.max(pageW,pageH),Math.sqrt(maxPixels/Math.max(1,pageW*pageH)));baseRs=Math.max(.30,base);
  const pm=p.toPixmap(mupdf.Matrix.scale(baseRs,baseRs),mupdf.ColorSpace.DeviceRGB,false,true),png=pm.asPNG();baseW=pm.getWidth?.()||Math.round(pageW*baseRs);baseH=pm.getHeight?.()||Math.round(pageH*baseRs);try{pm.destroy?.()}catch(_){}
  if(baseUrl)URL.revokeObjectURL(baseUrl);baseUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));img.src=baseUrl;await img.decode();img.style.width=baseW+'px';img.style.height=baseH+'px';stage.style.width=baseW+'px';stage.style.height=baseH+'px';sizeOverlay();$('#mode').textContent='Modo normal · clásico';requestAnimationFrame(()=>fit());
  status.textContent='Vista previa lista · preparando selección de arcos…';
- await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,40))));
  try{
   classicVisual=collectVisual(p);for(let i=0;i<classicVisual.length;i++)classicVisual[i]._ordinal=i;analysisReady=true;setButtons();
   status.textContent='Selector listo · visual='+classicVisual.length+' · modelo estructural se calculará solo al eliminar. Haz clic sobre un arco.';
  }finally{try{p.destroy?.()}catch(_){}}
- scheduleSharp(650)
+ if('requestIdleCallback'in window)requestIdleCallback(()=>scheduleSharp(80),{timeout:4500});else scheduleSharp(2500)
 }
 async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile(),bytes=new Uint8Array(await f.arrayBuffer());try{doc?.destroy?.()}catch(_){}activeBytes=bytes;doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');handle=h;pending=false;await renderPage()}
 function seedCompat(x,s){if(colorDist(x.rgb,s.rgb)>.035)return false;const wt=Math.max(.06,Math.abs(s.width)*.22);if(Math.abs(x.width-s.width)>wt)return false;if((x.curves>0)!==(s.curves>0)||(x.lines>0)!==(s.lines>0))return false;if(!!x.closed!==!!s.closed)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.5||dx/ds>2)return false;const tol=Math.max(2,Math.ceil(s.segs*.45));return Math.abs(x.segs-s.segs)<=tol}
