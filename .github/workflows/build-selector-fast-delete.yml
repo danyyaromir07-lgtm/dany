@@ -1,0 +1,39 @@
+name: build-selector-fast-delete
+on:
+  push:
+    branches: [candidate/selector-fast-delete]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate selector
+        run: python3 tmp-build-fast-delete.py
+      - name: Validate JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-rapido-exacto-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/selector-fast.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/selector-fast.mjs
+      - name: Validate fast path hooks
+        run: |
+          grep -q "Verificación rápida exacta" selector-nubes-rapido-exacto-core.html
+          grep -q "beforeVisual===beforeStruct" selector-nubes-rapido-exacto-core.html
+          grep -q "vía rápida exacta" selector-nubes-rapido-exacto-core.html
+          grep -q "selector-nubes-rapido-exacto-core.html" selector-nubes-rapido-exacto.html
+      - name: Commit generated files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-rapido-exacto-core.html selector-nubes-rapido-exacto.html
+          git commit -m "Add fast exact verification before causal fallback"
+          git push
