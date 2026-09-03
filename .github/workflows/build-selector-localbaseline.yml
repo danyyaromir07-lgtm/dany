@@ -1,0 +1,51 @@
+name: build-selector-localbaseline
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-localbaseline
+      - name: Generate local-baseline verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp selector-nubes-parserfix-core.html selector-nubes-baseline-core.html
+          cp selector-nubes-parserfix.html selector-nubes-baseline.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-baseline-core.html')
+          s=p.read_text()
+          old="if(baselineVisual.length!==beforeVisual)throw new Error('la copia directa no reproduce el mismo número de trazos visuales ('+beforeVisual+' → '+baselineVisual.length+')');if(!wm||wm.incomplete||wm.strokes.length!==beforeStruct)"
+          new="if(baselineVisual.length!==beforeVisual)throw new Error('la copia directa no reproduce el mismo número de trazos visuales ('+beforeVisual+' → '+baselineVisual.length+')');const baselineSigs=baselineVisual.map(sig),activeSigs=classicVisual.map(sig);for(let bi=0;bi<beforeVisual;bi++)if(baselineSigs[bi]!==activeSigs[bi])throw new Error('la copia directa cambió el orden/firma visual en el trazo '+bi);const selectedSet=new Set(selectedOrdinals),localExpected=new Map();for(let bi=0;bi<baselineVisual.length;bi++){if(selectedSet.has(bi))continue;const k=baselineSigs[bi];localExpected.set(k,(localExpected.get(k)||0)+1)}const localBagOK=a=>{if(a.length!==beforeVisual-selectedVisual)return false;const b=new Map();for(const v of a){const k=sig(v);b.set(k,(b.get(k)||0)+1)}if(b.size!==localExpected.size)return false;for(const[k,n]of localExpected)if(b.get(k)!==n)return false;return true};if(!wm||wm.incomplete||wm.strokes.length!==beforeStruct)"
+          assert old in s, 'baseline insertion anchor not found'
+          s=s.replace(old,new,1)
+          old2="if(!bagOK(previewVisual))throw new Error('antes de guardar, la geometría editada no coincide exactamente con original menos azul');"
+          new2="if(!localBagOK(previewVisual))throw new Error('antes de guardar, la geometría editada no coincide exactamente con la copia base menos azul');"
+          assert old2 in s, 'bag verifier anchor not found'
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          p=Path('selector-nubes-baseline.html')
+          s=p.read_text()
+          s=s.replace('./selector-nubes-parserfix-core.html?v=20260903-parserfix1','./selector-nubes-baseline-core.html?v=20260903-localbaseline1',1)
+          s=s.replace('Selector de nubes · parser geométrico normalizado','Selector de nubes · verificación base local',1)
+          p.write_text(s)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for f in ['selector-nubes-baseline-core.html','selector-nubes-baseline.html']:
+              for i,x in enumerate(re.findall(r'<script(?:\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+                  Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
+          PY
+          for f in /tmp/selector-nubes-baseline-*.mjs; do node --check "$f"; done
+          grep -q 'localBagOK' selector-nubes-baseline-core.html
+          grep -q 'copia base menos azul' selector-nubes-baseline-core.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-baseline-core.html selector-nubes-baseline.html
+          git commit -m 'Verify deletion against each direct working copy baseline'
+          git push origin HEAD:candidate/selector-localbaseline
