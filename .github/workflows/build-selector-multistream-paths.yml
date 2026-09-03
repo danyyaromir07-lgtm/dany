@@ -1,0 +1,39 @@
+name: build-selector-multistream-paths
+on:
+  push:
+    branches: [candidate/selector-multistream-paths]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate selector
+        run: python3 tmp-build-multistream-paths.py
+      - name: Validate JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          js=s.split('<script type="module">',1)[1].split('</script>',1)[0]
+          Path('/tmp/selector-multistream.mjs').write_text(js)
+          PY
+          node --check /tmp/selector-multistream.mjs
+      - name: Validate multistream hooks
+        run: |
+          grep -q "MULTI|" selector-nubes-multistream-core.html
+          grep -q "strokeEditGroups" selector-nubes-multistream-core.html
+          grep -q "editRanges" selector-nubes-multistream-core.html
+          grep -q "applyStrokeGroups(editGroups)" selector-nubes-multistream-core.html
+          grep -q "selector-nubes-multistream-core.html" selector-nubes-multistream.html
+      - name: Commit generated files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-multistream-core.html selector-nubes-multistream.html
+          git commit -m "Support exact paths spanning multiple content streams"
+          git push
