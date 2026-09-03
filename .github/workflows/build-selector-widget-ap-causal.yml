@@ -1,0 +1,30 @@
+name: build-selector-widget-ap-causal
+on:
+  push:
+    branches: [candidate/selector-widget-ap-causal]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate widget AP causal selector
+        run: |
+          python tmp-build-widget-ap-causal.py
+          node --check /tmp/selector-nubes-causal-ap.mjs
+          test -s selector-nubes-causal-ap-core.html
+          test -s selector-nubes-causal-ap.html
+          grep -q "widgetAppearanceStreams" selector-nubes-causal-ap-core.html
+          grep -q "AP pruebas" selector-nubes-causal-ap-core.html
+          grep -q "widgetAppearanceOps" selector-nubes-causal-ap-core.html
+      - name: Commit generated pages
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-ap-core.html selector-nubes-causal-ap.html
+          git diff --cached --quiet || git commit -m "Add exact causal search inside widget appearance streams"
+          git push
