@@ -1,0 +1,45 @@
+name: Build selector shape signature
+on:
+  push:
+    branches: [candidate/selector-shape-signature]
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-shape-signature
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply shape signature filter
+        run: python tmp-shape-signature-filter.py
+      - name: Verify targeted code
+        run: |
+          grep -F "!!x.closed!==!!s.closed" selector-nubes-multistream-core.html
+          grep -F "chordNorm" selector-nubes-multistream-core.html
+          grep -F "lengthNorm" selector-nubes-multistream-core.html
+      - name: JavaScript syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          if not m: raise SystemExit('module script not found')
+          js=m.group(1)
+          js=re.sub(r"^import \* as mupdf from .*?;\s*", "const mupdf={};\n", js, count=1)
+          Path('/tmp/selector.mjs').write_text(js)
+          PY
+          node --check /tmp/selector.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Refine immediate selection with shape signatures"
+          git push origin HEAD:candidate/selector-shape-signature
