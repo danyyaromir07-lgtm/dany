@@ -10,11 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Extract snippets
-        run: python tmp-inspect-unmodeled.py
+        run: |
+          python tmp-inspect-unmodeled.py
+          python tmp-extract-functions.py
       - name: Commit snippets
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add tmp-unmodeled-snippets.txt
+          git add tmp-unmodeled-snippets.txt tmp-functions.txt
           git diff --cached --quiet || git commit -m "Temporary inspect unmodeled visual paths"
           git push
