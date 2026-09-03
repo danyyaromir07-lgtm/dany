@@ -1,0 +1,18 @@
+name: tmp-inspect-hybrid
+on:
+  push:
+    branches: [candidate/selector-widget-causal]
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python tmp-inspect-hybrid.py > tmp-widget-hybrid.txt
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add tmp-widget-hybrid.txt
+          git diff --cached --quiet || git commit -m "Temporary hybrid source context"
+          git push
