@@ -1,0 +1,25 @@
+name: build-selector-annotation-causal
+on:
+  push:
+    branches: [candidate/selector-annotation-causal]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate annotation causal selector
+        run: |
+          python tmp-build-annotation-causal.py
+          node --check /tmp/selector-nubes-causal-anotaciones.mjs
+          grep -q "getAnnotations" selector-nubes-causal-anotaciones-core.html
+          grep -q "attemptHybrid" selector-nubes-causal-anotaciones-core.html
+          grep -q "RUTA HÍBRIDA OPERADORES+ANOTACIÓN LISTA" selector-nubes-causal-anotaciones-core.html
+      - name: Commit generated selector
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-anotaciones-core.html selector-nubes-causal-anotaciones.html
+          git diff --cached --quiet || git commit -m "Add annotation-aware exact causal deletion"
+          git push
