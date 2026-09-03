@@ -2,6 +2,8 @@ name: build-selector-widget-annotsarray
 on:
   push:
     branches: [candidate/selector-widget-annotsarray]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
