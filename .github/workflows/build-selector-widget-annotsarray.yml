@@ -1,0 +1,27 @@
+name: build-selector-widget-annotsarray
+on:
+  push:
+    branches: [candidate/selector-widget-annotsarray]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate widget Annots-array selector
+        run: |
+          python tmp-build-widget-annotsarray.py
+          node --check /tmp/selector-nubes-causal-widget2.mjs
+          test -s selector-nubes-causal-widget2-core.html
+          test -s selector-nubes-causal-widget2.html
+          grep -q "removeWidgetRefFromAnnots" selector-nubes-causal-widget2-core.html
+          grep -q "widgets intentados" selector-nubes-causal-widget2-core.html
+      - name: Commit generated pages
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-widget2-core.html selector-nubes-causal-widget2.html
+          git diff --cached --quiet || git commit -m "Use page Annots array for exact widget causal test"
+          git push
