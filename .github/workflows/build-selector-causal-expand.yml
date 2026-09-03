@@ -1,0 +1,24 @@
+name: build-selector-causal-expand
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-causal-expand
+      - name: Generate causal expansion viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tmp-build-causal-expand.py
+          for f in /tmp/selector-nubes-causal-expand-*.mjs; do node --check "$f"; done
+          grep -q 'expandBudget=700' selector-nubes-causal-expand-core.html
+          grep -q 'selector-nubes-causal-expand-core.html?v=20260903-causalexpand1' selector-nubes-causal-expand.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-expand-core.html selector-nubes-causal-expand.html
+          git commit -m 'Expand causal search for missing blue traces'
+          git push origin HEAD:candidate/selector-causal-expand
