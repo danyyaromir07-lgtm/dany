@@ -12,7 +12,6 @@ async function mapBlueResponsive(vs,blocked=[]){
  if(vs.length<180){await uiYield();return mapBlue(vs,blocked)}
  const maxK=Math.min(m,Math.max(320,Math.ceil(vs.length*1.22)+48));
  const passes=[128,256,512,maxK].filter((k,i,a)=>k<=m&&a.indexOf(k)===i);
- let fullLists=null;
  for(let pi=0;pi<passes.length;pi++){
   const K=passes[pi],lists=[];
   status.textContent='Preparando borrado exacto · mapeo global '+K+' candidatos · 0/'+vs.length+'…';await uiYield();
@@ -25,7 +24,7 @@ async function mapBlueResponsive(vs,blocked=[]){
    best.sort((a,b)=>a.score-b.score);const keep=best.slice(0,K);if(!keep.length){lists.length=0;break}lists.push(keep);
    if(vi%4===3||vi===vs.length-1){status.textContent='Preparando borrado exacto · mapeo global '+K+' candidatos · '+(vi+1)+'/'+vs.length+'…';await uiYield()}
   }
-  if(lists.length!==vs.length)continue;fullLists=lists;
+  if(lists.length!==vs.length)continue;
   const order=lists.map((a,i)=>({i,n:a.length,margin:(a[1]?.score??99)-a[0].score,best:a[0].score})).sort((x,y)=>x.n-y.n||y.margin-x.margin||x.best-y.best),owner=new Map(),chosen=new Array(vs.length);
   function place(vi,seen){for(const c of lists[vi]){if(seen.has(c.idx))continue;seen.add(c.idx);const old=owner.get(c.idx);if(old==null||place(old,seen)){owner.set(c.idx,vi);chosen[vi]=c;return true}}return false}
   let ok=true;
@@ -40,12 +39,11 @@ async function mapBlueResponsive(vs,blocked=[]){
 }
 '''
 src=src[:start]+new+src[end:]
-# give causal single-operator probing more browser breathing room
 src=src.replace("tested++;if(label&&tested%12===0)status.textContent=label+' · '+tested+' pruebas causales · coincidencias 1:1='+oneToOne+'…';return result", "tested++;if(label&&tested%8===0){status.textContent=label+' · '+tested+' pruebas causales · coincidencias 1:1='+oneToOne+'…';await uiYield()}return result")
 src=src.replace("if(offTests%20===0)status.textContent='Aislando azul · localizando la única pareja incorrecta…'", "if(offTests%12===0){status.textContent='Aislando azul · localizando la única pareja incorrecta…';await uiYield()}")
 src=src.replace("if(rootTests%25===0)status.textContent='Borrado exacto · buscando el último azul en streams de página '+rootTests+'/'+rootRanked.length+'…'", "if(rootTests%12===0){status.textContent='Borrado exacto · buscando el último azul en streams de página '+rootTests+'/'+rootRanked.length+'…';await uiYield()}")
 Path('selector-nubes-global-fluido-core.html').write_text(src)
-wrap=Path('selector-nubes-fluido-v2.html').read_text().replace('Selector de nubes · selección rápida y borrado fluido exacto v2','Selector de nubes · selección rápida y mapeo global fluido').replace('./selector-nubes-fluido-v2-core.html?v=20260903-fluidv2','./selector-nubes-global-fluido-core.html?v=20260903-globalasync1')
+wrap=Path('selector-nubes-fluido-v2.html').read_text().replace('Selector de nubes · selección rápida y borrado fluido exacto v2','Selector de nubes · selección rápida y mapeo global fluido').replace('./selector-nubes-fluido-v2-core.html?v=20260903-fluiddelete2','./selector-nubes-global-fluido-core.html?v=20260903-globalasync1')
 Path('selector-nubes-global-fluido.html').write_text(wrap)
 m=re.search(r'<script type="module">(.*?)</script>',src,re.S)
 if not m: raise SystemExit('module script not found')
