@@ -13,9 +13,9 @@ old_remove="async function removeGroup(){if(!doc||!model||!activeBytes||!selecti
 new_remove="async function removeGroup(){if(!doc||!model||!activeBytes||!visualSelected.length)return;if(model.incomplete){status.textContent='Borrado bloqueado: el recorrido de streams internos quedó incompleto.';return}if(!selectionMapSafe||structSelected.length!==visualSelected.length||!selectionAlternatives.length){status.textContent='Preparando borrado exacto · calculando correspondencia estructural para '+visualSelected.length+' trazos azules…';await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));const lazyMap=mapBlue(visualSelected,[]);structSelected=lazyMap.items;selectionAlternatives=lazyMap.alternatives||[];selectionMapSafe=!model?.incomplete&&structSelected.length===visualSelected.length&&visualSelected.length>0&&selectionAlternatives.length>0;if(!selectionMapSafe){setButtons();status.textContent='Borrado bloqueado: no existe una correspondencia estructural completa para toda la selección azul · mapeo='+lazyMap.mode+' · resaltados='+visualSelected.length+'. La selección azul se conserva.';return}}const beforeVisual="
 if old_remove not in src: raise SystemExit('removeGroup header not found')
 src=src.replace(old_remove,new_remove,1)
-src=src.replace('selector-nubes-adaptativo-core.html?v=20260903-adapt1','selector-nubes-rapido-core.html?v=20260903-lazymap1')
+src=src.replace('selector-nubes-adaptativo-core.html?v=20260903-adaptive1','selector-nubes-rapido-core.html?v=20260903-lazymap1')
 Path('selector-nubes-rapido-core.html').write_text(src)
-wrap=Path('selector-nubes-adaptativo.html').read_text().replace('Selector de nubes · borrado exacto azul adaptativo','Selector de nubes · selección rápida y borrado exacto').replace('./selector-nubes-adaptativo-core.html?v=20260903-adapt1','./selector-nubes-rapido-core.html?v=20260903-lazymap1')
+wrap=Path('selector-nubes-adaptativo.html').read_text().replace('Selector de nubes · borrado exacto azul adaptativo','Selector de nubes · selección rápida y borrado exacto').replace('./selector-nubes-adaptativo-core.html?v=20260903-adaptive1','./selector-nubes-rapido-core.html?v=20260903-lazymap1')
 Path('selector-nubes-rapido.html').write_text(wrap)
 m=re.search(r'<script type="module">(.*?)</script>',src,re.S)
 if not m: raise SystemExit('module script not found')
