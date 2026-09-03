@@ -1,0 +1,58 @@
+name: build-selector-hd-racefix
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-hd-racefix
+      - name: Generate race-safe HD viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp selector-nubes-hd-estable-core.html selector-nubes-hd-persistente-core.html
+          cp selector-nubes-hd-estable.html selector-nubes-hd-persistente.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-hd-persistente-core.html')
+          s=p.read_text()
+          old="let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,pageBounds=[0,0,1,1],pageW=1,pageH=1,baseRs=1,baseW=1,baseH=1,zoom=1,panX=0,panY=0,pending=false,rendering=false,detailPixelBudget=36_000_000,classicVisual=[],visualSelected=[],structSelected=[],model=null,selectionMapSafe=false,selectionFamilies=0,selectionAlternatives=[],sharpTimer=null;"
+          new="let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,pageBounds=[0,0,1,1],pageW=1,pageH=1,baseRs=1,baseW=1,baseH=1,zoom=1,panX=0,panY=0,pending=false,rendering=false,detailPixelBudget=36_000_000,classicVisual=[],visualSelected=[],structSelected=[],model=null,selectionMapSafe=false,selectionFamilies=0,selectionAlternatives=[],sharpTimer=null,sharpEpoch=0,sharpQueued=false;"
+          assert old in s
+          s=s.replace(old,new,1)
+          old="function scheduleSharp(delay=180){clearTimeout(sharpTimer);if(!doc||rendering)return;sharpTimer=setTimeout(()=>{if(doc&&!rendering)renderVisibleSharp()},delay)}\nfunction clearDetail(){detail.removeAttribute('src');detail.style.display='none';if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}"
+          new="function scheduleSharp(delay=180){clearTimeout(sharpTimer);if(!doc)return;sharpQueued=true;sharpTimer=setTimeout(()=>{sharpTimer=null;if(!doc)return;if(rendering){sharpQueued=true;return}sharpQueued=false;renderVisibleSharp()},delay)}\nfunction clearDetail(){sharpEpoch++;detail.removeAttribute('src');detail.style.display='none';if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}"
+          assert old in s
+          s=s.replace(old,new,1)
+          start=s.index('async function renderVisibleSharp(){')
+          end=s.index('\nasync function renderPage(){',start)
+          newfun="""async function renderVisibleSharp(){if(!doc)return;if(rendering){sharpQueued=true;return}rendering=true;sharpQueued=false;const myEpoch=sharpEpoch;status.textContent='Renderizando la zona visible a alta resolución…';let freshUrl=null;try{const[x0,y0,x1,y1]=visibleBaseRect();if(x1<=x0||y1<=y0)throw new Error('La página está fuera del visor.');const p=doc.loadPage(0),dpr=Math.min(2,window.devicePixelRatio||1),screenW=(x1-x0)*zoom,screenH=(y1-y0)*zoom;let useRs=baseRs*zoom*dpr,px0=pageBounds[0]+x0/baseRs,py0=pageBounds[1]+y0/baseRs,px1=pageBounds[0]+x1/baseRs,py1=pageBounds[1]+y1/baseRs,bbox=[Math.floor(px0*useRs),Math.floor(py0*useRs),Math.ceil(px1*useRs),Math.ceil(py1*useRs)],rw=bbox[2]-bbox[0],rh=bbox[3]-bbox[1];if(rw*rh>detailPixelBudget){const f=Math.sqrt(detailPixelBudget/(rw*rh));useRs*=f;bbox=[Math.floor(px0*useRs),Math.floor(py0*useRs),Math.ceil(px1*useRs),Math.ceil(py1*useRs)];rw=bbox[2]-bbox[0];rh=bbox[3]-bbox[1]}const pix=new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB,bbox,false);let dev=null;try{dev=new mupdf.DrawDevice(mupdf.Matrix.identity,pix);p.run(dev,mupdf.Matrix.scale(useRs,useRs));try{dev.close?.()}catch(_){}const png=pix.asPNG();freshUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));const probe=new Image();probe.src=freshUrl;await probe.decode();if(myEpoch!==sharpEpoch){URL.revokeObjectURL(freshUrl);freshUrl=null;return}if(detailUrl)URL.revokeObjectURL(detailUrl);detailUrl=freshUrl;freshUrl=null;detail.src=detailUrl;detail.style.display='block';detail.style.left=(panX+x0*zoom)+'px';detail.style.top=(panY+y0*zoom)+'px';detail.style.width=screenW+'px';detail.style.height=screenH+'px';drawSelection();status.textContent=`Nitidez visible actualizada · zoom ${Math.round(zoom*100)}%.`}finally{try{dev?.destroy?.()}catch(_){}try{pix.destroy?.()}catch(_){}p.destroy?.()}}catch(e){if(freshUrl)URL.revokeObjectURL(freshUrl);if(myEpoch===sharpEpoch){clearDetail();status.textContent='No pude renderizar la zona HD: '+e.message}}finally{rendering=false;setButtons();if(sharpQueued&&doc)scheduleSharp(40)}}"""
+          s=s[:start]+newfun+s[end:]
+          p.write_text(s)
+
+          p=Path('selector-nubes-hd-persistente.html')
+          s=p.read_text()
+          assert './selector-nubes-hd-estable-core.html?v=20260903-hdstable1' in s
+          s=s.replace('./selector-nubes-hd-estable-core.html?v=20260903-hdstable1','./selector-nubes-hd-persistente-core.html?v=20260903-racefix1',1)
+          s=s.replace('Selector de nubes · preview HD estable','Selector de nubes · HD persistente',1)
+          p.write_text(s)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for f in ['selector-nubes-hd-persistente-core.html','selector-nubes-hd-persistente.html']:
+              for i,x in enumerate(re.findall(r'<script(?:\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+                  Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
+          PY
+          for f in /tmp/selector-nubes-hd-persistente-*.mjs; do node --check "$f"; done
+          grep -q 'sharpEpoch' selector-nubes-hd-persistente-core.html
+          grep -q 'sharpQueued' selector-nubes-hd-persistente-core.html
+          grep -q 'probe.decode' selector-nubes-hd-persistente-core.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-hd-persistente-core.html selector-nubes-hd-persistente.html
+          git commit -m 'Add race-safe persistent HD preview'
+          git push origin HEAD:candidate/selector-hd-racefix
