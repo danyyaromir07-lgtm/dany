@@ -1,0 +1,45 @@
+name: Build selector component context
+on:
+  push:
+    branches: [candidate/selector-component-context]
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-component-context
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply component-context selector patch
+        run: python tmp-component-context.py
+      - name: Verify targeted code
+        run: |
+          grep -F "function annotateVisualComponents" selector-nubes-multistream-core.html
+          grep -F "componentCompatible(v,best)" selector-nubes-multistream-core.html
+          grep -F "annotateVisualComponents(classicVisual)" selector-nubes-multistream-core.html
+      - name: JavaScript syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          if not m: raise SystemExit('module script not found')
+          js=m.group(1)
+          js=re.sub(r"^import \* as mupdf from .*?;\s*", "const mupdf={};\n", js, count=1)
+          Path('/tmp/selector.mjs').write_text(js)
+          PY
+          node --check /tmp/selector.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Refine immediate selection with component context"
+          git push origin HEAD:candidate/selector-component-context
