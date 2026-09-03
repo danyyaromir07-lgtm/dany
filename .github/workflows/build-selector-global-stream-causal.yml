@@ -1,0 +1,40 @@
+name: build-selector-global-stream-causal
+on:
+  push:
+    branches: [candidate/selector-global-stream-causal]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate selector
+        run: python3 tmp-build-global-stream-causal.py
+      - name: Validate JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-causal-streams-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/selector.mjs').write_text(m.group(1))
+          PY
+          node --check /tmp/selector.mjs
+      - name: Validate global stream hooks
+        run: |
+          grep -q "streams globales=" selector-nubes-causal-streams-core.html
+          grep -q "allPdfStreams" selector-nubes-causal-streams-core.html
+          grep -q "globalStreamOps" selector-nubes-causal-streams-core.html
+          grep -q "selector-nubes-causal-streams-core.html?v=20260903-streamcausal1" selector-nubes-causal-streams.html
+      - name: Commit generated files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-causal-streams-core.html selector-nubes-causal-streams.html
+          git commit -m "Add causal search across unmodeled PDF streams"
+          git push
