@@ -1,0 +1,54 @@
+name: build-selector-diagnostics
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-diagnostics
+      - name: Generate diagnostic viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp selector-nubes-baseline-core.html selector-nubes-diagnostico-core.html
+          cp selector-nubes-baseline.html selector-nubes-diagnostico.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-diagnostico-core.html')
+          s=p.read_text()
+          old="const outBase=new Uint8Array(activeBytes),errors=[];async function attempt(selectedIdx,number,saveMode)"
+          new="const outBase=new Uint8Array(activeBytes),errors=[];let firstMismatchDiagnostic='';async function attempt(selectedIdx,number,saveMode)"
+          assert old in s
+          s=s.replace(old,new,1)
+          old="if(!localBagOK(previewVisual))throw new Error('antes de guardar, la geometría editada no coincide exactamente con la copia base menos azul');"
+          new="""if(!localBagOK(previewVisual)){if(!firstMismatchDiagnostic){const baseBag=new Map(),afterBag=new Map(),blueBag=new Map();for(const k of baselineSigs)baseBag.set(k,(baseBag.get(k)||0)+1);for(const v of previewVisual){const k=sig(v);afterBag.set(k,(afterBag.get(k)||0)+1)}for(const oi of selectedOrdinals){const k=baselineSigs[oi];blueBag.set(k,(blueBag.get(k)||0)+1)}let removed=0,added=0,blueRemoved=0,unselectedRemoved=0,blueStill=0,removedKinds=0,addedKinds=0;for(const[k,n]of baseBag){const d=Math.max(0,n-(afterBag.get(k)||0));if(d){removed+=d;removedKinds++;const bn=blueBag.get(k)||0;blueRemoved+=Math.min(d,bn);unselectedRemoved+=Math.max(0,d-bn)}}for(const[k,n]of afterBag){const d=Math.max(0,n-(baseBag.get(k)||0));if(d){added+=d;addedKinds++}}for(const[k,n]of blueBag){const d=Math.max(0,n-Math.max(0,(baseBag.get(k)||0)-(afterBag.get(k)||0)));blueStill+=d}firstMismatchDiagnostic='esperados azul='+selectedVisual+' · desaparecieron='+removed+' · azules realmente desaparecidos='+blueRemoved+' · no azules desaparecidos='+unselectedRemoved+' · azules que siguen presentes='+blueStill+' · firmas nuevas='+added+' · tipos desaparecidos='+removedKinds+' · tipos nuevos='+addedKinds+' · visual antes/después='+baselineVisual.length+'/'+previewVisual.length}throw new Error('antes de guardar, la geometría editada no coincide exactamente con la copia base menos azul')}"""
+          assert old in s
+          s=s.replace(old,new,1)
+          old="status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) con '+saveModes.length+' estrategias de guardado y ninguna pasó la verificación exacta · '+errors.join(' | ')"
+          new="status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) con '+saveModes.length+' estrategias de guardado y ninguna pasó la verificación exacta · '+errors.join(' | ')+(firstMismatchDiagnostic?' · DIAGNÓSTICO: '+firstMismatchDiagnostic:'')"
+          assert old in s
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          p=Path('selector-nubes-diagnostico.html')
+          s=p.read_text()
+          s=s.replace('./selector-nubes-baseline-core.html?v=20260903-localbaseline1','./selector-nubes-diagnostico-core.html?v=20260903-diag1',1)
+          s=s.replace('Selector de nubes · verificación base local','Selector de nubes · diagnóstico exacto',1)
+          p.write_text(s)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          for f in ['selector-nubes-diagnostico-core.html','selector-nubes-diagnostico.html']:
+              for i,x in enumerate(re.findall(r'<script(?:\s+[^>]*)?>(.*?)</script>',Path(f).read_text(),re.S)):
+                  Path(f'/tmp/{Path(f).stem}-{i}.mjs').write_text(x)
+          PY
+          for f in /tmp/selector-nubes-diagnostico-*.mjs; do node --check "$f"; done
+          grep -q 'DIAGNÓSTICO:' selector-nubes-diagnostico-core.html
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add selector-nubes-diagnostico-core.html selector-nubes-diagnostico.html
+          git commit -m 'Add exact deletion mismatch diagnostics'
+          git push origin HEAD:candidate/selector-diagnostics
