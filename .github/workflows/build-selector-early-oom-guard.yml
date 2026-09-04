@@ -1,0 +1,39 @@
+name: Build selector early OOM guard
+on:
+  push:
+    branches:
+      - candidate/selector-early-oom-guard
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-early-oom-guard
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python tmp-selector-early-oom-guard.py
+      - name: Validate invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          assert "earlyHugeVisualCount>=250000" in s
+          assert "deepModel" in s
+          assert "bagOK" in s
+          assert "strokeEditRanges" in s
+          assert "Ctrl/Shift+clic" in s
+          assert "Borrado bloqueado sin modificar el PDF" in s
+          print('invariants ok')
+          PY
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Block giant delete before WASM-heavy work"
+          git push origin HEAD:candidate/selector-early-oom-guard
