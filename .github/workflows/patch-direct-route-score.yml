@@ -1,0 +1,67 @@
+name: Patch direct route scoring
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-direct-route-score.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout patch source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: patchsrc
+
+      - name: Checkout public branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: site
+          fetch-depth: 0
+
+      - name: Apply geometry-ranked single-transaction patch
+        run: |
+          cd site
+          python3 ../patchsrc/.github/scripts/patch_direct_route_score.py
+
+      - name: Validate JavaScript syntax and invariants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('site/selector-nubes-multistream-core.html').read_text(encoding='utf-8')
+          marker='<script type="module">'
+          a=s.index(marker)+len(marker)
+          b=s.index('</script>',a)
+          Path('/tmp/core.mjs').write_text(s[a:b],encoding='utf-8')
+          required=[
+            'directCandidates.sort((a,b)=>a.score-b.score',
+            'makeDirectEditPlan(directChoice.route,model.strokes)',
+            "if(!bagOK(previewVisual))throw new Error('la geometría directa no coincide exactamente con la copia base menos azul')",
+            'if(await rasterDigest(cp)!==previewRaster'
+          ]
+          for x in required:
+            assert x in s, x
+          print('invariants OK')
+          PY
+          node --check /tmp/core.mjs
+
+      - name: Publish only the selector core
+        run: |
+          cd site
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          if git diff --cached --quiet; then
+            echo 'No changes to publish'
+            exit 0
+          fi
+          git commit -m 'Rank direct deletion routes geometrically before single transaction'
+          git push origin HEAD:gh-pages
