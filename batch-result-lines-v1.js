@@ -29,6 +29,10 @@ function ensureStyle() {
       line-height: 1.35;
       overflow-wrap: anywhere;
     }
+    #batchTable .batch-no-matches {
+      color: #b42318;
+      font-weight: 700;
+    }
     #batchTable .batch-result-actions {
       display: flex;
       align-items: center;
@@ -95,7 +99,7 @@ function formatRow(row) {
     }
   } else {
     const line = document.createElement('span');
-    line.className = 'batch-hit-line';
+    line.className = 'batch-hit-line batch-no-matches';
     line.textContent = 'Sin coincidencias';
     hitWrap.appendChild(line);
   }
