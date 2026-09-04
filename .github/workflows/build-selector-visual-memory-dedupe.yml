@@ -1,0 +1,41 @@
+name: Selector visual memory dedupe
+on:
+  push:
+    branches: [candidate/selector-visual-memory-dedupe]
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-visual-memory-dedupe
+      - name: Apply narrow memory patch
+        run: python tmp-selector-visual-memory-dedupe.py
+      - name: Validate inline module syntax and invariants
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m, 'module script not found'
+          Path('/tmp/selector-module.mjs').write_text(m.group(1))
+          for t in ['const bagOK=', 'strokeEditRanges', 'Búsqueda causal dirigida', 'afterRaster!==previewRaster', 'remapStructTargets(activeTargets,wm)', 'XObject compartido: un operador candidato también produce geometría no seleccionada']:
+              assert t in s, t
+          assert "const baseOnce=collectVisual(baselineCheckPage)" in s
+          assert "wm=null;wp.destroy?.();wp=null;await uiYield();wp=work.loadPage(0);let previewVisual=collectVisual(wp)" in s
+          assert "previewVisual=null;await uiYield();let previewModel=deepModel(wp)" in s
+          print('invariants ok')
+          PY
+          node --check /tmp/selector-module.mjs
+      - name: Commit generated core only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Reuse baseline visual model across route attempts'
+          git push origin HEAD:candidate/selector-visual-memory-dedupe
