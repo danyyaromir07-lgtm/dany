@@ -13,7 +13,7 @@ export async function runFallback(){
     crumb('firma final · verificada antes de runner',{files:result?.files??0,removed:result?.removed??0});
   }
   crumb('loader fallback · importando runner');
-  const mod=await import('./batch-apply-verified-heavy-flate-v3.js?v=20260819-heavyflate3-trace2');
+  const mod=await import('./batch-apply-verified-heavy-flate-v3.js?v=20260821-canonical-capture1');
   crumb('loader fallback · runner cargado');
   if(typeof mod.runFallback!=='function')throw new Error('El runner pesado no exporta runFallback.');
   crumb('loader fallback · entrando a runner');

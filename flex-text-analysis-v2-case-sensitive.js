@@ -1,0 +1,18 @@
+import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
+
+const ANALYZE='#batchAnalyze',APPLY='#batchApply',STATUS='#batchStatus';
+const FLEX_SEP=/[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000‐‑‒–—−-]/gu;
+// IMPORTANT: no lowercasing here. Text matching is case-sensitive by design.
+const key=s=>String(s||'').replace(FLEX_SEP,'');
+let timer=null,lastToken='';
+
+function countIn(text,target){const s=key(text),t=key(target);if(!t)return 0;let n=0,p=0;while((p=s.indexOf(t,p))>=0){n++;p+=Math.max(1,t.length)}return n}
+function pageText(page){try{return page.toStructuredText('preserve-spans').asText()}catch(_){return''}}
+function ensureBox(){let box=document.querySelector('#flexTextMatches');if(box)return box;box=document.createElement('div');box.id='flexTextMatches';box.className='summary hidden';box.style.marginTop='10px';document.querySelector(STATUS)?.insertAdjacentElement('afterend',box);return box}
+function render(changes){const box=ensureBox();const positive=changes.filter(x=>x.delta>0);if(!positive.length){box.classList.add('hidden');box.textContent='';return}const total=positive.reduce((n,x)=>n+x.delta,0);const lines=positive.map(x=>`📄 ${x.name} — +${x.delta} coincidencia${x.delta===1?'':'s'} flexible${x.pages.length?` · página${x.pages.length===1?'':'s'} ${x.pages.join(', ')}`:''}`);box.textContent=`🔎 Texto PDF flexible: ${total} coincidencia${total===1?'':'s'} adicional${total===1?'':'es'} detectada${total===1?'':'s'}\n${lines.join('\n')}`;box.style.whiteSpace='pre-wrap';box.classList.remove('hidden')}
+function syncApply(list){const apply=document.querySelector(APPLY);if(!apply)return;const hasWork=list.some(a=>!a?.error&&(Number(a?.comments||0)>0||(a?.counts||[]).some(c=>Number(c?.count||0)>0||Number(c?.annotationCount||0)>0||Number(c?.ocrCount||0)>0)));apply.disabled=!hasWork}
+function syncStat(list){const stat=document.querySelector('#statEdits');if(!stat)return;const total=list.reduce((n,a)=>n+(a?.error?0:(a.counts||[]).reduce((q,c)=>q+Number(c.count||0)+Number(c.annotationCount||0)+Number(c.ocrCount||0),0)),0);stat.textContent=total}
+async function reconcile(){const list=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];if(!list.length)return;const token=list.map(x=>`${x?.name||''}:${x?.data?.length||0}:${(x?.counts||[]).map(c=>`${c.find}:${c.count}`).join(',')}`).join('|');if(token===lastToken)return;lastToken=token;const changes=[];for(const item of list){if(item?.error||!item?.data||!Array.isArray(item.counts))continue;let doc;try{doc=mupdf.PDFDocument.openDocument(new Uint8Array(item.data),'application/pdf');const texts=[];for(let i=0;i<doc.countPages();i++)texts.push(pageText(doc.loadPage(i)));for(const c of item.counts){if(!String(c?.find||'').trim())continue;let exact=0;const pages=[];for(let i=0;i<texts.length;i++){const n=countIn(texts[i],c.find);exact+=n;if(n)pages.push(i+1)}const old=Math.max(0,Number(c.count||0));if(exact!==old){c.count=exact;c.pages=pages;changes.push({name:item.name,find:c.find,from:old,to:exact,delta:exact-old,pages})}}}catch(e){console.warn('case-sensitive text reconciliation',item?.name,e)}finally{try{doc?.destroy()}catch(_){}}}
+render(changes);syncStat(list);syncApply(list);window.__flexTextAnalysis={extra:changes,reconciled:true,caseSensitive:true}}
+function watch(){lastToken='';if(timer)clearInterval(timer);let ticks=0;timer=setInterval(()=>{reconcile();if(++ticks>600){clearInterval(timer);timer=null}},100)}
+document.querySelector(ANALYZE)?.addEventListener('click',watch);

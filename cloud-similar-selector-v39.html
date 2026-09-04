@@ -1,0 +1,19 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v39</title></head><body><script type="module">
+const origFetch=window.fetch;
+window.fetch=async function(input,init){
+  const u=String(input);
+  if(u.includes('cloud-similar-selector-v24.html')){
+    const rr=await origFetch(input,init),txt=await rr.text();
+    let x=txt;
+    const oldPair="pairOK=ordinal.length===visualSelected.length&&ordinal.every((x,i)=>{const v=visualSelected[i],t=Math.max(1,Math.ceil(v.segs*.45));return x&&((x.curves>0)===(v.curves>0))&&((x.lines>0)===(v.lines>0))&&Math.abs(x.segs-v.segs)<=t}),os=ordinal.reduce((n,x)=>n+x.segs,0),oratio=vs?os/vs:0,ordinalSafe=ordPossible&&pairOK&&oratio>=.92&&oratio<=1.08";
+    const newPair="pairOK=ordinal.length===visualSelected.length&&ordinal.every((x,i)=>{const v=visualSelected[i];if(!x)return false;const tol=Math.max(.75,diag(v.bbox)*.06),boxOK=Math.abs(x.bbox[0]-v.bbox[0])<=tol&&Math.abs(x.bbox[1]-v.bbox[1])<=tol&&Math.abs(x.bbox[2]-v.bbox[2])<=tol&&Math.abs(x.bbox[3]-v.bbox[3])<=tol,colorOK=colorDist(x.rgb,v.rgb)<=.035,wt=Math.max(.06,Math.abs(v.width)*.22),widthOK=Math.abs(x.width-v.width)<=wt;return boxOK&&colorOK&&widthOK}),os=ordinal.reduce((n,x)=>n+x.segs,0),oratio=vs?os/vs:0,ordinalSafe=ordPossible&&pairOK&&oratio>=.92&&oratio<=1.08";
+    if(!x.includes(oldPair))throw new Error('No pude localizar la validación ordinal clásica.');
+    x=x.replace(oldPair,newPair).replace(/Selector de nubes v24/g,'Selector de nubes v39');
+    return new Response(x,{status:rr.status,statusText:rr.statusText,headers:rr.headers});
+  }
+  return origFetch(input,init);
+};
+const r=await origFetch('./cloud-similar-selector-v38.html?v=20260901-classicdefault1',{cache:'no-store'});let h=await r.text();
+h=h.replace(/Selector de nubes v38/g,'Selector de nubes v39').replace('v38 · clásico por defecto hasta 8 MB comprimidos + protección masiva por encima + lectura corregida de /Contents.','v39 · clásico por defecto + mapeo ordinal 1:1 validado por geometría, color y grosor.');
+document.open();document.write(h);document.close();
+</script></body></html>
