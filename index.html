@@ -15,7 +15,7 @@
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
       let html=await response.text();
       const marker='<script type="importmap">'+JSON.stringify({imports:{'./revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v10.js?v=20260819-density50-recovery2'}})+'</'+'script>';
-      const heavyAnalysisGuard='<script type="module" src="./batch-analysis-heavy-guard-v2-device.js?v=20260904-device-heavy2"></'+'script>';
+      const heavyAnalysisGuard='<script type="module" src="./batch-analysis-heavy-guard-v3-flate.js?v=20260904-flate-analysis3"></'+'script>';
       const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
       const flexOld='flex-text-analysis-v1.js?v=20260813-flextext2';
