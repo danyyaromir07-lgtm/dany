@@ -56,7 +56,7 @@ function pageText(page) {
 }
 
 function augmentItem(item, rules) {
-  if (!item || item.error || !item.data || !Array.isArray(item.counts)) return 0;
+  if (!item || item.error || item.memorySafeAnalysis === true || !item.data || !Array.isArray(item.counts)) return 0;
   const existing = new Set(item.counts.map((rule) => variantKey(rule?.find)).filter(Boolean));
   const missing = rules.filter((rule) => !existing.has(rule.key));
   if (!missing.length) return 0;
@@ -109,12 +109,14 @@ function augmentBatch(value) {
   if (!rules.length) return;
   let files = 0;
   let rulesAdded = 0;
+  let skippedMemorySafe = 0;
   for (const item of value) {
+    if (item?.memorySafeAnalysis === true) { skippedMemorySafe++; continue; }
     const added = augmentItem(item, rules);
     if (added) files++;
     rulesAdded += added;
   }
-  window.__batchSearchVariants = { files, rulesAdded };
+  window.__batchSearchVariants = { files, rulesAdded, skippedMemorySafe };
 }
 
 function install() {
