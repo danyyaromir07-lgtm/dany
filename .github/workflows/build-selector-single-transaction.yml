@@ -15,7 +15,12 @@ jobs:
         with:
           python-version: '3.x'
       - name: Patch selector
-        run: python tmp-selector-single-transaction.py
+        run: |
+          if grep -q "function makeDirectEditPlan" selector-nubes-multistream-core.html; then
+            echo "candidate already generated"
+          else
+            python tmp-selector-single-transaction.py
+          fi
       - name: Static invariants
         run: |
           python - <<'PY'
@@ -33,7 +38,7 @@ jobs:
           from pathlib import Path
           import re
           s=Path('selector-nubes-multistream-core.html').read_text()
-          m=re.search(r'<script type="module">(.*)</script>',s,re.S)
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
           assert m
           Path('/tmp/selector.mjs').write_text(m.group(1))
           PY
@@ -46,7 +51,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add selector-nubes-multistream-core.html selector-syntax.log selector-syntax.code
-          git commit -m "Generate single-transaction selector candidate" || true
+          git commit -m "Validate single-transaction selector candidate" || true
           git push origin HEAD:candidate/selector-single-transaction
       - name: Enforce syntax
         run: |
