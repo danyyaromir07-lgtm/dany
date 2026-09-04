@@ -1,0 +1,64 @@
+name: PDF text fixture
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check v63 JavaScript syntax
+        run: node --check text-editor-v63.js
+      - name: Run v63 core regression test
+        run: node tests/test-v63-core.mjs | tee v63-core-report.txt
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      - name: Run v63 in Chromium against official PDF
+        run: node tests/browser-test-v63.mjs | tee v63-browser-report.txt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyMuPDF
+        run: python -m pip install --disable-pip-version-check pymupdf==1.26.7
+      - name: Validate edited PDF
+        run: python tests/validate-v63-result.py 2>&1 | tee validation-report.txt
+      - name: Inspect official PDF fixture
+        run: python tests/inspect-pdf-fixture.py 2>&1 | tee fixture-report.txt
+      - name: Publish fixture report to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '## PDF text editor CI diagnostic'
+            echo
+            echo "Commit: $GITHUB_SHA"
+            echo
+            echo '### v63 core regression'
+            echo '```text'
+            cat v63-core-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### v63 Chromium test'
+            echo '```text'
+            cat v63-browser-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Edited PDF validation'
+            echo '```text'
+            cat validation-report.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Fixture inspection'
+            echo '```text'
+            cat fixture-report.txt 2>/dev/null || true
+            echo '```'
+          } > issue-body.md
+          gh issue create --title "PDF editor CI $GITHUB_SHA" --body-file issue-body.md || true

@@ -1,0 +1,15 @@
+import { prepareEmptyRules, restoreEmptyRules } from './batch-apply-empty-wrapper-v1.js?v=20260827-empty1';
+export async function runSelectiveFallback(){
+  const list=Array.isArray(window.__batchAnalysis)?window.__batchAnalysis:[];
+  let prepared={backups:[],total:0};
+  try{
+    prepared=await prepareEmptyRules(list);
+    const base=await import('./batch-apply-selective-v1.js?v=20260827-empty-selective-base1');
+    if(typeof base.runSelectiveFallback!=='function')throw new Error('El Apply selectivo no está disponible.');
+    const result=await base.runSelectiveFallback();
+    const stat=document.querySelector('#statEdits');
+    if(stat&&prepared.total){const n=Number(stat.textContent||0);if(Number.isFinite(n))stat.textContent=String(n+prepared.total)}
+    window.__emptyReplacementApply={version:1,prepared:prepared.total,complete:true,selective:true};
+    return result;
+  }finally{restoreEmptyRules(prepared.backups)}
+}

@@ -1,0 +1,1 @@
+Static Pages fallback is prepared.

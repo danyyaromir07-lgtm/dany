@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF Tools · Cloud v24 test</title></head>
+<body><p id="boot" style="font-family:system-ui;padding:20px">Cargando prueba estructural de nubes v24…</p>
+<script>
+(async()=>{
+  const boot=document.getElementById('boot');
+  try{
+    const r=await fetch('./index.html?v=20260831-v24-test-source1',{cache:'no-store'});
+    if(!r.ok)throw new Error('No se pudo cargar index.html: '+r.status);
+    let html=await r.text();
+    const oldRoute="'./revision-cloud-additive-families-v1.js?v=20260821-additive1':'./revision-cloud-additive-families-v23.js?v=20260831-tokendiag1'";
+    const newRoute="'./revision-cloud-additive-families-v1.js?v=20260821-additive1':'./revision-cloud-additive-families-v24.js?v=20260831-combinedcm1'";
+    if(!html.includes(oldRoute))throw new Error('No encontré la ruta v23 esperada en index.html.');
+    html=html.replace(oldRoute,newRoute);
+    document.open();document.write(html);document.close();
+  }catch(err){boot.textContent='ERROR AL CARGAR PRUEBA v24: '+(err?.message||String(err));}
+})();
+</script></body></html>

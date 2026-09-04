@@ -1,0 +1,11 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v43</title></head><body><script type="module">
+const r=await fetch('./cloud-similar-selector-v42.html?v=20260901-directtransaction1',{cache:'no-store'});
+let h=await r.text();
+const old="h=h.replace(oldRefs,newRefs).replace('massive=rawBytes>=5_000_000','massive=rawBytes>=8_000_000');";
+const neu="h=h.replace(oldRefs,newRefs).replace('massive=rawBytes>=5_000_000','massive=false');";
+if(!h.includes(old))throw new Error('v43: no pude localizar la bifurcación masiva de v42.');
+h=h.replace(old,neu)
+   .replace(/Selector de nubes v42/g,'Selector de nubes v43')
+   .replace('v42 · selector directo + mapeo ordinal 1:1 + borrado transaccional verificado.','v43 · selector clásico único + mapeo ordinal 1:1 + borrado transaccional verificado.');
+document.open();document.write(h);document.close();
+</script></body></html>
