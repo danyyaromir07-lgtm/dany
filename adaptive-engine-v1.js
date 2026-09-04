@@ -1,11 +1,28 @@
 import * as mupdf from 'https://cdn.jsdelivr.net/npm/mupdf@1.28.0/dist/mupdf.js';
 
 const normalize = s => String(s || '').replace(/\s+/g, ' ').trim();
+const HIGH_RISK_RAW_STREAM = 8 * 1024 * 1024;
+function primitive(o){try{return o?.valueOf?.()??o}catch(_){return o}}
+function numberOf(o){try{if(o?.asNumber)return Number(o.asNumber());const n=Number(primitive(o));return Number.isFinite(n)?n:0}catch(_){return 0}}
+function resolve(o){try{return o?.resolve?.()||o}catch(_){return o}}
+function pageHasLargeContentStream(page){
+  try{
+    const co=page.getObject()?.get?.('Contents'); if(!co)return false;
+    const r=resolve(co), refs=r?.isArray?.()?Array.from({length:Number(r.length||0)},(_,i)=>r.get(i)):[co];
+    for(const ref of refs){
+      const st=resolve(ref); if(!st?.isStream?.())continue;
+      let n=0; try{n=numberOf(st.get?.('Length'))}catch(_){}
+      if(!n)try{const raw=st.readRawStream?.();n=Number(raw?.asUint8Array?.()?.byteLength||raw?.byteLength||raw?.length||0)}catch(_){}
+      if(n>=HIGH_RISK_RAW_STREAM)return true;
+    }
+  }catch(_){}
+  return false;
+}
 function countPageContent(page){const out={textObjects:0,pathObjects:0,imageObjects:0,fillText:0,fillPath:0,strokePath:0,fillImage:0};try{const dev=new mupdf.Device({fillText(){out.fillText++},fillPath(){out.fillPath++;out.pathObjects++},strokePath(){out.strokePath++;out.pathObjects++},fillImage(){out.fillImage++;out.imageObjects++},fillImageMask(){out.imageObjects++}});page.runPageContents(dev,mupdf.Matrix.identity);dev.close()}catch(_){}out.textObjects=out.fillText;return out}
 function getAnnotations(page){try{return page.getAnnotations?page.getAnnotations():[]}catch(_){return[]}}
 function getPageCount(doc){try{if(typeof doc.countPages==='function')return doc.countPages();if(typeof doc.getPageCount==='function')return doc.getPageCount();if(typeof doc.getPages==='function'){const pages=doc.getPages();return Array.isArray(pages)?pages.length:(typeof pages?.length==='number'?pages.length:0)}}catch(_){}return 0}
 function getPage(doc,i){try{if(typeof doc.loadPage==='function')return doc.loadPage(i);if(typeof doc.getPage==='function')return doc.getPage(i);if(typeof doc.getPages==='function')return doc.getPages()?.[i]||null}catch(_){}return null}
-export function inspectPage(page,options={}){const graphics=options.graphics!==false,content=graphics?countPageContent(page):{textObjects:0,pathObjects:0,imageObjects:0,fillText:0,fillPath:0,strokePath:0,fillImage:0};let structured=null,text='';try{structured=page.toStructuredText('preserve-spans');text=structured.asText()}catch(_){}const annotations=getAnnotations(page),ann=annotations.map(a=>{let type='',contents='';try{type=a.getType()}catch(_){}try{contents=a.getContents()}catch(_){}return{annotation:a,type,contents}}),freeTexts=ann.filter(a=>a.type==='FreeText'),imageBlock=structured&&(()=>{try{return JSON.parse(structured.asJSON()).blocks.some(b=>b.type==='image')}catch(_){return false}})(),images=content.imageObjects>0||!!imageBlock;return{text,hasRealText:!!normalize(text),annotations:ann.length,freeTexts,hasFreeText:freeTexts.length>0,hasImages:images,hasVectorGraphics:content.pathObjects>0,content,kinds:{text:!!normalize(text),annotation:freeTexts.length>0,vector:content.pathObjects>0,image:images}}
+export function inspectPage(page,options={}){const graphics=options.graphics!==false,content=graphics?countPageContent(page):{textObjects:0,pathObjects:0,imageObjects:0,fillText:0,fillPath:0,strokePath:0,fillImage:0};const skipStructured=options.graphics===false&&pageHasLargeContentStream(page);let structured=null,text='';if(!skipStructured)try{structured=page.toStructuredText('preserve-spans');text=structured.asText()}catch(_){}const annotations=getAnnotations(page),ann=annotations.map(a=>{let type='',contents='';try{type=a.getType()}catch(_){}try{contents=a.getContents()}catch(_){}return{annotation:a,type,contents}}),freeTexts=ann.filter(a=>a.type==='FreeText'),imageBlock=structured&&(()=>{try{return JSON.parse(structured.asJSON()).blocks.some(b=>b.type==='image')}catch(_){return false}})(),images=content.imageObjects>0||!!imageBlock;return{text,hasRealText:!!normalize(text),annotations:ann.length,freeTexts,hasFreeText:freeTexts.length>0,hasImages:images,hasVectorGraphics:content.pathObjects>0,content,kinds:{text:!!normalize(text),annotation:freeTexts.length>0,vector:content.pathObjects>0,image:images},structuredSkippedForMemory:skipStructured}
 }
 export function findFreeTextMatches(page,needle){const target=normalize(needle);if(!target)return[];const info=inspectPage(page,{graphics:false});return info.freeTexts.filter(x=>normalize(x.contents).includes(target))}
 export function editFreeTextDetailed(doc,needle,replacement){const target=normalize(needle);if(!target)return{count:0,preserved:new Set()};let count=0;const preserved=new Set();const pageCount=getPageCount(doc);for(let i=0;i<pageCount;i++){const page=getPage(doc,i);if(!page)continue;const annotations=getAnnotations(page);let changed=false;for(const a of annotations){let type='',contents='';try{type=a.getType()}catch(_){}if(type!=='FreeText')continue;try{contents=a.getContents()}catch(_){continue}if(!normalize(contents).includes(target))continue;const next=contents.replace(target,replacement);try{a.setContents(next);a.update();changed=true;count++;preserved.add(a)}catch(_){} }if(changed)try{page.update()}catch(_){} }return{count,preserved}}
