@@ -18,10 +18,14 @@
       const heavyAnalysisGuard='<script type="module" src="./batch-analysis-heavy-guard-v2-device.js?v=20260904-device-heavy2"></'+'script>';
       const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
+      const flexOld='flex-text-analysis-v1.js?v=20260813-flextext2';
+      const flexNew='flex-text-analysis-v1.js?v=20260904-heavy-skip1';
       if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
+      if(!html.includes(flexOld))throw new Error('No encontré el reconciliador flexible esperado en la aplicación base.');
       html=html.replace('</head>',marker+heavyAnalysisGuard+'</head>');
       html=html.replace(signatureOld,signatureNew);
+      html=html.replace(flexOld,flexNew);
       document.open();
       document.write(html);
       document.close();
