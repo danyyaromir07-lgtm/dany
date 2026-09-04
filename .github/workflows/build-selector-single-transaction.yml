@@ -21,26 +21,13 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('selector-nubes-multistream-core.html').read_text()
-          required=[
-            'function makeDirectEditPlan',
-            'function applyDirectEditPlan',
-            'async function attemptSingleTransaction',
-            "transacción directa 1:1",
-            'giantSingleTransaction',
-            'function strokeEditRanges',
-            'function applyStrokeGroups',
-            'async function rasterDigest',
-            'if(!bagOK(previewVisual))',
-            'buildCausalRoute',
-            'editRanges'
-          ]
-          for x in required:
-            assert x in s, x
+          required=['function makeDirectEditPlan','function applyDirectEditPlan','async function attemptSingleTransaction','transacción directa 1:1','giantSingleTransaction','function strokeEditRanges','function applyStrokeGroups','async function rasterDigest','if(!bagOK(previewVisual))','buildCausalRoute','editRanges']
+          for x in required: assert x in s, x
           assert "if(vs.length<180&&classicVisual.length<250000)" in s
           assert "página excepcionalmente grande" not in s
           print('static invariants ok')
           PY
-      - name: JavaScript syntax
+      - name: JavaScript syntax diagnostics
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -50,12 +37,18 @@ jobs:
           assert m
           Path('/tmp/selector.mjs').write_text(m.group(1))
           PY
-          node --check /tmp/selector.mjs
-      - name: Commit generated core
+          set +e
+          node --check /tmp/selector.mjs > selector-syntax.log 2>&1
+          echo $? > selector-syntax.code
+          set -e
+      - name: Commit generated core and diagnostics
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add selector-nubes-multistream-core.html
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Add exact single-transaction delete path"
+          git add selector-nubes-multistream-core.html selector-syntax.log selector-syntax.code
+          git commit -m "Generate single-transaction selector candidate" || true
           git push origin HEAD:candidate/selector-single-transaction
+      - name: Enforce syntax
+        run: |
+          cat selector-syntax.log
+          test "$(cat selector-syntax.code)" = "0"
