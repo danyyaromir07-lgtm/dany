@@ -1,0 +1,61 @@
+name: Build selector single transaction
+on:
+  push:
+    branches: [candidate/selector-single-transaction]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: candidate/selector-single-transaction
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch selector
+        run: python tmp-selector-single-transaction.py
+      - name: Static invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          required=[
+            'function makeDirectEditPlan',
+            'function applyDirectEditPlan',
+            'async function attemptSingleTransaction',
+            "transacción directa 1:1",
+            'giantSingleTransaction',
+            'function strokeEditRanges',
+            'function applyStrokeGroups',
+            'async function rasterDigest',
+            'if(!bagOK(previewVisual))',
+            'buildCausalRoute',
+            'editRanges'
+          ]
+          for x in required:
+            assert x in s, x
+          assert "if(vs.length<180&&classicVisual.length<250000)" in s
+          assert "página excepcionalmente grande" not in s
+          print('static invariants ok')
+          PY
+      - name: JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*)</script>',s,re.S)
+          assert m
+          Path('/tmp/selector.mjs').write_text(m.group(1))
+          PY
+          node --check /tmp/selector.mjs
+      - name: Commit generated core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Add exact single-transaction delete path"
+          git push origin HEAD:candidate/selector-single-transaction
