@@ -1,0 +1,43 @@
+name: Safe selector verification pruning
+on:
+  push:
+    branches: [candidate/selector-verify-pruning]
+    paths:
+      - 'tmp-safe-verify-pruning.py'
+      - '.github/workflows/build-selector-safe-verify-pruning.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply conservative performance patch
+        run: python tmp-safe-verify-pruning.py
+      - name: Extract and syntax-check module JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m, 'module script missing'
+          js=m.group(1)
+          # strip ESM import for node syntax check
+          js=re.sub(r"^import .*?;\s*",'',js,count=1,flags=re.S)
+          Path('/tmp/core.mjs').write_text(js)
+          assert 'function activeRouteImpossible' in s
+          assert "const previewVisual=collectVisual(wp);if(!localBagOK(previewVisual))" in s
+          assert "const previewModel=deepModel(wp);if(!previewModel" in s
+          assert 'afterRaster!==previewRaster' in s
+          assert 'strokeEditRanges' in s
+          assert 'Búsqueda causal dirigida' in s
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit generated core only
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Prune failed routes before expensive exact verification" || exit 0
+          git push
