@@ -1,9 +1,0 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v28</title></head><body><script type="module">
-const r=await fetch('./cloud-similar-selector-v25.html?v=20260901-visualfirst1',{cache:'no-store'});let h=await r.text();
-const a="structSelected=ordinalSafe?ordinal:(unique?win.a:[]);",b="const direct=model.strokes.filter(x=>similar(x,visualSeed)),directSeg=direct.reduce((n,x)=>n+x.segs,0),directRatio=vs?directSeg/vs:0,directSafe=direct.length>0&&directRatio>=.92&&directRatio<=1.08;structSelected=ordinalSafe?ordinal:(unique?win.a:(directSafe?direct:[]));";
-const c="safe=ordinalSafe||unique;status.textContent=",d="safe=ordinalSafe||unique||directSafe;$('#delete').disabled=!safe;window.__cloudMapSafe=safe;status.textContent=";
-if(!h.includes(a)||!h.includes(c))throw new Error('No encontré los puntos de mapeo de v25.');h=h.replace(a,b).replace(c,d);
-h=h.replace("status.textContent=`Zoom ${Math.round(zoom*100)}%.`;","status.textContent=window.__cloudLastStatus||`Zoom ${Math.round(zoom*100)}%.`;");
-h=h.replace("overlay.addEventListener('click',chooseClassic);","overlay.addEventListener('click',chooseClassic);overlay.addEventListener('click',()=>setTimeout(()=>{window.__cloudLastStatus=status.textContent;const b=$('#delete');if(window.__cloudMapSafe===true)b.disabled=false;$('#mode').textContent=(massive?'Modo masivo':'Modo normal · clásico')+(window.__cloudMapSafe===true?' · MAPEO SEGURO':' · MAPEO BLOQUEADO')},0));");
-h=h.replace(/Selector de nubes v25/g,'Selector de nubes v28').replace('v25 · selección visual primero; mapeo estructural después.','v28 · selección v25 + estado de mapeo persistente.');document.open();document.write(h);document.close();
-</script></body></html>

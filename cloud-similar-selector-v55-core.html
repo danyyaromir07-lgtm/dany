@@ -1,9 +1,0 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v55 core</title></head><body><script type="module">
-const r=await fetch('./cloud-similar-selector-v54-core.html?v=20260902-xobjects1',{cache:'no-store'});
-let src=await r.text();
-const old='ordPossible=!model?.incomplete&&!!model?.strokes?.length&&classicVisual.length===model.strokes.length';
-const neu='ordPossible=!!model?.strokes?.length&&classicVisual.length===model.strokes.length';
-if(!src.includes(old))throw new Error('v55: no pude localizar la guardia ordinal de v54.');
-src=src.replace(old,neu).replace(/Selector de nubes v54/g,'Selector de nubes v55');
-document.open();document.write(src);document.close();
-</script></body></html>

@@ -1,1 +1,0 @@
-v6 keeps repeated group deletions in memory and only writes the original file when the user explicitly presses Guardar en archivo original. Direct same-file write requires File System Access API (Chrome/Edge).

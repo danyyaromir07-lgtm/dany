@@ -1,8 +1,0 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Selector de nubes v14</title></head><body><script type="module">
-const r=await fetch('./cloud-similar-selector-v13.html?v=20260901-tile1',{cache:'no-store'});let h=await r.text();
-const bad="p.run(dev,mupdf.Matrix.scale(useRs,useRs));";
-const good="p.run(dev,mupdf.Matrix.identity);";
-if(!h.includes(bad))throw new Error('No pude localizar la doble transformación de v13.');
-h=h.replace(bad,good).replace(/Selector de nubes v13/g,'Selector de nubes v14').replace('v13 · zoom/pan ligero · nitidez real solo en la zona visible.','v14 · tile corregido · una sola transformación de render.');
-document.open();document.write(h);document.close();
-</script></body></html>
