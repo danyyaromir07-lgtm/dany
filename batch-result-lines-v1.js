@@ -1,4 +1,4 @@
-import './batch-search-variants-v1.js?v=20260814-searchvariants1';
+import './batch-search-variants-v1.js?v=20260904-heavy-skip1';
 import './signature-analysis-sync-v2.js?v=20260819-signaturesync2';
 import './signature-result-badge-v2.js?v=20260819-signaturebadge2';
 
