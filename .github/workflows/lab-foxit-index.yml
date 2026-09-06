@@ -33,7 +33,11 @@ jobs:
           python -m pip install --quiet pymupdf
       - name: Syntax check
         run: node --check foxit-index-engine.mjs
-      - name: Generate synthetic fixtures
+      - name: Generate correctness fixtures
         run: python lab-tests/generate_fixtures.py
       - name: Run exact deletion tests
         run: node lab-tests/test_engine.mjs
+      - name: Generate 120k-stroke performance fixture
+        run: python lab-tests/generate_large_fixture.py
+      - name: Run cached-index performance gate
+        run: node lab-tests/test_performance.mjs
