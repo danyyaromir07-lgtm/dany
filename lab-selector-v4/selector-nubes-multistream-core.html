@@ -70,9 +70,12 @@ async function startCompactIndex(){const my=++indexEpoch;indexReady=false;let p=
 function compactCell(r,cell=.05){const b=r?.bbox||[0,0,0,0],cx=(Number(b[0])+Number(b[2]))*.5,cy=(Number(b[1])+Number(b[3]))*.5;return[Math.round(cx/cell),Math.round(cy/cell)]}
 function compactCellKey(r,x,y){return String(r?.lines||0)+'|'+String(r?.curves||0)+'|'+x+'|'+y}
 function compactSeqToken(x){
- const r=n=>Math.round(Number(n||0)*1000)/1000;
- const rgb=Array.isArray(x?.rgb)?x.rgb.slice(0,3).map(r):[];
- return [Number(x?.lines||0),Number(x?.curves||0),Number(x?.segs??((x?.lines||0)+(x?.curves||0))),r(x?.width),...rgb].join('|');
+ // Common parser-stable topology only. Width/color/coordinates are intentionally
+ // excluded from the global alignment because MuPDF visual callbacks and the
+ // compact PDF parser can normalize those values differently. Safety comes from
+ // requiring a unique optimal ordinal mapping and from the exact transactional
+ // visual/structural verification before the active PDF is replaced.
+ return Number(x?.lines||0)+'|'+Number(x?.curves||0);
 }
 async function strictCompactBandedMap(vs){
  if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
@@ -92,7 +95,7 @@ async function strictCompactBandedMap(vs){
   if((i&4095)===4095)await uiYield();
  }
  const end=at(n,m),best=end>=0?F[end]:INF;
- if(best===INF||best>maxCost)return{ok:false,why:'la secuencia exacta no cabe en una alineación acotada · coste='+String(best)};
+ if(best===INF||best>maxCost)return{ok:false,why:'la secuencia topológica no cabe en una alineación acotada · coste='+String(best)};
  const R=new Uint8Array((n+1)*W);R.fill(INF);q=at(n,m);R[q]=0;
  for(let i=n;i>=0;i--){
   const j0=Math.max(0,i-band),j1=Math.min(m,i+band);
@@ -270,9 +273,9 @@ async function removeGroup(){
  const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}
  let targets=[],structOrd=[],mapMode='ordinal';
  if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{
-  status.textContent='Borrado exacto · alineando secuencia visual↔estructural completa para '+visualSelected.length+' trazos azules…';await uiYield();
+  status.textContent='Borrado exacto · alineando topología visual↔estructural completa para '+visualSelected.length+' trazos azules…';await uiYield();
   const bm=await strictCompactBandedMap(visualSelected);if(!bm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+bm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
-  targets=bm.targets;structOrd=bm.structOrd;mapMode='alineación global exacta por secuencia · coste '+bm.cost+' + verificación exacta';
+  targets=bm.targets;structOrd=bm.structOrd;mapMode='alineación global topológica única · coste '+bm.cost+' + verificación exacta';
  }
  let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
  let work=null,wp=null,check=null,cp=null;try{
