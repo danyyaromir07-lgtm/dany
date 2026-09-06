@@ -1,0 +1,98 @@
+name: Lab v4 equal-count ordinal mapping
+
+on:
+  push:
+    branches:
+      - lab/foxit-index-v4-realpdf-map
+    paths:
+      - .github/workflows/lab-v4-ordinal-equal-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v4-realpdf-map
+          fetch-depth: 0
+      - name: Patch equal-count route and assert selector block behavior
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old=""" let targets=[],structOrd=[],mapMode='ordinal';
+ if(model.ordinalSafe&&model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i])}else{
+  status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();
+  const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+  targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';
+ }"""
+          new=""" let targets=[],structOrd=[],mapMode='ordinal';
+ if(model.strokes.length===classicVisual.length){
+  structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta';
+ }else{
+  status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();
+  const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+  targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';
+ }"""
+          if old not in s:
+              raise SystemExit('target removeGroup block not found')
+          s=s.replace(old,new,1)
+          # Selector regression invariants: preserve component expansion exactly.
+          required=[
+            "const broad=classicVisual.filter(v=>seedCompat(v,best))",
+            "groups.find(g=>g.includes(best))||[best]",
+            "if(seed.length>=3)",
+            "componentLike(g,seed)",
+            "famVisual=[...new Set(famVisual)]",
+            "visualSelected=add?[...new Set([...prevVisual,...famVisual])]:famVisual",
+            "expansión por componente"
+          ]
+          for q in required:
+              if q not in s: raise SystemExit('selector regression: '+q)
+          p.write_text(s)
+          print('patched equal-count route; selector block invariants preserved')
+          PY
+      - name: Syntax and route assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          assert "model.strokes.length===classicVisual.length" in s
+          assert "ordinal por secuencia + verificación exacta" in s
+          assert "model.ordinalSafe&&model.strokes.length===classicVisual.length" not in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S); assert m
+          js=re.sub(r"^import .*?;\s*",'',m.group(1),count=1,flags=re.S)
+          Path('/tmp/core.mjs').write_text(js)
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit lab core
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Lab: equal-count ordinal route with exact post-verification'
+          git push origin HEAD:lab/foxit-index-v4-realpdf-map
+      - name: Publish only isolated lab files
+        run: |
+          CORE=$(cat selector-nubes-multistream-core.html)
+          git fetch origin gh-pages
+          git checkout -B lab-publish origin/gh-pages
+          mkdir -p lab-selector-v4
+          printf '%s' "$CORE" > lab-selector-v4/selector-nubes-multistream-core.html
+          # Preserve the existing compact lab wrapper; only bump its iframe cache key.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          import re
+          s=re.sub(r'selector-nubes-multistream-core\.html\?v=[^\"\']+', 'selector-nubes-multistream-core.html?v=20260906-equalcount3', s, count=1)
+          p.write_text(s)
+          PY
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Publish isolated lab v4 equal-count fix'
+          git push origin HEAD:gh-pages
