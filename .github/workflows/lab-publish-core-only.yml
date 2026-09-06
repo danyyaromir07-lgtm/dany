@@ -1,0 +1,47 @@
+name: Lab publish core only
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+          fetch-depth: 0
+      - name: Guard public base and candidate
+        run: |
+          git fetch origin gh-pages lab/foxit-index-v3
+          test "$(git rev-parse origin/gh-pages)" = "e3bc533784d9ed581e6970d66b82d89a0f8521c1"
+          git show origin/lab/foxit-index-v3:selector-nubes-multistream-core.html > /tmp/candidate.html
+          ! grep -q "PRE:" /tmp/candidate.html
+          ! grep -q "IDX:" /tmp/candidate.html
+          grep -q "function strokeEditGroups" /tmp/candidate.html
+          grep -q "rangeKeys:new Set()" /tmp/candidate.html
+          grep -q "function compactEditPlan" /tmp/candidate.html
+          grep -q "function applyCompactPlan" /tmp/candidate.html
+          grep -q "function verifyVisualSequence" /tmp/candidate.html
+          grep -q "function verifyCompactStructure" /tmp/candidate.html
+          grep -q "editRanges" /tmp/candidate.html
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('/tmp/candidate.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          if not m: raise SystemExit('module script not found')
+          Path('/tmp/candidate.mjs').write_text(m.group(1))
+          PY
+          node --check /tmp/candidate.mjs
+      - name: Publish only core on gh-pages
+        run: |
+          git checkout -B gh-pages origin/gh-pages
+          cp /tmp/candidate.html selector-nubes-multistream-core.html
+          test "$(git status --short | wc -l)" -eq 1
+          git status --short | grep -q "selector-nubes-multistream-core.html"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Publish direct exact cloud deletion engine"
+          git push origin HEAD:gh-pages
