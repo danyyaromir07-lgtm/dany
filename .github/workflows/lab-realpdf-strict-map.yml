@@ -1,4 +1,4 @@
-name: Lab strict real-PDF mapping patch
+name: Lab strict real-PDF mapping validation
 
 on:
   push:
@@ -7,62 +7,66 @@ on:
     paths:
       - .github/workflows/lab-realpdf-strict-map.yml
 
-permissions:
-  contents: write
-
 jobs:
-  patch:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: lab/foxit-index-v4-realpdf-map
-      - name: Patch compact exact mapper
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate wiring and module syntax
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('selector-nubes-multistream-core.html')
-          s=p.read_text()
-          old=""" if(!model.ordinalSafe||model.strokes.length!==classicVisual.length){status.textContent='Borrado bloqueado sin modificar el PDF: no se pudo demostrar una identidad visual→estructural ordinal única ('+classicVisual.length+'/'+model.strokes.length+'). No se probarán rutas alternativas ni causal.';setButtons();return}\n const ord=visualSelected.map(v=>Number(v._ordinal));if(ord.some(i=>!Number.isInteger(i)||i<0||i>=model.strokes.length)||new Set(ord).size!==ord.length){status.textContent='Borrado bloqueado: selección ordinal inestable.';return}\n const targets=ord.map(i=>model.strokes[i]);let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}"""
-          new=""" const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}\n let targets=[],structOrd=[],mapMode='ordinal';\n if(model.ordinalSafe&&model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i])}else{\n  status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();\n  const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}\n  targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';\n }\n let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}"""
-          if s.count(old)!=1:
-              raise SystemExit(f'guard block match count={s.count(old)}')
-          s=s.replace(old,new)
-
-          anchor="function directResolveCompactStream(page,loc){"
-          helper="""function compactCell(r,cell=.05){const b=r?.bbox||[0,0,0,0],cx=(Number(b[0])+Number(b[2]))*.5,cy=(Number(b[1])+Number(b[3]))*.5;return[Math.round(cx/cell),Math.round(cy/cell)]}\nfunction compactCellKey(r,x,y){return String(r?.lines||0)+'|'+String(r?.curves||0)+'|'+x+'|'+y}\nasync function strictCompactGeomMap(vs){\n if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};\n if(!vs?.length)return{ok:false,why:'sin selección azul'};\n const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);\n for(let i=0;i<vs.length;i++){const[cx,cy]=compactCell(vs[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(vs[i],cx+dx,cy+dy);let a=byCell.get(k);if(!a)byCell.set(k,a=[]);a.push(i)}}\n for(let si=0;si<model.strokes.length;si++){const st=model.strokes[si],[cx,cy]=compactCell(st,cell),a=byCell.get(compactCellKey(st,cx,cy));if(a)for(const vi of a)if(compactGeomMatch(vs[vi],st))cand[vi].push(si);if((si&16383)===16383)await uiYield()}\n for(let i=0;i<cand.length;i++)if(cand[i].length!==1)return{ok:false,why:'el azul '+(i+1)+' tiene '+cand[i].length+' candidatos estructurales exactos'};\n const structOrd=cand.map(a=>a[0]);if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos trazos azules convergen en el mismo origen estructural'};\n const targets=structOrd.map(i=>model.strokes[i]),revCell=new Map(),hits=targets.map(()=>[]);\n for(let i=0;i<targets.length;i++){const[cx,cy]=compactCell(targets[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(targets[i],cx+dx,cy+dy);let a=revCell.get(k);if(!a)revCell.set(k,a=[]);a.push(i)}}\n for(let vi=0;vi<classicVisual.length;vi++){const v=classicVisual[vi],[cx,cy]=compactCell(v,cell),a=revCell.get(compactCellKey(v,cx,cy));if(a)for(const ti of a)if(compactGeomMatch(v,targets[ti]))hits[ti].push(vi);if((vi&16383)===16383)await uiYield()}\n for(let i=0;i<hits.length;i++){const expected=Number(vs[i]._ordinal),h=hits[i];if(h.length!==1||h[0]!==expected)return{ok:false,why:'el origen del azul '+(i+1)+' también corresponde a geometría no azul o ambigua'}}\n return{ok:true,targets,structOrd}\n}\n"""
-          if s.count(anchor)!=1:
-              raise SystemExit(f'anchor count={s.count(anchor)}')
-          s=s.replace(anchor,helper+anchor)
-
-          reps={
-          "status.textContent='Borrado exacto · una sola transacción sobre '+ord.length+' trazos…';":"status.textContent='Borrado exacto · una sola transacción sobre '+visualOrd.length+' trazos · mapeo '+mapMode+'…';",
-          "const vv=verifyVisualSequence(wp,ord);":"const vv=verifyVisualSequence(wp,visualOrd);",
-          "const sv=await verifyCompactStructure(wp,ord);":"const sv=await verifyCompactStructure(wp,structOrd);",
-          "status.textContent='Selección eliminada y verificada: '+ord.length+' trazos · '+touched+' stream(s) · ruta única · '+((performance.now()-t0)/1000).toFixed(1)+' s. Índice de la nueva copia reconstruyéndose en segundo plano.';":"status.textContent='Selección eliminada y verificada: '+visualOrd.length+' trazos · '+touched+' stream(s) · '+mapMode+' · ruta única · '+((performance.now()-t0)/1000).toFixed(1)+' s. Índice de la nueva copia reconstruyéndose en segundo plano.';"
-          }
-          for a,b in reps.items():
-              if s.count(a)!=1:
-                  raise SystemExit(f'replacement missing/count {s.count(a)}: {a[:70]}')
-              s=s.replace(a,b)
-          p.write_text(s)
-          PY
-      - name: Static assertions
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          import re
           s=Path('selector-nubes-multistream-core.html').read_text()
-          assert 'strictCompactGeomMap' in s
-          assert 'verifyVisualSequence(wp,visualOrd)' in s
-          assert 'verifyCompactStructure(wp,structOrd)' in s
-          assert 'No se probarán rutas alternativas ni causal.' not in s
-          assert '<iframe' not in s
-          print('static assertions ok')
+          required=[
+            'async function strictCompactGeomMap(vs)',
+            'verifyVisualSequence(wp,visualOrd)',
+            'verifyCompactStructure(wp,structOrd)',
+            "mapMode='geométrica 1:1 estricta'",
+            'dos trazos azules convergen en el mismo origen estructural',
+            'también corresponde a geometría no azul o ambigua'
+          ]
+          for q in required: assert q in s, q
+          assert "if(!model.ordinalSafe||model.strokes.length!==classicVisual.length)" not in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          js=m.group(1)
+          js=re.sub(r"^import .*?;\s*",'',js,count=1,flags=re.S)
+          Path('/tmp/core.mjs').write_text(js)
+          print('wiring ok')
           PY
-      - name: Commit lab patch
+          node --check /tmp/core.mjs
+      - name: Install Playwright Chromium
         run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add selector-nubes-multistream-core.html
-          git commit -m "Lab: strict geometric 1:1 fallback for real PDFs"
-          git push origin HEAD:lab/foxit-index-v4-realpdf-map
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Browser smoke test core
+        run: |
+          cat > /tmp/smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import { spawn } from 'node:child_process';
+          const server=spawn('python3',['-m','http.server','4173','--bind','127.0.0.1'],{stdio:'ignore'});
+          const browser=await chromium.launch({headless:true});
+          try {
+            const page=await browser.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('http://127.0.0.1:4173/selector-nubes-multistream-core.html',{waitUntil:'networkidle'});
+            await page.locator('#open').waitFor({state:'visible'});
+            await page.locator('#select').waitFor({state:'visible'});
+            await page.locator('#delete').waitFor({state:'visible'});
+            await page.locator('#save').waitFor({state:'visible'});
+            if(errors.length) throw new Error(errors.join(' | '));
+            console.log('CHROMIUM_CORE_SMOKE_OK');
+          } finally {
+            await browser.close();
+            server.kill('SIGTERM');
+          }
+          JS
+          node /tmp/smoke.mjs
