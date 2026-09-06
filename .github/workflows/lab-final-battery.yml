@@ -49,3 +49,4 @@ jobs:
         run: node lab-tests/test_shared_form_all_selected.mjs
       - name: 430k browser stress
         run: node lab-tests/test_stress_browser.mjs
+# rerun after safe trace cleanup
