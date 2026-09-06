@@ -5,6 +5,7 @@ on:
       - lab/foxit-index-v3
     paths:
       - tools/lab_foxit_index_patch.py
+      - .github/workflows/lab-foxit-index-v3.yml
 permissions:
   contents: write
 jobs:
