@@ -20,11 +20,17 @@ await page.addInitScript(() => {
 });
 await page.goto(base+'/selector-nubes-multistream-core.html',{waitUntil:'domcontentloaded',timeout:60000});
 await page.click('#open');
-await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('identidad ordinal exacta lista'),null,{timeout:60000});
+await page.waitForFunction(() => {
+  const s=document.querySelector('#status')?.textContent||'';
+  return s.includes('identidad ordinal exacta lista') || s.includes('identidad ordinal no demostrada') || s.includes('índice estructural falló');
+},null,{timeout:60000});
 let status=await page.locator('#status').textContent();
 console.log('OPEN_STATUS',status);
+console.log('PAGE_ERRORS',pageErrors);
+console.log('CONSOLE_ERRORS',consoleErrors);
 assert.match(status,/visual=3/);
 assert.match(status,/índice estructural=3/);
+assert.match(status,/identidad ordinal exacta lista/);
 
 const rect=await page.locator('#page').boundingBox();
 assert(rect && rect.width>0 && rect.height>0);
@@ -50,7 +56,6 @@ assert.match(status,/ruta única/);
 assert.doesNotMatch(status,/correspondencia \d|CAUSAL|causal|rutas alternativas/);
 assert(elapsed < 20,`delete took ${elapsed}s`);
 assert.deepEqual(pageErrors,[],`page errors: ${pageErrors.join('\n')}`);
-// Ignore favicon/network noise, but no JS/WASM/module errors are allowed.
 const serious=consoleErrors.filter(x=>/TypeError|ReferenceError|SyntaxError|wasm|mupdf|Uncaught/i.test(x));
 assert.deepEqual(serious,[],`console errors: ${serious.join('\n')}`);
 await browser.close();
