@@ -292,6 +292,28 @@ async function removeGroup(){
  finally{try{cp?.destroy?.()}catch(_){}try{check?.destroy?.()}catch(_){}try{wp?.destroy?.()}catch(_){}try{work?.destroy?.()}catch(_){}}
 }
 
+
+// LAB UI phase 1: read-only state bridge + explicit selection reset.
+// Does not change mapping, deletion, verification, saving, or indexing algorithms.
+function clearVisualSelectionUI(){
+ visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];
+ drawSelection();setButtons();
+ if(doc)status.textContent=indexReady?'Selección limpiada · índice estructural listo.':'Selección limpiada · preparando índice estructural…';
+}
+window.selectorPhase1={
+ clearSelection:clearVisualSelectionUI,
+ getState:()=>({
+  hasDocument:!!doc,
+  selected:Number(visualSelected.length||0),
+  visualTotal:Number(classicVisual.length||0),
+  structuralTotal:Number(model?.strokes?.length||0),
+  indexReady:!!indexReady,
+  analysisReady:!!analysisReady,
+  structuralIncomplete:!!model?.incomplete,
+  pending:!!pending
+ })
+};
+
 async function renderPage(){
  clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;strokeIndexCache=null;analysisReady=false;indexReady=false;indexEpoch++;indexPromise=null;setButtons();
  const p=doc.loadPage(0);pageBounds=p.getBounds();pageW=pageBounds[2]-pageBounds[0];pageH=pageBounds[3]-pageBounds[1];
