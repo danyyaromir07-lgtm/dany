@@ -1,0 +1,80 @@
+name: Lab safe trace cleanup
+on:
+  push:
+    branches: [lab/foxit-index-v3]
+    paths: [.github/workflows/lab-safe-trace-cleanup.yml]
+permissions:
+  contents: write
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+          fetch-depth: 0
+      - name: Restore validated core and remove debug calls safely
+        run: |
+          git show 34c3a8cea128faecaf0478f71412e7acc9f0f215:selector-nubes-multistream-core.html > selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          starts=("console.log('PRE:", 'console.log("PRE:', "console.log('IDX:", 'console.log("IDX:')
+          removed=0
+          pos=0
+          while True:
+              hits=[(s.find(x,pos),x) for x in starts]
+              hits=[h for h in hits if h[0]>=0]
+              if not hits: break
+              i,token=min(hits,key=lambda x:x[0])
+              j=i+len('console.log')
+              if j>=len(s) or s[j]!='(':
+                  raise SystemExit('unexpected console.log form')
+              depth=0; quote=None; esc=False; k=j
+              while k<len(s):
+                  c=s[k]
+                  if quote:
+                      if esc: esc=False
+                      elif c=='\\': esc=True
+                      elif c==quote: quote=None
+                  else:
+                      if c in "'\"`": quote=c
+                      elif c=='(': depth+=1
+                      elif c==')':
+                          depth-=1
+                          if depth==0:
+                              k+=1
+                              break
+                  k+=1
+              if depth!=0: raise SystemExit('unbalanced debug call')
+              if k<len(s) and s[k]==';': k+=1
+              s=s[:i]+s[k:]
+              pos=i
+              removed+=1
+          if removed < 10: raise SystemExit(f'expected >=10 traces, got {removed}')
+          if 'PRE:' in s or 'IDX:' in s: raise SystemExit('trace prefix remains')
+          p.write_text(s)
+          print('removed',removed)
+          PY
+      - name: Validate module syntax and invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          if not m: raise SystemExit('module script not found')
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          required=['function strokeEditGroups','rangeKeys:new Set()','function compactEditPlan','function applyCompactPlan','function verifyVisualSequence','function verifyCompactStructure','editRanges']
+          for x in required:
+              if x not in s: raise SystemExit('missing invariant: '+x)
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit corrected clean core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Clean debug traces without altering core syntax"
+          git push origin HEAD:lab/foxit-index-v3
