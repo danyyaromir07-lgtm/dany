@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
+// Re-run marker after compact scanner progress guard.
 const base = process.env.LAB_URL || 'http://127.0.0.1:8765';
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1400,height:900}});
