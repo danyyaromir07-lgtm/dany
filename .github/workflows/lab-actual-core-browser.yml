@@ -1,0 +1,42 @@
+name: Lab Actual Core Browser
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - selector-nubes-multistream-core.html
+      - lab-tests/test_actual_core_browser.mjs
+      - lab-tests/generate_fixtures.py
+      - .github/workflows/lab-actual-core-browser.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pymupdf
+      - name: Generate PDF fixture
+        run: python lab-tests/generate_fixtures.py
+      - name: Serve actual core
+        run: |
+          python -m http.server 8765 > /tmp/lab-http.log 2>&1 &
+          echo $! > /tmp/lab-http.pid
+          sleep 2
+      - name: Run browser E2E against actual core
+        run: node lab-tests/test_actual_core_browser.mjs
