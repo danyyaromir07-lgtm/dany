@@ -1,0 +1,39 @@
+name: Lab Foxit Index
+
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - foxit-index-engine.mjs
+      - foxit-index-lab.html
+      - lab-tests/**
+      - .github/workflows/lab-foxit-index.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install mupdf@1.28.0
+          python -m pip install --quiet pymupdf
+      - name: Syntax check
+        run: node --check foxit-index-engine.mjs
+      - name: Generate synthetic fixtures
+        run: python lab-tests/generate_fixtures.py
+      - name: Run exact deletion tests
+        run: node lab-tests/test_engine.mjs
