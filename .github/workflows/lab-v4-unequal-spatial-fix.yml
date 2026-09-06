@@ -1,0 +1,83 @@
+name: Lab v4 unequal spatial fix
+
+on:
+  push:
+    branches:
+      - lab/foxit-index-v4-realpdf-map
+    paths:
+      - .github/workflows/lab-v4-unequal-spatial-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v4-realpdf-map
+          fetch-depth: 0
+      - name: Patch unequal-count spatial window
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old=' const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);'
+          new=' const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);'
+          if old not in s:
+              raise SystemExit('strict mapper cell line not found')
+          s=s.replace(old,new,1)
+          # Keep all fail-closed guards and equal-count route unchanged.
+          required=[
+            "cand[i].length!==1",
+            "dos trazos azules convergen en el mismo origen estructural",
+            "también corresponde a geometría no azul o ambigua",
+            "model.strokes.length===classicVisual.length",
+            "ordinal por secuencia + verificación exacta",
+            "expansión por componente"
+          ]
+          for q in required:
+              if q not in s: raise SystemExit('missing invariant: '+q)
+          p.write_text(s)
+          print('unequal-count spatial window patched; strict guards preserved')
+          PY
+      - name: Syntax and regression assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          assert ' const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);' in s
+          assert ' const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);' not in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S); assert m
+          js=re.sub(r"^import .*?;\s*",'',m.group(1),count=1,flags=re.S)
+          Path('/tmp/core.mjs').write_text(js)
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit candidate
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Lab: widen strict spatial candidate window for unequal counts'
+          git push origin HEAD:lab/foxit-index-v4-realpdf-map
+      - name: Publish isolated lab only
+        run: |
+          CORE=$(cat selector-nubes-multistream-core.html)
+          git fetch origin gh-pages
+          git checkout -B lab-publish origin/gh-pages
+          mkdir -p lab-selector-v4
+          printf '%s' "$CORE" > lab-selector-v4/selector-nubes-multistream-core.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          s=re.sub(r'selector-nubes-multistream-core\.html\?v=[^\"\']+', 'selector-nubes-multistream-core.html?v=20260906-unequalspatial5', s, count=1)
+          p.write_text(s)
+          PY
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Publish isolated lab v4 unequal-count spatial fix'
+          git push origin HEAD:gh-pages
