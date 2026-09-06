@@ -24,5 +24,12 @@ sh=sp.new_shape(); sh.draw_line((10,50),(30,70)); sh.draw_line((30,70),(50,50));
 out=fitz.open(); tp=out.new_page(width=400,height=200)
 tp.show_pdf_page(fitz.Rect(20,20,120,120),src,0)
 tp.show_pdf_page(fitz.Rect(180,20,280,120),src,0)
-out.save('lab-tests/fixtures/reused-form.pdf'); out.close(); src.close()
+out.save('lab-tests/fixtures/reused-form.pdf'); out.close()
+
+# Same source Form XObject invoked at very different scales. A click on the small
+# instance should not select the large one, while both still share source operators.
+out=fitz.open(); tp=out.new_page(width=520,height=320)
+tp.show_pdf_page(fitz.Rect(20,20,120,120),src,0)
+tp.show_pdf_page(fitz.Rect(220,20,500,300),src,0)
+out.save('lab-tests/fixtures/reused-form-scaled.pdf'); out.close(); src.close()
 print('fixtures generated')
