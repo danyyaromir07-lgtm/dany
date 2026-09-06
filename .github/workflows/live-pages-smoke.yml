@@ -35,7 +35,7 @@ jobs:
           assert 'PRE:' not in core and 'IDX:' not in core
           print('LIVE_FILES_OK', len(fast), len(core))
           PY
-          cat > /tmp/live-smoke.mjs <<'JS'
+          cat > live-smoke.mjs <<'JS'
           import { chromium } from 'playwright';
           import assert from 'node:assert/strict';
           const browser=await chromium.launch({headless:true});
@@ -58,4 +58,4 @@ jobs:
           console.log('LIVE_BROWSER_OK',src,openText?.trim());
           await browser.close();
           JS
-          node /tmp/live-smoke.mjs
+          node live-smoke.mjs
