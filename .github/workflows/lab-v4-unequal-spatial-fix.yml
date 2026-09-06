@@ -1,4 +1,4 @@
-name: Lab v4 unequal spatial fix
+name: Lab v4 unequal anchored fix
 
 on:
   push:
@@ -18,30 +18,57 @@ jobs:
         with:
           ref: lab/foxit-index-v4-realpdf-map
           fetch-depth: 0
-      - name: Patch unequal-count spatial window
+      - name: Patch unequal-count anchored mapping
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('selector-nubes-multistream-core.html')
           s=p.read_text()
-          old=' const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);'
-          new=' const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);'
-          if old not in s:
-              raise SystemExit('strict mapper cell line not found')
+          marker='async function strictCompactGeomMap(vs){'
+          if marker not in s: raise SystemExit('mapper marker missing')
+          fn="""async function strictCompactAnchoredMap(vs){
+           if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
+           if(!vs?.length)return{ok:false,why:'sin selección azul'};
+           const delta=Math.abs(classicVisual.length-model.strokes.length),maxShift=Math.min(32,Math.max(10,delta+6)),anchorSpan=18,minAnchors=8;
+           const structOrd=[];
+           for(let qi=0;qi<vs.length;qi++){
+            const vi=Number(vs[qi]._ordinal);if(!Number.isInteger(vi))return{ok:false,why:'ordinal visual inválido en azul '+(qi+1)};
+            const good=[];
+            for(let sh=-maxShift;sh<=maxShift;sh++){
+             const sj=vi+sh;if(sj<0||sj>=model.strokes.length)continue;
+             let ok=0,left=0,right=0,bad=0;
+             for(let d=1;d<=anchorSpan;d++)for(const sign of [-1,1]){const a=vi+sign*d,b=sj+sign*d;if(a<0||a>=classicVisual.length||b<0||b>=model.strokes.length)continue;if(compactGeomMatch(classicVisual[a],model.strokes[b])){ok++;if(sign<0)left++;else right++}else bad++}
+             if(ok>=minAnchors&&left>=3&&right>=3&&bad<=4)good.push({sh,sj,ok,bad});
+            }
+            good.sort((a,b)=>b.ok-a.ok||a.bad-b.bad||Math.abs(a.sh)-Math.abs(b.sh));
+            if(!good.length)return{ok:false,why:'el azul '+(qi+1)+' no tiene anclas ordinales suficientes a ambos lados'};
+            const best=good[0],ties=good.filter(g=>g.ok===best.ok&&g.bad===best.bad);
+            if(ties.length!==1)return{ok:false,why:'el azul '+(qi+1)+' tiene '+ties.length+' desplazamientos ordinales igualmente demostrados'};
+            structOrd.push(best.sj);if((qi&31)===31)await uiYield();
+           }
+           if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos azules convergen en el mismo origen estructural'};
+           const pairs=vs.map((v,i)=>[Number(v._ordinal),structOrd[i]]).sort((a,b)=>a[0]-b[0]);for(let i=1;i<pairs.length;i++)if(pairs[i][1]<=pairs[i-1][1])return{ok:false,why:'la correspondencia anclada rompe el orden estructural'};
+           return{ok:true,targets:structOrd.map(i=>model.strokes[i]),structOrd};
+          }
+          """
+          if 'async function strictCompactAnchoredMap(vs){' not in s:
+              s=s.replace(marker,fn+marker,1)
+          old=""" }else{
+            status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();
+            const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+            targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';
+           }"""
+          new=""" }else{
+            status.textContent='Borrado exacto · demostrando identidad ordinal local por anclas para '+visualSelected.length+' trazos azules…';await uiYield();
+            const am=await strictCompactAnchoredMap(visualSelected);if(!am.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+am.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+            targets=am.targets;structOrd=am.structOrd;mapMode='ordinal local anclada + verificación exacta';
+           }"""
+          if old not in s: raise SystemExit('unequal route block not found')
           s=s.replace(old,new,1)
-          # Keep all fail-closed guards and equal-count route unchanged.
-          required=[
-            "cand[i].length!==1",
-            "dos trazos azules convergen en el mismo origen estructural",
-            "también corresponde a geometría no azul o ambigua",
-            "model.strokes.length===classicVisual.length",
-            "ordinal por secuencia + verificación exacta",
-            "expansión por componente"
-          ]
+          required=['model.strokes.length===classicVisual.length','ordinal por secuencia + verificación exacta','expansión por componente','Sin rutas alternativas ni causal.']
           for q in required:
               if q not in s: raise SystemExit('missing invariant: '+q)
           p.write_text(s)
-          print('unequal-count spatial window patched; strict guards preserved')
           PY
       - name: Syntax and regression assertions
         run: |
@@ -49,8 +76,8 @@ jobs:
           from pathlib import Path
           import re
           s=Path('selector-nubes-multistream-core.html').read_text()
-          assert ' const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);' in s
-          assert ' const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);' not in s
+          assert 'strictCompactAnchoredMap' in s
+          assert 'ordinal local anclada + verificación exacta' in s
           m=re.search(r'<script type="module">(.*?)</script>',s,re.S); assert m
           js=re.sub(r"^import .*?;\s*",'',m.group(1),count=1,flags=re.S)
           Path('/tmp/core.mjs').write_text(js)
@@ -61,7 +88,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add selector-nubes-multistream-core.html
-          git commit -m 'Lab: widen strict spatial candidate window for unequal counts'
+          git commit -m 'Lab: anchored local ordinal mapping for unequal counts'
           git push origin HEAD:lab/foxit-index-v4-realpdf-map
       - name: Publish isolated lab only
         run: |
@@ -75,9 +102,9 @@ jobs:
           import re
           p=Path('lab-selector-v4/index.html')
           s=p.read_text()
-          s=re.sub(r'selector-nubes-multistream-core\.html\?v=[^\"\']+', 'selector-nubes-multistream-core.html?v=20260906-unequalspatial5', s, count=1)
+          s=re.sub(r'selector-nubes-multistream-core\.html\?v=[^\"\']+', 'selector-nubes-multistream-core.html?v=20260906-anchor7', s, count=1)
           p.write_text(s)
           PY
           git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
-          git commit -m 'Publish isolated lab v4 unequal-count spatial fix'
+          git commit -m 'Publish isolated lab v4 anchored unequal-count fix'
           git push origin HEAD:gh-pages
