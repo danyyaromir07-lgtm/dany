@@ -1,0 +1,42 @@
+name: Lab browser stress
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - lab-tests/generate_stress_fixture.py
+      - lab-tests/test_stress_browser.mjs
+      - selector-nubes-multistream-core.html
+      - .github/workflows/lab-stress-browser.yml
+permissions:
+  contents: read
+jobs:
+  stress-100k:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      STRESS_N: '100000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pymupdf
+      - name: Generate stress fixture
+        run: python lab-tests/generate_stress_fixture.py
+      - name: Serve lab
+        run: |
+          python -m http.server 8765 > /tmp/lab-http.log 2>&1 &
+          sleep 2
+      - name: Run browser stress E2E
+        run: node lab-tests/test_stress_browser.mjs
