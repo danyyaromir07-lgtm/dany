@@ -32,10 +32,20 @@ await page.waitForFunction(() => (window.__statusHistory||[]).some(s => /visual=
 let history=await page.evaluate(()=>window.__statusHistory);
 console.log('INDEX_HISTORY_MATCH',history.find(s=>/visual=3.*índice estructural=3.*identidad ordinal exacta lista/.test(s)));
 
-const rect=await page.locator('#page').boundingBox();
-assert(rect && rect.width>0 && rect.height>0);
-// First red path spans /Contents stream 0 -> stream 1, around PDF point (60,58).
-await page.mouse.click(rect.x+rect.width*(60/400),rect.y+rect.height*(58/400));
+const vp=await page.locator('#viewport').boundingBox();
+assert(vp && vp.width>0 && vp.height>0);
+const tr=await page.locator('#stage').evaluate(el=>getComputedStyle(el).transform);
+const nums=(tr.match(/matrix\(([^)]+)\)/)?.[1]||'').split(',').map(Number);
+assert.equal(nums.length,6,'stage must have a 2D transform');
+const [scale,,, ,panX,panY]=nums;
+const baseW=parseFloat(await page.locator('#stage').evaluate(el=>getComputedStyle(el).width));
+const baseRs=baseW/400;
+// Content stream y≈58 maps through MuPDF page transform to visual page y≈342.
+const pdfX=60,pdfY=342;
+const clickX=vp.x+panX+pdfX*baseRs*scale;
+const clickY=vp.y+panY+pdfY*baseRs*scale;
+console.log('CLICK',JSON.stringify({tr,scale,panX,panY,baseRs,clickX,clickY}));
+await page.mouse.click(clickX,clickY);
 await page.waitForFunction(() => (window.__statusHistory||[]).some(s => /resaltados=1/.test(s)), null, {timeout:10000});
 assert.equal(await page.locator('#delete').isDisabled(),false,'delete must enable after selecting one stroke');
 history=await page.evaluate(()=>window.__statusHistory);
