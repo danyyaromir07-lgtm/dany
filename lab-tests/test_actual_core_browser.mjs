@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
-// Instrumented run: stream all IDX:* console markers from the real core.
+// Instrumented run: stream PRE:* and IDX:* markers from the real core.
 const base = process.env.LAB_URL || 'http://127.0.0.1:8765';
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1400,height:900}});
@@ -10,7 +10,7 @@ const consoleErrors=[];
 page.on('pageerror',e=>{pageErrors.push(String(e));console.log('PAGEERROR',String(e))});
 page.on('console',m=>{
   const txt=m.text();
-  if(txt.startsWith('IDX:')) console.log('BROWSER',txt);
+  if(txt.startsWith('PRE:')||txt.startsWith('IDX:')) console.log('BROWSER',txt);
   if(m.type()==='error') consoleErrors.push(txt);
 });
 await page.addInitScript(() => {
