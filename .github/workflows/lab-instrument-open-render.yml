@@ -1,0 +1,38 @@
+name: Lab instrument open render
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - tools/lab_instrument_open_render.py
+      - .github/workflows/lab-instrument-open-render.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+          fetch-depth: 0
+      - name: Apply instrumentation
+        run: python tools/lab_instrument_open_render.py
+      - name: Syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/core.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/core.mjs
+          grep -q "PRE:before-collectVisual" selector-nubes-multistream-core.html
+      - name: Commit instrumented core
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Instrument open and render phases'
+          git push origin HEAD:lab/foxit-index-v3
