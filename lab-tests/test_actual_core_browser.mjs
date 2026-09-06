@@ -1,0 +1,57 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+
+const base = process.env.LAB_URL || 'http://127.0.0.1:8765';
+const browser = await chromium.launch({headless:true});
+const page = await browser.newPage({viewport:{width:1400,height:900}});
+const pageErrors=[];
+const consoleErrors=[];
+page.on('pageerror',e=>pageErrors.push(String(e)));
+page.on('console',m=>{if(m.type()==='error') consoleErrors.push(m.text())});
+await page.addInitScript(() => {
+  window.showOpenFilePicker = async () => [{
+    getFile: async () => {
+      const r=await fetch('/lab-tests/fixtures/multistream-cross.pdf');
+      const b=await r.arrayBuffer();
+      return new File([b],'multistream-cross.pdf',{type:'application/pdf'});
+    },
+    createWritable: async () => ({write:async()=>{},close:async()=>{}})
+  }];
+});
+await page.goto(base+'/selector-nubes-multistream-core.html',{waitUntil:'domcontentloaded',timeout:60000});
+await page.click('#open');
+await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('identidad ordinal exacta lista'),null,{timeout:60000});
+let status=await page.locator('#status').textContent();
+console.log('OPEN_STATUS',status);
+assert.match(status,/visual=3/);
+assert.match(status,/índice estructural=3/);
+
+const rect=await page.locator('#page').boundingBox();
+assert(rect && rect.width>0 && rect.height>0);
+// PDF page is 400x400. Click the first red cross-stream path around (60,58).
+await page.mouse.click(rect.x+rect.width*(60/400),rect.y+rect.height*(58/400));
+await page.waitForFunction(() => /resaltados=1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:10000});
+status=await page.locator('#status').textContent();
+console.log('SELECT_STATUS',status);
+assert.equal(await page.locator('#delete').isDisabled(),false);
+
+const t0=Date.now();
+await page.click('#delete');
+await page.waitForFunction(() => {
+  const s=document.querySelector('#status')?.textContent||'';
+  return s.includes('Selección eliminada y verificada') || s.includes('Borrado cancelado') || s.includes('Borrado bloqueado');
+},null,{timeout:60000});
+const elapsed=(Date.now()-t0)/1000;
+status=await page.locator('#status').textContent();
+console.log('DELETE_STATUS',status);
+console.log('DELETE_WALL_SECONDS',elapsed.toFixed(3));
+assert.match(status,/Selección eliminada y verificada: 1 trazos/);
+assert.match(status,/ruta única/);
+assert.doesNotMatch(status,/correspondencia \d|CAUSAL|causal|rutas alternativas/);
+assert(elapsed < 20,`delete took ${elapsed}s`);
+assert.deepEqual(pageErrors,[],`page errors: ${pageErrors.join('\n')}`);
+// Ignore favicon/network noise, but no JS/WASM/module errors are allowed.
+const serious=consoleErrors.filter(x=>/TypeError|ReferenceError|SyntaxError|wasm|mupdf|Uncaught/i.test(x));
+assert.deepEqual(serious,[],`console errors: ${serious.join('\n')}`);
+await browser.close();
+console.log('ACTUAL_CORE_BROWSER_E2E_OK');
