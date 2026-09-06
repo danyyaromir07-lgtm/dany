@@ -72,7 +72,7 @@ function compactCellKey(r,x,y){return String(r?.lines||0)+'|'+String(r?.curves||
 async function strictCompactGeomMap(vs){
  if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
  if(!vs?.length)return{ok:false,why:'sin selección azul'};
- const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);
+ const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);
  for(let i=0;i<vs.length;i++){const[cx,cy]=compactCell(vs[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(vs[i],cx+dx,cy+dy);let a=byCell.get(k);if(!a)byCell.set(k,a=[]);a.push(i)}}
  for(let si=0;si<model.strokes.length;si++){const st=model.strokes[si],[cx,cy]=compactCell(st,cell),a=byCell.get(compactCellKey(st,cx,cy));if(a)for(const vi of a)if(compactGeomMatch(vs[vi],st))cand[vi].push(si);if((si&16383)===16383)await uiYield()}
  for(let i=0;i<cand.length;i++)if(cand[i].length!==1)return{ok:false,why:'el azul '+(i+1)+' tiene '+cand[i].length+' candidatos estructurales exactos'};
