@@ -80,43 +80,44 @@ function compactSeqToken(x){
 async function strictCompactBandedMap(vs){
  if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
  if(!vs?.length)return{ok:false,why:'sin selección azul'};
- const A=classicVisual,B=model.strokes,n=A.length,m=B.length,delta=Math.abs(n-m),band=Math.min(24,Math.max(10,delta+8)),W=band*2+1,INF=255,maxCost=Math.min(250,delta+16);
+ const A=classicVisual,B=model.strokes,n=A.length,m=B.length,delta=Math.abs(n-m),band=Math.min(32,Math.max(12,delta+10)),W=band*2+1,INF=65535;
  const at=(i,j)=>{const k=j-i+band;return k<0||k>=W?-1:i*W+k};
- const F=new Uint8Array((n+1)*W);F.fill(INF);
+ const step=(a,b)=>compactSeqToken(a)===compactSeqToken(b)?0:1;
+ const F=new Uint16Array((n+1)*W);F.fill(INF);
  let q=at(0,0);if(q<0)return{ok:false,why:'banda ordinal inválida'};F[q]=0;
  for(let i=0;i<=n;i++){
   const j0=Math.max(0,i-band),j1=Math.min(m,i+band);
   for(let j=j0;j<=j1;j++){
    const idx=at(i,j),cur=F[idx];if(cur===INF)continue;
-   if(i<n&&j<m&&compactSeqToken(A[i])===compactSeqToken(B[j])){const z=at(i+1,j+1);if(z>=0&&cur<F[z])F[z]=cur}
-   if(i<n&&cur<maxCost){const z=at(i+1,j);if(z>=0&&cur+1<F[z])F[z]=cur+1}
-   if(j<m&&cur<maxCost){const z=at(i,j+1);if(z>=0&&cur+1<F[z])F[z]=cur+1}
+   if(i<n&&j<m){const z=at(i+1,j+1),v=cur+step(A[i],B[j]);if(z>=0&&v<F[z])F[z]=v}
+   if(i<n){const z=at(i+1,j),v=cur+1;if(z>=0&&v<F[z])F[z]=v}
+   if(j<m){const z=at(i,j+1),v=cur+1;if(z>=0&&v<F[z])F[z]=v}
   }
   if((i&4095)===4095)await uiYield();
  }
  const end=at(n,m),best=end>=0?F[end]:INF;
- if(best===INF||best>maxCost)return{ok:false,why:'la secuencia topológica no cabe en una alineación acotada · coste='+String(best)};
- const R=new Uint8Array((n+1)*W);R.fill(INF);q=at(n,m);R[q]=0;
+ if(best===INF)return{ok:false,why:'la secuencia ordenada no cabe en la banda ordinal'};
+ const R=new Uint16Array((n+1)*W);R.fill(INF);q=at(n,m);R[q]=0;
  for(let i=n;i>=0;i--){
   const j0=Math.max(0,i-band),j1=Math.min(m,i+band);
   for(let j=j1;j>=j0;j--){
    const idx=at(i,j),cur=R[idx];if(cur===INF)continue;
-   if(i>0&&j>0&&compactSeqToken(A[i-1])===compactSeqToken(B[j-1])){const z=at(i-1,j-1);if(z>=0&&cur<R[z])R[z]=cur}
-   if(i>0&&cur<maxCost){const z=at(i-1,j);if(z>=0&&cur+1<R[z])R[z]=cur+1}
-   if(j>0&&cur<maxCost){const z=at(i,j-1);if(z>=0&&cur+1<R[z])R[z]=cur+1}
+   if(i>0&&j>0){const z=at(i-1,j-1),v=cur+step(A[i-1],B[j-1]);if(z>=0&&v<R[z])R[z]=v}
+   if(i>0){const z=at(i-1,j),v=cur+1;if(z>=0&&v<R[z])R[z]=v}
+   if(j>0){const z=at(i,j-1),v=cur+1;if(z>=0&&v<R[z])R[z]=v}
   }
   if((i&4095)===0)await uiYield();
  }
  const structOrd=[];
  for(let qi=0;qi<vs.length;qi++){
   const vi=Number(vs[qi]._ordinal);if(!Number.isInteger(vi)||vi<0||vi>=n)return{ok:false,why:'ordinal visual inválido en azul '+(qi+1)};
-  const candidates=[],j0=Math.max(0,vi-band),j1=Math.min(m-1,vi+band),tok=compactSeqToken(A[vi]);
+  const candidates=[],j0=Math.max(0,vi-band),j1=Math.min(m-1,vi+band);
   for(let j=j0;j<=j1;j++){
-   if(tok!==compactSeqToken(B[j]))continue;
    const a=at(vi,j),b=at(vi+1,j+1);if(a<0||b<0)continue;
-   const fa=F[a],rb=R[b];if(fa!==INF&&rb!==INF&&fa+rb===best)candidates.push(j);
+   const fa=F[a],rb=R[b];if(fa===INF||rb===INF)continue;
+   const total=fa+step(A[vi],B[j])+rb;if(total===best)candidates.push(j);
   }
-  if(candidates.length!==1)return{ok:false,why:'el azul '+(qi+1)+' tiene '+candidates.length+' correspondencias estructurales óptimas en la alineación global · coste='+best};
+  if(candidates.length!==1)return{ok:false,why:'el azul '+(qi+1)+' tiene '+candidates.length+' correspondencias estructurales óptimas en la alineación global con sustituciones · coste='+best};
   structOrd.push(candidates[0]);
  }
  if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos azules convergen en el mismo origen estructural'};
@@ -273,9 +274,9 @@ async function removeGroup(){
  const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}
  let targets=[],structOrd=[],mapMode='ordinal';
  if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{
-  status.textContent='Borrado exacto · alineando topología visual↔estructural completa para '+visualSelected.length+' trazos azules…';await uiYield();
+  status.textContent='Borrado exacto · alineando secuencia visual↔estructural ordenada para '+visualSelected.length+' trazos azules…';await uiYield();
   const bm=await strictCompactBandedMap(visualSelected);if(!bm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+bm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
-  targets=bm.targets;structOrd=bm.structOrd;mapMode='alineación global topológica única · coste '+bm.cost+' + verificación exacta';
+  targets=bm.targets;structOrd=bm.structOrd;mapMode='alineación global ordenada única · coste '+bm.cost+' + verificación exacta';
  }
  let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
  let work=null,wp=null,check=null,cp=null;try{
