@@ -9,6 +9,7 @@ const consoleErrors=[];
 page.on('pageerror',e=>pageErrors.push(String(e)));
 page.on('console',m=>{if(m.type()==='error') consoleErrors.push(m.text())});
 await page.addInitScript(() => {
+  window.__statusHistory=[];
   window.showOpenFilePicker = async () => [{
     getFile: async () => {
       const r=await fetch('/lab-tests/fixtures/multistream-cross.pdf');
@@ -19,13 +20,19 @@ await page.addInitScript(() => {
   }];
 });
 await page.goto(base+'/selector-nubes-multistream-core.html',{waitUntil:'domcontentloaded',timeout:60000});
+await page.evaluate(() => {
+  const el=document.querySelector('#status');
+  window.__statusHistory.push(el?.textContent||'');
+  new MutationObserver(()=>window.__statusHistory.push(el?.textContent||'')).observe(el,{subtree:true,childList:true,characterData:true});
+});
 await page.click('#open');
-await page.waitForFunction(() => {
-  const s=document.querySelector('#status')?.textContent||'';
-  return s.includes('identidad ordinal exacta lista') || s.includes('identidad ordinal no demostrada') || s.includes('índice estructural falló');
-},null,{timeout:60000});
-let status=await page.locator('#status').textContent();
-console.log('OPEN_STATUS',status);
+await page.waitForFunction(() => (window.__statusHistory||[]).some(s =>
+  s.includes('identidad ordinal exacta lista') || s.includes('identidad ordinal no demostrada') || s.includes('índice estructural falló')
+),null,{timeout:60000});
+let history=await page.evaluate(()=>window.__statusHistory);
+let status=history.findLast(s=>s.includes('identidad ordinal exacta lista')||s.includes('identidad ordinal no demostrada')||s.includes('índice estructural falló'))||'';
+console.log('STATUS_HISTORY',history);
+console.log('INDEX_STATUS',status);
 console.log('PAGE_ERRORS',pageErrors);
 console.log('CONSOLE_ERRORS',consoleErrors);
 assert.match(status,/visual=3/);
