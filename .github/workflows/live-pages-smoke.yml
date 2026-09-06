@@ -1,0 +1,61 @@
+name: Live Pages smoke
+on:
+  push:
+    branches: [lab/foxit-index-v3]
+    paths: [.github/workflows/live-pages-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright
+          npx playwright install --with-deps chromium
+      - name: Verify public files and browser startup
+        run: |
+          python - <<'PY'
+          import urllib.request
+          base='https://danyyaromir07-lgtm.github.io/dany/'
+          fast=urllib.request.urlopen(base+'selector-fast.html', timeout=30).read().decode('utf-8')
+          core=urllib.request.urlopen(base+'selector-nubes-multistream-core.html', timeout=30).read().decode('utf-8')
+          assert 'selector-nubes-multistream-core.html' in fast
+          assert 'compactEditPlan' in core
+          assert 'directResolveCompactStream' in core
+          assert 'XObject compartido: una instancia no azul usa el mismo operador' in core
+          assert 'PRE:' not in core and 'IDX:' not in core
+          print('LIVE_FILES_OK', len(fast), len(core))
+          PY
+          cat > /tmp/live-smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1400,height:900}});
+          const errors=[];
+          page.on('pageerror',e=>errors.push('PAGEERROR '+String(e)));
+          page.on('console',m=>{if(m.type()==='error')errors.push('CONSOLE '+m.text())});
+          const r=await page.goto('https://danyyaromir07-lgtm.github.io/dany/selector-fast.html',{waitUntil:'networkidle',timeout:60000});
+          assert.equal(r?.status(),200);
+          const iframe=page.locator('iframe');
+          assert.equal(await iframe.count(),1);
+          const src=await iframe.getAttribute('src');
+          assert(src && src.includes('selector-nubes-multistream-core.html'));
+          const frame=page.frames().find(f=>f.url().includes('selector-nubes-multistream-core.html'));
+          assert(frame,'core iframe not loaded');
+          await frame.waitForSelector('#open',{timeout:15000});
+          const openText=await frame.locator('#open').textContent();
+          assert(openText?.trim().length);
+          assert(!errors.some(x=>/SyntaxError|ReferenceError|TypeError|Failed to load module/i.test(x)),errors.join('\n'));
+          console.log('LIVE_BROWSER_OK',src,openText?.trim());
+          await browser.close();
+          JS
+          node /tmp/live-smoke.mjs
