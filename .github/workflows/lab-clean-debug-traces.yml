@@ -1,0 +1,37 @@
+name: Lab clean debug traces
+on:
+  push:
+    branches: [lab/foxit-index-v3]
+    paths: [.github/workflows/lab-clean-debug-traces.yml]
+permissions:
+  contents: write
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - name: Remove temporary PRE/IDX console traces only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          before=s
+          s,n=re.subn(r"console\.log\('(?:PRE|IDX):[^;]*;",'',s)
+          if n < 10:
+              raise SystemExit(f'expected many debug traces, removed only {n}')
+          if 'PRE:' in s or 'IDX:' in s:
+              raise SystemExit('debug trace prefix remains after cleanup')
+          p.write_text(s)
+          print('removed_debug_logs',n,'bytes_delta',len(before)-len(s))
+          PY
+      - name: Commit cleaned core
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Remove temporary browser debug traces"
+          git push origin HEAD:lab/foxit-index-v3
