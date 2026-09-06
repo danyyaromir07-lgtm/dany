@@ -1,0 +1,51 @@
+name: Lab final clean-core battery
+on:
+  push:
+    branches: [lab/foxit-index-v3]
+    paths: [.github/workflows/lab-final-battery.yml]
+permissions:
+  contents: read
+jobs:
+  final-browser-battery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STRESS_N: '430000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pymupdf
+      - name: Assert debug traces are gone
+        run: |
+          ! grep -q "PRE:" selector-nubes-multistream-core.html
+          ! grep -q "IDX:" selector-nubes-multistream-core.html
+      - name: Generate fixtures
+        run: |
+          python lab-tests/generate_fixtures.py
+          python lab-tests/generate_stress_fixture.py
+      - name: Serve lab
+        run: |
+          python -m http.server 8765 > /tmp/lab-http.log 2>&1 &
+          sleep 2
+      - name: Multi-stream direct transaction
+        run: node lab-tests/test_actual_core_browser.mjs
+      - name: Accumulated multi-selection transaction
+        run: node lab-tests/test_multi_selection_transaction.mjs
+      - name: Shared Form partial-selection safety
+        run: node lab-tests/test_shared_form_safety.mjs
+      - name: Shared Form all-selected dedupe
+        run: node lab-tests/test_shared_form_all_selected.mjs
+      - name: 430k browser stress
+        run: node lab-tests/test_stress_browser.mjs
