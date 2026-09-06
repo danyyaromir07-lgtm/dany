@@ -67,6 +67,22 @@ async function compactModel(page,epoch=-1,emit=null,collect=true){
 }
 function compactGeomMatch(v,s,tol=.012){if(!v||!s||v.lines!==s.lines||v.curves!==s.curves)return false;for(let i=0;i<4;i++)if(Math.abs(Number(v.bbox[i])-Number(s.bbox[i]))>tol)return false;if(v.first&&s.first&&(Math.abs(v.first[0]-s.first[0])>tol||Math.abs(v.first[1]-s.first[1])>tol))return false;if(v.last&&s.last&&(Math.abs(v.last[0]-s.last[0])>tol||Math.abs(v.last[1]-s.last[1])>tol))return false;return true}
 async function startCompactIndex(){const my=++indexEpoch;indexReady=false;let p=null;try{p=doc.loadPage(0);const m=await compactModel(p,my);if(my!==indexEpoch)return null;let ordinal=m.strokes.length===classicVisual.length&&!m.incomplete;if(ordinal)for(let i=0;i<classicVisual.length;i++){if(!compactGeomMatch(classicVisual[i],m.strokes[i])){ordinal=false;break}if((i&8191)===8191)await uiYield()}m.ordinalSafe=ordinal;model=m;indexReady=true;if(!visualSelected.length)status.textContent='Selector listo · visual='+classicVisual.length+' · índice estructural='+m.strokes.length+' · '+(ordinal?'identidad ordinal exacta lista':'identidad ordinal no demostrada')+'. Haz clic sobre un arco.';return m}catch(e){if(my===indexEpoch){model=null;indexReady=false;if(e?.message!=='índice cancelado')status.textContent='Selector visual listo · índice estructural falló: '+e.message}return null}finally{try{p?.destroy?.()}catch(_){}}}
+function compactCell(r,cell=.05){const b=r?.bbox||[0,0,0,0],cx=(Number(b[0])+Number(b[2]))*.5,cy=(Number(b[1])+Number(b[3]))*.5;return[Math.round(cx/cell),Math.round(cy/cell)]}
+function compactCellKey(r,x,y){return String(r?.lines||0)+'|'+String(r?.curves||0)+'|'+x+'|'+y}
+async function strictCompactGeomMap(vs){
+ if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
+ if(!vs?.length)return{ok:false,why:'sin selección azul'};
+ const cell=.05,byCell=new Map(),cand=vs.map(()=>[]);
+ for(let i=0;i<vs.length;i++){const[cx,cy]=compactCell(vs[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(vs[i],cx+dx,cy+dy);let a=byCell.get(k);if(!a)byCell.set(k,a=[]);a.push(i)}}
+ for(let si=0;si<model.strokes.length;si++){const st=model.strokes[si],[cx,cy]=compactCell(st,cell),a=byCell.get(compactCellKey(st,cx,cy));if(a)for(const vi of a)if(compactGeomMatch(vs[vi],st))cand[vi].push(si);if((si&16383)===16383)await uiYield()}
+ for(let i=0;i<cand.length;i++)if(cand[i].length!==1)return{ok:false,why:'el azul '+(i+1)+' tiene '+cand[i].length+' candidatos estructurales exactos'};
+ const structOrd=cand.map(a=>a[0]);if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos trazos azules convergen en el mismo origen estructural'};
+ const targets=structOrd.map(i=>model.strokes[i]),revCell=new Map(),hits=targets.map(()=>[]);
+ for(let i=0;i<targets.length;i++){const[cx,cy]=compactCell(targets[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(targets[i],cx+dx,cy+dy);let a=revCell.get(k);if(!a)revCell.set(k,a=[]);a.push(i)}}
+ for(let vi=0;vi<classicVisual.length;vi++){const v=classicVisual[vi],[cx,cy]=compactCell(v,cell),a=revCell.get(compactCellKey(v,cx,cy));if(a)for(const ti of a)if(compactGeomMatch(v,targets[ti]))hits[ti].push(vi);if((vi&16383)===16383)await uiYield()}
+ for(let i=0;i<hits.length;i++){const expected=Number(vs[i]._ordinal),h=hits[i];if(h.length!==1||h[0]!==expected)return{ok:false,why:'el origen del azul '+(i+1)+' también corresponde a geometría no azul o ambigua'}}
+ return{ok:true,targets,structOrd}
+}
 function directResolveCompactStream(page,loc){if(!loc||!Number.isInteger(loc.root))throw new Error('localizador estructural inválido');const roots=refs(page);let ref=roots[loc.root];if(!ref?.isStream?.())throw new Error('stream raíz no disponible');let res=deepPageResources(page.getObject());for(const rawName of loc.names||[]){const name=String(rawName||'').replace(/^\//,''),xd=deepObj(deepObj(res)?.get?.('XObject'));if(!xd?.isDictionary?.())throw new Error('ruta XObject incompleta');const next=xd.get(name);if(!next?.isStream?.())throw new Error('/'+name+' no es stream');const dict=deepObj(next);if(deepName(dict?.get?.('Subtype'))!=='Form')throw new Error('/'+name+' no es Form');ref=next;res=deepResources(dict,res)}return ref}
 async function compactTextDigest(text){const d=await crypto.subtle.digest('SHA-256',raw(text));return Array.from(new Uint8Array(d),x=>x.toString(16).padStart(2,'0')).join('')}
 async function compactEditPlan(targets){const allCount=new Map(),selCount=new Map();for(const s of model.strokes)allCount.set(s.sourceKey,(allCount.get(s.sourceKey)||0)+1);for(const s of targets)selCount.set(s.sourceKey,(selCount.get(s.sourceKey)||0)+1);for(const[k,n]of selCount)if(n!==(allCount.get(k)||0))throw new Error('XObject compartido: una instancia no azul usa el mismo operador');const groups=strokeEditGroups(targets),plan=[];for(const g of groups.values()){const loc=model.locators.get(g.key);if(!loc)throw new Error('sin localizador estable para un stream seleccionado');const text=latin(g.ref.readStream()),ranges=[];for(const[a,b]of g.ranges){if(a<0||b>text.length||a>=b)throw new Error('rango seleccionado inválido');ranges.push({start:a,end:b,original:text.slice(a,b)})}plan.push({loc,length:text.length,digest:await compactTextDigest(text),ranges})}return plan}
@@ -176,18 +192,23 @@ async function removeGroup(){
  if(!doc||!activeBytes||!visualSelected.length)return;const t0=performance.now();
  if(!indexReady&&indexPromise){status.textContent='Borrado exacto · esperando que termine el índice estructural ya iniciado al abrir…';await indexPromise}
  if(!model||!indexReady){status.textContent='Borrado bloqueado sin modificar el PDF: el índice estructural no está disponible.';setButtons();return}
- if(!model.ordinalSafe||model.strokes.length!==classicVisual.length){status.textContent='Borrado bloqueado sin modificar el PDF: no se pudo demostrar una identidad visual→estructural ordinal única ('+classicVisual.length+'/'+model.strokes.length+'). No se probarán rutas alternativas ni causal.';setButtons();return}
- const ord=visualSelected.map(v=>Number(v._ordinal));if(ord.some(i=>!Number.isInteger(i)||i<0||i>=model.strokes.length)||new Set(ord).size!==ord.length){status.textContent='Borrado bloqueado: selección ordinal inestable.';return}
- const targets=ord.map(i=>model.strokes[i]);let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
+ const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}
+ let targets=[],structOrd=[],mapMode='ordinal';
+ if(model.ordinalSafe&&model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i])}else{
+  status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();
+  const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+  targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';
+ }
+ let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
  let work=null,wp=null,check=null,cp=null;try{
-  status.textContent='Borrado exacto · una sola transacción sobre '+ord.length+' trazos…';await uiYield();
+  status.textContent='Borrado exacto · una sola transacción sobre '+visualOrd.length+' trazos · mapeo '+mapMode+'…';await uiYield();
   work=mupdf.PDFDocument.openDocument(new Uint8Array(activeBytes),'application/pdf');const touched=await applyCompactPlan(work,plan);wp=work.loadPage(0);
-  const vv=verifyVisualSequence(wp,ord);if(!vv.ok)throw new Error('original − azul falló: '+vv.why);await uiYield();
-  const sv=await verifyCompactStructure(wp,ord);if(!sv.ok)throw new Error('verificación estructural falló: '+sv.why);await uiYield();
+  const vv=verifyVisualSequence(wp,visualOrd);if(!vv.ok)throw new Error('original − azul falló: '+vv.why);await uiYield();
+  const sv=await verifyCompactStructure(wp,structOrd);if(!sv.ok)throw new Error('verificación estructural falló: '+sv.why);await uiYield();
   const beforeSave=await rasterDigest(wp);if(work.canBeSavedIncrementally?.()===false)throw new Error('el PDF no admite guardado incremental seguro');
   const outBuf=work.saveToBuffer('incremental'),out=new Uint8Array(U(outBuf));wp.destroy?.();wp=null;work.destroy();work=null;
   check=mupdf.PDFDocument.openDocument(out,'application/pdf');cp=check.loadPage(0);if(await rasterDigest(cp)!==beforeSave)throw new Error('el render cambió después de guardar');cp.destroy?.();cp=null;check.destroy();check=null;
-  activeBytes=out;try{doc.destroy()}catch(_){}doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+ord.length+' trazos · '+touched+' stream(s) · ruta única · '+((performance.now()-t0)/1000).toFixed(1)+' s. Índice de la nueva copia reconstruyéndose en segundo plano.';
+  activeBytes=out;try{doc.destroy()}catch(_){}doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+visualOrd.length+' trazos · '+touched+' stream(s) · '+mapMode+' · ruta única · '+((performance.now()-t0)/1000).toFixed(1)+' s. Índice de la nueva copia reconstruyéndose en segundo plano.';
  }catch(e){status.textContent='Borrado cancelado sin modificar el PDF activo: '+e.message+' · '+((performance.now()-t0)/1000).toFixed(1)+' s · sin rutas alternativas ni causal.';setButtons()}
  finally{try{cp?.destroy?.()}catch(_){}try{check?.destroy?.()}catch(_){}try{wp?.destroy?.()}catch(_){}try{work?.destroy?.()}catch(_){}}
 }
