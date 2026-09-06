@@ -11,11 +11,11 @@ on:
 permissions:
   contents: read
 jobs:
-  stress-100k:
+  stress-300k:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      STRESS_N: '100000'
+      STRESS_N: '300000'
     steps:
       - uses: actions/checkout@v4
         with:
