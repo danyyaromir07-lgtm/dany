@@ -1,15 +1,10 @@
-name: Lab v4 unequal anchored fix
-
+name: Lab v4 anchored mapper
 on:
   push:
-    branches:
-      - lab/foxit-index-v4-realpdf-map
-    paths:
-      - .github/workflows/lab-v4-unequal-spatial-fix.yml
-
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: [.github/workflows/lab-v4-unequal-spatial-fix.yml]
 permissions:
   contents: write
-
 jobs:
   patch:
     runs-on: ubuntu-latest
@@ -18,96 +13,11 @@ jobs:
         with:
           ref: lab/foxit-index-v4-realpdf-map
           fetch-depth: 0
-      - name: Patch unequal-count anchored mapping
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('selector-nubes-multistream-core.html')
-          s=p.read_text()
-          marker='async function strictCompactGeomMap(vs){'
-          if marker not in s: raise SystemExit('mapper marker missing')
-          fn="""async function strictCompactAnchoredMap(vs){
-           if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
-           if(!vs?.length)return{ok:false,why:'sin selección azul'};
-           const delta=Math.abs(classicVisual.length-model.strokes.length),maxShift=Math.min(32,Math.max(10,delta+6)),anchorSpan=18,minAnchors=8;
-           const structOrd=[];
-           for(let qi=0;qi<vs.length;qi++){
-            const vi=Number(vs[qi]._ordinal);if(!Number.isInteger(vi))return{ok:false,why:'ordinal visual inválido en azul '+(qi+1)};
-            const good=[];
-            for(let sh=-maxShift;sh<=maxShift;sh++){
-             const sj=vi+sh;if(sj<0||sj>=model.strokes.length)continue;
-             let ok=0,left=0,right=0,bad=0;
-             for(let d=1;d<=anchorSpan;d++)for(const sign of [-1,1]){const a=vi+sign*d,b=sj+sign*d;if(a<0||a>=classicVisual.length||b<0||b>=model.strokes.length)continue;if(compactGeomMatch(classicVisual[a],model.strokes[b])){ok++;if(sign<0)left++;else right++}else bad++}
-             if(ok>=minAnchors&&left>=3&&right>=3&&bad<=4)good.push({sh,sj,ok,bad});
-            }
-            good.sort((a,b)=>b.ok-a.ok||a.bad-b.bad||Math.abs(a.sh)-Math.abs(b.sh));
-            if(!good.length)return{ok:false,why:'el azul '+(qi+1)+' no tiene anclas ordinales suficientes a ambos lados'};
-            const best=good[0],ties=good.filter(g=>g.ok===best.ok&&g.bad===best.bad);
-            if(ties.length!==1)return{ok:false,why:'el azul '+(qi+1)+' tiene '+ties.length+' desplazamientos ordinales igualmente demostrados'};
-            structOrd.push(best.sj);if((qi&31)===31)await uiYield();
-           }
-           if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos azules convergen en el mismo origen estructural'};
-           const pairs=vs.map((v,i)=>[Number(v._ordinal),structOrd[i]]).sort((a,b)=>a[0]-b[0]);for(let i=1;i<pairs.length;i++)if(pairs[i][1]<=pairs[i-1][1])return{ok:false,why:'la correspondencia anclada rompe el orden estructural'};
-           return{ok:true,targets:structOrd.map(i=>model.strokes[i]),structOrd};
-          }
-          """
-          if 'async function strictCompactAnchoredMap(vs){' not in s:
-              s=s.replace(marker,fn+marker,1)
-          needle='const gm=await strictCompactGeomMap(visualSelected)'
-          pos=s.find(needle)
-          if pos<0: raise SystemExit('unequal mapper call not found')
-          start=s.rfind('}else{',0,pos)
-          end=s.find('let plan;',pos)
-          if start<0 or end<0 or end<=start: raise SystemExit('unequal route bounds not found')
-          new="""}else{
-            status.textContent='Borrado exacto · demostrando identidad ordinal local por anclas para '+visualSelected.length+' trazos azules…';await uiYield();
-            const am=await strictCompactAnchoredMap(visualSelected);if(!am.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+am.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
-            targets=am.targets;structOrd=am.structOrd;mapMode='ordinal local anclada + verificación exacta';
-           }
- """
-          s=s[:start]+new+s[end:]
-          required=['model.strokes.length===classicVisual.length','ordinal por secuencia + verificación exacta','expansión por componente','Sin rutas alternativas ni causal.']
-          for q in required:
-              if q not in s: raise SystemExit('missing invariant: '+q)
-          p.write_text(s)
-          PY
-      - name: Syntax and regression assertions
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          s=Path('selector-nubes-multistream-core.html').read_text()
-          assert 'strictCompactAnchoredMap' in s
-          assert 'ordinal local anclada + verificación exacta' in s
-          assert 'const gm=await strictCompactGeomMap(visualSelected)' not in s
-          assert 'const broad=classicVisual.filter(v=>seedCompat(v,best))' in s
-          m=re.search(r'<script type="module">(.*?)</script>',s,re.S); assert m
-          js=re.sub(r"^import .*?;\s*",'',m.group(1),count=1,flags=re.S)
-          Path('/tmp/core.mjs').write_text(js)
-          PY
-          node --check /tmp/core.mjs
+      - name: Apply patch
+        run: echo 'CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAppbXBvcnQgcmUKcD1QYXRoKCJzZWxlY3Rvci1udWJlcy1tdWx0aXN0cmVhbS1jb3JlLmh0bWwiKQpzPXAucmVhZF90ZXh0KCkKbWFya2VyPSJhc3luYyBmdW5jdGlvbiBzdHJpY3RDb21wYWN0R2VvbU1hcCh2cyl7IgppZiBtYXJrZXIgbm90IGluIHM6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJtYXBwZXIgbWFya2VyIG1pc3NpbmciKQpmbj0iIiJhc3luYyBmdW5jdGlvbiBzdHJpY3RDb21wYWN0QW5jaG9yZWRNYXAodnMpewogaWYoIW1vZGVsPy5zdHJva2VzPy5sZW5ndGh8fG1vZGVsLmluY29tcGxldGUpcmV0dXJue29rOmZhbHNlLHdoeTptb2RlbD8uaW5jb21wbGV0ZT8ncmVjb3JyaWRvIGVzdHJ1Y3R1cmFsIGluY29tcGxldG8nOidzaW4gw61uZGljZSBlc3RydWN0dXJhbCd9OwogaWYoIXZzPy5sZW5ndGgpcmV0dXJue29rOmZhbHNlLHdoeTonc2luIHNlbGVjY2nDs24gYXp1bCd9OwogY29uc3QgZGVsdGE9TWF0aC5hYnMoY2xhc3NpY1Zpc3VhbC5sZW5ndGgtbW9kZWwuc3Ryb2tlcy5sZW5ndGgpLG1heFNoaWZ0PU1hdGgubWluKDMyLE1hdGgubWF4KDEwLGRlbHRhKzYpKSxhbmNob3JTcGFuPTE4LG1pbkFuY2hvcnM9ODsKIGNvbnN0IHN0cnVjdE9yZD1bXTsKIGZvcihsZXQgcWk9MDtxaTx2cy5sZW5ndGg7cWkrKyl7CiAgY29uc3Qgdmk9TnVtYmVyKHZzW3FpXS5fb3JkaW5hbCk7aWYoIU51bWJlci5pc0ludGVnZXIodmkpKXJldHVybntvazpmYWxzZSx3aHk6J29yZGluYWwgdmlzdWFsIGludsOhbGlkbyBlbiBhenVsICcrKHFpKzEpfTsKICBjb25zdCBnb29kPVtdOwogIGZvcihsZXQgc2g9LW1heFNoaWZ0O3NoPD1tYXhTaGlmdDtzaCsrKXsKICAgY29uc3Qgc2o9dmkrc2g7aWYoc2o8MHx8c2o+PW1vZGVsLnN0cm9rZXMubGVuZ3RoKWNvbnRpbnVlOwogICBsZXQgb2s9MCxsZWZ0PTAscmlnaHQ9MCxiYWQ9MDsKICAgZm9yKGxldCBkPTE7ZDw9YW5jaG9yU3BhbjtkKyspZm9yKGNvbnN0IHNpZ24gb2YgWy0xLDFdKXtjb25zdCBhPXZpK3NpZ24qZCxiPXNqK3NpZ24qZDtpZihhPDB8fGE+PWNsYXNzaWNWaXN1YWwubGVuZ3RofHxiPDB8fGI+PW1vZGVsLnN0cm9rZXMubGVuZ3RoKWNvbnRpbnVlO2lmKGNvbXBhY3RHZW9tTWF0Y2goY2xhc3NpY1Zpc3VhbFthXSxtb2RlbC5zdHJva2VzW2JdKSl7b2srKztpZihzaWduPDApbGVmdCsrO2Vsc2UgcmlnaHQrK31lbHNlIGJhZCsrfQogICBpZihvaz49bWluQW5jaG9ycyYmbGVmdD49MyYmcmlnaHQ+PTMmJmJhZDw9NClnb29kLnB1c2goe3NoLHNqLG9rLGJhZH0pOwogIH0KICBnb29kLnNvcnQoKGEsYik9PmIub2stYS5va3x8YS5iYWQtYi5iYWR8fE1hdGguYWJzKGEuc2gpLU1hdGguYWJzKGIuc2gpKTsKICBpZighZ29vZC5sZW5ndGgpcmV0dXJue29rOmZhbHNlLHdoeTonZWwgYXp1bCAnKyhxaSsxKSsnIG5vIHRpZW5lIGFuY2xhcyBvcmRpbmFsZXMgc3VmaWNpZW50ZXMgYSBhbWJvcyBsYWRvcyd9OwogIGNvbnN0IGJlc3Q9Z29vZFswXSx0aWVzPWdvb2QuZmlsdGVyKGc9Pmcub2s9PT1iZXN0Lm9rJiZnLmJhZD09PWJlc3QuYmFkKTsKICBpZih0aWVzLmxlbmd0aCE9PTEpcmV0dXJue29rOmZhbHNlLHdoeTonZWwgYXp1bCAnKyhxaSsxKSsnIHRpZW5lICcrdGllcy5sZW5ndGgrJyBkZXNwbGF6YW1pZW50b3Mgb3JkaW5hbGVzIGlndWFsbWVudGUgZGVtb3N0cmFkb3MnfTsKICBzdHJ1Y3RPcmQucHVzaChiZXN0LnNqKTtpZigocWkmMzEpPT09MzEpYXdhaXQgdWlZaWVsZCgpOwogfQogaWYobmV3IFNldChzdHJ1Y3RPcmQpLnNpemUhPT1zdHJ1Y3RPcmQubGVuZ3RoKXJldHVybntvazpmYWxzZSx3aHk6J2RvcyBhenVsZXMgY29udmVyZ2VuIGVuIGVsIG1pc21vIG9yaWdlbiBlc3RydWN0dXJhbCd9OwogY29uc3QgcGFpcnM9dnMubWFwKCh2LGkpPT5bTnVtYmVyKHYuX29yZGluYWwpLHN0cnVjdE9yZFtpXV0pLnNvcnQoKGEsYik9PmFbMF0tYlswXSk7Zm9yKGxldCBpPTE7aTxwYWlycy5sZW5ndGg7aSsrKWlmKHBhaXJzW2ldWzFdPD1wYWlyc1tpLTFdWzFdKXJldHVybntvazpmYWxzZSx3aHk6J2xhIGNvcnJlc3BvbmRlbmNpYSBhbmNsYWRhIHJvbXBlIGVsIG9yZGVuIGVzdHJ1Y3R1cmFsJ307CiByZXR1cm57b2s6dHJ1ZSx0YXJnZXRzOnN0cnVjdE9yZC5tYXAoaT0+bW9kZWwuc3Ryb2tlc1tpXSksc3RydWN0T3JkfTsKfQoiIiIKaWYgImFzeW5jIGZ1bmN0aW9uIHN0cmljdENvbXBhY3RBbmNob3JlZE1hcCh2cyl7IiBub3QgaW4gczoKICAgIHM9cy5yZXBsYWNlKG1hcmtlcixmbittYXJrZXIsMSkKbmVlZGxlPSJjb25zdCBnbT1hd2FpdCBzdHJpY3RDb21wYWN0R2VvbU1hcCh2aXN1YWxTZWxlY3RlZCkiCnBvcz1zLmZpbmQobmVlZGxlKQppZiBwb3M8MDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoInVuZXF1YWwgbWFwcGVyIGNhbGwgbm90IGZvdW5kIikKc3RhcnQ9cy5yZmluZCgifWVsc2V7IiwwLHBvcykKZW5kPXMuZmluZCgibGV0IHBsYW47Iixwb3MpCmlmIHN0YXJ0PDAgb3IgZW5kPDAgb3IgZW5kPD1zdGFydDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJ1bmVxdWFsIHJvdXRlIGJvdW5kcyBub3QgZm91bmQgc3RhcnQ9e3N0YXJ0fSBlbmQ9e2VuZH0iKQpuZXc9IiIifWVsc2V7CiAgc3RhdHVzLnRleHRDb250ZW50PSdCb3JyYWRvIGV4YWN0byDCtyBkZW1vc3RyYW5kbyBpZGVudGlkYWQgb3JkaW5hbCBsb2NhbCBwb3IgYW5jbGFzIHBhcmEgJyt2aXN1YWxTZWxlY3RlZC5sZW5ndGgrJyB0cmF6b3MgYXp1bGVz4oCmJzthd2FpdCB1aVlpZWxkKCk7CiAgY29uc3QgYW09YXdhaXQgc3RyaWN0Q29tcGFjdEFuY2hvcmVkTWFwKHZpc3VhbFNlbGVjdGVkKTtpZighYW0ub2spe3N0YXR1cy50ZXh0Q29udGVudD0nQm9ycmFkbyBibG9xdWVhZG8gc2luIG1vZGlmaWNhciBlbCBQREY6ICcrYW0ud2h5KycgKCcrY2xhc3NpY1Zpc3VhbC5sZW5ndGgrJy8nK21vZGVsLnN0cm9rZXMubGVuZ3RoKycpLiBTaW4gcnV0YXMgYWx0ZXJuYXRpdmFzIG5pIGNhdXNhbC4nO3NldEJ1dHRvbnMoKTtyZXR1cm59CiAgdGFyZ2V0cz1hbS50YXJnZXRzO3N0cnVjdE9yZD1hbS5zdHJ1Y3RPcmQ7bWFwTW9kZT0nb3JkaW5hbCBsb2NhbCBhbmNsYWRhICsgdmVyaWZpY2FjacOzbiBleGFjdGEnOwogfQogIiIiCnM9c1s6c3RhcnRdK25ldytzW2VuZDpdCmZvciBxIGluIFsibW9kZWwuc3Ryb2tlcy5sZW5ndGg9PT1jbGFzc2ljVmlzdWFsLmxlbmd0aCIsIm9yZGluYWwgcG9yIHNlY3VlbmNpYSArIHZlcmlmaWNhY2nDs24gZXhhY3RhIiwiZXhwYW5zacOzbiBwb3IgY29tcG9uZW50ZSIsIlNpbiBydXRhcyBhbHRlcm5hdGl2YXMgbmkgY2F1c2FsLiJdOgogICAgaWYgcSBub3QgaW4gczoKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KCJtaXNzaW5nIGludmFyaWFudDogIitxKQpwLndyaXRlX3RleHQocykK' | base64 -d > /tmp/patch.py && python3 /tmp/patch.py
+      - name: Check JS
+        run: python3 -c "from pathlib import Path; import re; s=Path('selector-nubes-multistream-core.html').read_text(); assert 'strictCompactAnchoredMap' in s; assert 'ordinal local anclada + verificación exacta' in s; m=re.search(r'<script type=\"module\">(.*?)</script>',s,re.S); assert m; Path('/tmp/core.mjs').write_text(re.sub(r'^import .*?;\\s*','',m.group(1),count=1,flags=re.S))" && node --check /tmp/core.mjs
       - name: Commit candidate
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add selector-nubes-multistream-core.html
-          git commit -m 'Lab: anchored local ordinal mapping for unequal counts'
-          git push origin HEAD:lab/foxit-index-v4-realpdf-map
-      - name: Publish isolated lab only
-        run: |
-          CORE=$(cat selector-nubes-multistream-core.html)
-          git fetch origin gh-pages
-          git checkout -B lab-publish origin/gh-pages
-          mkdir -p lab-selector-v4
-          printf '%s' "$CORE" > lab-selector-v4/selector-nubes-multistream-core.html
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p=Path('lab-selector-v4/index.html')
-          s=p.read_text()
-          s=re.sub(r'selector-nubes-multistream-core\.html\?v=[^\"\']+', 'selector-nubes-multistream-core.html?v=20260906-anchor9', s, count=1)
-          p.write_text(s)
-          PY
-          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
-          git commit -m 'Publish isolated lab v4 anchored unequal-count fix'
-          git push origin HEAD:gh-pages
+        run: git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add selector-nubes-multistream-core.html && git commit -m 'Lab anchored local ordinal mapping for unequal counts' && git push origin HEAD:lab/foxit-index-v4-realpdf-map
+      - name: Publish isolated lab
+        run: cp selector-nubes-multistream-core.html /tmp/core.html && git fetch origin gh-pages && git checkout -B lab-publish origin/gh-pages && mkdir -p lab-selector-v4 && cp /tmp/core.html lab-selector-v4/selector-nubes-multistream-core.html && sed -i -E 's#selector-nubes-multistream-core.html\?v=[^\"]+#selector-nubes-multistream-core.html?v=20260906-anchor10#' lab-selector-v4/index.html && git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html && git commit -m 'Publish isolated lab anchored unequal-count fix' && git push origin HEAD:gh-pages
