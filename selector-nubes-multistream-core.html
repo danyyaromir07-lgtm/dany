@@ -193,22 +193,22 @@ async function removeGroup(){
 }
 
 async function renderPage(){
- clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;strokeIndexCache=null;analysisReady=false;indexReady=false;indexEpoch++;indexPromise=null;setButtons();
- const p=doc.loadPage(0);pageBounds=p.getBounds();pageW=pageBounds[2]-pageBounds[0];pageH=pageBounds[3]-pageBounds[1];
+ console.log('PRE:renderPage:enter');clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;strokeIndexCache=null;analysisReady=false;indexReady=false;indexEpoch++;indexPromise=null;setButtons();
+ console.log('PRE:before-loadPage');const p=doc.loadPage(0);console.log('PRE:after-loadPage');pageBounds=p.getBounds();pageW=pageBounds[2]-pageBounds[0];pageH=pageBounds[3]-pageBounds[1];
  status.textContent='Abriendo vista previa…';
  const dpr=Math.min(2,window.devicePixelRatio||1),maxDim=1900,maxPixels=2_000_000,base=Math.min(1.20*dpr,maxDim/Math.max(pageW,pageH),Math.sqrt(maxPixels/Math.max(1,pageW*pageH)));baseRs=Math.max(.30,base);
- const pm=p.toPixmap(mupdf.Matrix.scale(baseRs,baseRs),mupdf.ColorSpace.DeviceRGB,false,true),png=pm.asPNG();baseW=pm.getWidth?.()||Math.round(pageW*baseRs);baseH=pm.getHeight?.()||Math.round(pageH*baseRs);try{pm.destroy?.()}catch(_){}
- if(baseUrl)URL.revokeObjectURL(baseUrl);baseUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));img.src=baseUrl;await img.decode();img.style.width=baseW+'px';img.style.height=baseH+'px';stage.style.width=baseW+'px';stage.style.height=baseH+'px';sizeOverlay();$('#mode').textContent='Modo normal · clásico';requestAnimationFrame(()=>fit());
+ console.log('PRE:before-pixmap',baseRs,pageW,pageH);const pm=p.toPixmap(mupdf.Matrix.scale(baseRs,baseRs),mupdf.ColorSpace.DeviceRGB,false,true);console.log('PRE:after-pixmap');const png=pm.asPNG();console.log('PRE:after-png',U(png)?.length);baseW=pm.getWidth?.()||Math.round(pageW*baseRs);baseH=pm.getHeight?.()||Math.round(pageH*baseRs);try{pm.destroy?.()}catch(_){}
+ if(baseUrl)URL.revokeObjectURL(baseUrl);baseUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));img.src=baseUrl;console.log('PRE:before-img-decode');await img.decode();console.log('PRE:after-img-decode');img.style.width=baseW+'px';img.style.height=baseH+'px';stage.style.width=baseW+'px';stage.style.height=baseH+'px';sizeOverlay();$('#mode').textContent='Modo normal · clásico';requestAnimationFrame(()=>fit());
  status.textContent='Vista previa lista · preparando selección de arcos…';
- await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,40))));
+ console.log('PRE:before-frame-yield');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,40))));console.log('PRE:after-frame-yield');
  try{
-  classicVisual=collectVisual(p);for(let i=0;i<classicVisual.length;i++)classicVisual[i]._ordinal=i;analysisReady=true;setButtons();
+  console.log('PRE:before-collectVisual');classicVisual=collectVisual(p);console.log('PRE:after-collectVisual',classicVisual.length);for(let i=0;i<classicVisual.length;i++)classicVisual[i]._ordinal=i;analysisReady=true;setButtons();
   status.textContent='Selector listo · visual='+classicVisual.length+' · construyendo índice estructural compacto…';
  }finally{try{p.destroy?.()}catch(_){}}
- indexPromise=startCompactIndex();
+ console.log('PRE:before-startCompactIndex');indexPromise=startCompactIndex();console.log('PRE:after-startCompactIndex-call');
  if('requestIdleCallback'in window)requestIdleCallback(()=>scheduleSharp(80),{timeout:4500});else scheduleSharp(2500)
 }
-async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile(),bytes=new Uint8Array(await f.arrayBuffer());try{doc?.destroy?.()}catch(_){}activeBytes=bytes;doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');handle=h;pending=false;await renderPage()}
+async function openPdf(){console.log('PRE:openPdf:enter');if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');console.log('PRE:before-picker');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});console.log('PRE:after-picker');const f=await h.getFile();console.log('PRE:after-getFile',f.size);const bytes=new Uint8Array(await f.arrayBuffer());console.log('PRE:after-arrayBuffer',bytes.length);try{doc?.destroy?.()}catch(_){}activeBytes=bytes;console.log('PRE:before-openDocument');doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');console.log('PRE:after-openDocument');handle=h;pending=false;console.log('PRE:before-renderPage');await renderPage();console.log('PRE:after-renderPage')}
 function seedCompat(x,s){if(colorDist(x.rgb,s.rgb)>.035)return false;const wt=Math.max(.06,Math.abs(s.width)*.22);if(Math.abs(x.width-s.width)>wt)return false;if((x.curves>0)!==(s.curves>0)||(x.lines>0)!==(s.lines>0))return false;if(!!x.closed!==!!s.closed)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.5||dx/ds>2)return false;const tol=Math.max(2,Math.ceil(s.segs*.45));return Math.abs(x.segs-s.segs)<=tol}
 function seedComponentGroups(items){if(!items.length)return[];const md=med(items.map(x=>diag(x.bbox)).filter(Boolean)),tol=Math.max(.45,md*.24),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const A=[items[i].first,items[i].last].filter(Boolean),B=[items[j].first,items[j].last].filter(Boolean);if(A.some(a=>B.some(b=>Math.hypot(a[0]-b[0],a[1]-b[1])<=tol)))u(i,j)}const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
 function componentBox(a){return[Math.min(...a.map(x=>x.bbox[0])),Math.min(...a.map(x=>x.bbox[1])),Math.max(...a.map(x=>x.bbox[2])),Math.max(...a.map(x=>x.bbox[3]))]}
