@@ -1,14 +1,18 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 
-// Re-run marker after compact scanner progress guard.
+// Instrumented run: stream all IDX:* console markers from the real core.
 const base = process.env.LAB_URL || 'http://127.0.0.1:8765';
 const browser = await chromium.launch({headless:true});
 const page = await browser.newPage({viewport:{width:1400,height:900}});
 const pageErrors=[];
 const consoleErrors=[];
-page.on('pageerror',e=>pageErrors.push(String(e)));
-page.on('console',m=>{if(m.type()==='error') consoleErrors.push(m.text())});
+page.on('pageerror',e=>{pageErrors.push(String(e));console.log('PAGEERROR',String(e))});
+page.on('console',m=>{
+  const txt=m.text();
+  if(txt.startsWith('IDX:')) console.log('BROWSER',txt);
+  if(m.type()==='error') consoleErrors.push(txt);
+});
 await page.addInitScript(() => {
   window.__statusHistory=[];
   window.showOpenFilePicker = async () => [{
@@ -29,7 +33,7 @@ await page.evaluate(() => {
 await page.click('#open');
 await page.waitForFunction(() => (window.__statusHistory||[]).some(s =>
   s.includes('identidad ordinal exacta lista') || s.includes('identidad ordinal no demostrada') || s.includes('índice estructural falló')
-),null,{timeout:60000});
+),null,{timeout:30000});
 let history=await page.evaluate(()=>window.__statusHistory);
 let status=history.findLast(s=>s.includes('identidad ordinal exacta lista')||s.includes('identidad ordinal no demostrada')||s.includes('índice estructural falló'))||'';
 console.log('STATUS_HISTORY',history);
@@ -42,7 +46,6 @@ assert.match(status,/identidad ordinal exacta lista/);
 
 const rect=await page.locator('#page').boundingBox();
 assert(rect && rect.width>0 && rect.height>0);
-// PDF page is 400x400. Click the first red cross-stream path around (60,58).
 await page.mouse.click(rect.x+rect.width*(60/400),rect.y+rect.height*(58/400));
 await page.waitForFunction(() => /resaltados=1/.test(document.querySelector('#status')?.textContent||''),null,{timeout:10000});
 status=await page.locator('#status').textContent();
