@@ -1,0 +1,75 @@
+name: Lab real-PDF strict mapping validation
+
+on:
+  push:
+    branches:
+      - lab/foxit-index-v4-realpdf-map
+    paths:
+      - .github/workflows/lab-realpdf-validate.yml
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v4-realpdf-map
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check module syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m, 'module script not found'
+          js=m.group(1)
+          js=re.sub(r"^import .*?;\s*",'',js,count=1,flags=re.S)
+          Path('/tmp/core.mjs').write_text(js)
+          PY
+          node --check /tmp/core.mjs
+      - name: Assert strict fallback wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          required=[
+            'async function strictCompactGeomMap(vs)',
+            'verifyVisualSequence(wp,visualOrd)',
+            'verifyCompactStructure(wp,structOrd)',
+            "mapMode='geométrica 1:1 estricta'",
+            'dos trazos azules convergen en el mismo origen estructural',
+            'también corresponde a geometría no azul o ambigua'
+          ]
+          for q in required: assert q in s, q
+          assert "if(!model.ordinalSafe||model.strokes.length!==classicVisual.length)" not in s
+          print('strict fallback wiring ok')
+          PY
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Load core in Chromium
+        run: |
+          cat > /tmp/load-core.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import { spawn } from 'node:child_process';
+          const server=spawn('python3',['-m','http.server','4173','--bind','127.0.0.1'],{stdio:'ignore'});
+          const browser=await chromium.launch({headless:true});
+          try{
+            const page=await browser.newPage();
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('http://127.0.0.1:4173/selector-nubes-multistream-core.html',{waitUntil:'networkidle'});
+            await page.locator('#open').waitFor({state:'visible'});
+            await page.locator('#delete').waitFor({state:'visible'});
+            const title=await page.title();
+            if(!title.includes('Selector de nubes')) throw new Error('unexpected title '+title);
+            if(errors.length) throw new Error(errors.join(' | '));
+            console.log('CHROMIUM_CORE_LOAD_OK');
+          }finally{await browser.close();server.kill('SIGTERM')}
+          JS
+          node /tmp/load-core.mjs
