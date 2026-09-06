@@ -31,8 +31,6 @@ const stageW=parseFloat(await page.locator('#stage').evaluate(el=>getComputedSty
 const baseRs=stageW/520;
 const clickPdf=async(x,y)=>page.mouse.click(vp.x+panX+x*baseRs*scale,vp.y+panY+y*baseRs*scale);
 
-// Search only inside the small first instance. The source triangle occupies roughly
-// x 30..70, y 50..90 in this placement. Stop as soon as exactly one visual stroke is selected.
 let selected='';
 for(const y of [60,70,80,90,50]){
   for(const x of [40,50,60,70,30]){
@@ -53,9 +51,9 @@ const history=await page.evaluate(()=>window.__statusHistory);
 const result=history.findLast(s=>s.includes('Borrado cancelado')||s.includes('Borrado bloqueado'))||'';
 console.log('DELETE_RESULT',result);
 assert.match(result,/XObject compartido|instancia no azul usa el mismo operador/);
-assert.match(result,/sin rutas alternativas ni causal/);
-assert.equal(await page.locator('#save').isDisabled(),true,'cancelled delete must not create pending changes');
-assert.equal(await page.locator('#delete').isDisabled(),false,'blue selection must remain after cancellation');
+assert.equal(await page.locator('#save').isDisabled(),true,'blocked delete must not create pending changes');
+assert.equal(await page.locator('#delete').isDisabled(),false,'blue selection must remain after safety block');
+assert(!history.some(s=>s.includes('Selección eliminada y verificada')),'shared source operator must never be committed when an unselected instance remains');
 assert(!errors.some(x=>/TypeError|ReferenceError|SyntaxError|wasm.*error|mupdf.*error/i.test(x)),errors.join('\n'));
 await browser.close();
 console.log('SHARED_FORM_SAFETY_E2E_OK');
