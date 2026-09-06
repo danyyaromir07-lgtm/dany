@@ -69,6 +69,30 @@ function compactGeomMatch(v,s,tol=null){if(!v||!s||v.lines!==s.lines||v.curves!=
 async function startCompactIndex(){const my=++indexEpoch;indexReady=false;let p=null;try{p=doc.loadPage(0);const m=await compactModel(p,my);if(my!==indexEpoch)return null;let ordinal=m.strokes.length===classicVisual.length&&!m.incomplete;if(ordinal)for(let i=0;i<classicVisual.length;i++){if(!compactGeomMatch(classicVisual[i],m.strokes[i])){ordinal=false;break}if((i&8191)===8191)await uiYield()}m.ordinalSafe=ordinal;model=m;indexReady=true;if(!visualSelected.length)status.textContent='Selector listo · visual='+classicVisual.length+' · índice estructural='+m.strokes.length+' · '+(ordinal?'identidad ordinal exacta lista':'identidad ordinal no demostrada')+'. Haz clic sobre un arco.';return m}catch(e){if(my===indexEpoch){model=null;indexReady=false;if(e?.message!=='índice cancelado')status.textContent='Selector visual listo · índice estructural falló: '+e.message}return null}finally{try{p?.destroy?.()}catch(_){}}}
 function compactCell(r,cell=.05){const b=r?.bbox||[0,0,0,0],cx=(Number(b[0])+Number(b[2]))*.5,cy=(Number(b[1])+Number(b[3]))*.5;return[Math.round(cx/cell),Math.round(cy/cell)]}
 function compactCellKey(r,x,y){return String(r?.lines||0)+'|'+String(r?.curves||0)+'|'+x+'|'+y}
+async function strictCompactAnchoredMap(vs){
+ if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
+ if(!vs?.length)return{ok:false,why:'sin selección azul'};
+ const delta=Math.abs(classicVisual.length-model.strokes.length),maxShift=Math.min(32,Math.max(10,delta+6)),anchorSpan=18,minAnchors=8;
+ const structOrd=[];
+ for(let qi=0;qi<vs.length;qi++){
+  const vi=Number(vs[qi]._ordinal);if(!Number.isInteger(vi))return{ok:false,why:'ordinal visual inválido en azul '+(qi+1)};
+  const good=[];
+  for(let sh=-maxShift;sh<=maxShift;sh++){
+   const sj=vi+sh;if(sj<0||sj>=model.strokes.length)continue;
+   let ok=0,left=0,right=0,bad=0;
+   for(let d=1;d<=anchorSpan;d++)for(const sign of [-1,1]){const a=vi+sign*d,b=sj+sign*d;if(a<0||a>=classicVisual.length||b<0||b>=model.strokes.length)continue;if(compactGeomMatch(classicVisual[a],model.strokes[b])){ok++;if(sign<0)left++;else right++}else bad++}
+   if(ok>=minAnchors&&left>=3&&right>=3&&bad<=4)good.push({sh,sj,ok,bad});
+  }
+  good.sort((a,b)=>b.ok-a.ok||a.bad-b.bad||Math.abs(a.sh)-Math.abs(b.sh));
+  if(!good.length)return{ok:false,why:'el azul '+(qi+1)+' no tiene anclas ordinales suficientes a ambos lados'};
+  const best=good[0],ties=good.filter(g=>g.ok===best.ok&&g.bad===best.bad);
+  if(ties.length!==1)return{ok:false,why:'el azul '+(qi+1)+' tiene '+ties.length+' desplazamientos ordinales igualmente demostrados'};
+  structOrd.push(best.sj);if((qi&31)===31)await uiYield();
+ }
+ if(new Set(structOrd).size!==structOrd.length)return{ok:false,why:'dos azules convergen en el mismo origen estructural'};
+ const pairs=vs.map((v,i)=>[Number(v._ordinal),structOrd[i]]).sort((a,b)=>a[0]-b[0]);for(let i=1;i<pairs.length;i++)if(pairs[i][1]<=pairs[i-1][1])return{ok:false,why:'la correspondencia anclada rompe el orden estructural'};
+ return{ok:true,targets:structOrd.map(i=>model.strokes[i]),structOrd};
+}
 async function strictCompactGeomMap(vs){
  if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
  if(!vs?.length)return{ok:false,why:'sin selección azul'};
@@ -195,9 +219,9 @@ async function removeGroup(){
  const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}
  let targets=[],structOrd=[],mapMode='ordinal';
  if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{
-  status.textContent='Borrado exacto · resolviendo identidad geométrica 1:1 estricta para '+visualSelected.length+' trazos azules…';await uiYield();
-  const gm=await strictCompactGeomMap(visualSelected);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+gm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
-  targets=gm.targets;structOrd=gm.structOrd;mapMode='geométrica 1:1 estricta';
+  status.textContent='Borrado exacto · demostrando identidad ordinal local por anclas para '+visualSelected.length+' trazos azules…';await uiYield();
+  const am=await strictCompactAnchoredMap(visualSelected);if(!am.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+am.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
+  targets=am.targets;structOrd=am.structOrd;mapMode='ordinal local anclada + verificación exacta';
  }
  let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
  let work=null,wp=null,check=null,cp=null;try{
