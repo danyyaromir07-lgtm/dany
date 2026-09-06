@@ -1,8 +1,10 @@
 name: Lab Foxit index v3
 on:
   push:
-    branches: [lab/foxit-index-v3]
-    paths: ['.github/workflows/lab-foxit-index-v3.yml']
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - tools/lab_foxit_index_patch.py
 permissions:
   contents: write
 jobs:
@@ -13,112 +15,9 @@ jobs:
         with:
           ref: lab/foxit-index-v3
           fetch-depth: 0
-      - name: Patch compact structural index
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('selector-nubes-multistream-core.html')
-          s=p.read_text()
-          old="let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,pageBounds=[0,0,1,1],pageW=1,pageH=1,baseRs=1,baseW=1,baseH=1,zoom=1,panX=0,panY=0,pending=false,rendering=false,detailPixelBudget=36_000_000,classicVisual=[],visualSelected=[],structSelected=[],model=null,selectionMapSafe=false,selectionFamilies=0,selectionAlternatives=[],sharpTimer=null,sharpEpoch=0,sharpQueued=false,analysisReady=false;"
-          new=old[:-1]+",indexPromise=null,indexEpoch=0,indexReady=false;"
-          assert old in s
-          s=s.replace(old,new,1)
-
-          anchor='function structStableKey(s){'
-          assert anchor in s
-          insert=r'''
-async function compactModel(page,epoch=-1,emit=null,collect=true){
- const out=collect?[]:null,roots=refs(page),ctx={incomplete:false,forms:0},rootRes=deepPageResources(page.getObject()),locators=new Map();let pageBase=[1,0,0,1,0,0];
- try{pageBase=mupdf.Matrix.invert(page.getTransform())}catch(_){}
- const setLoc=(ref,loc)=>{const k=deepKey(ref);if(!locators.has(k))locators.set(k,loc)};for(let i=0;i<roots.length;i++)setLoc(roots[i],{root:i,names:[]});
- function formFor(res,name){try{const xd=deepObj(deepObj(res)?.get?.('XObject'));if(!xd?.isDictionary?.())return null;const ref=xd.get(String(name||'').replace(/^\//,''));if(!ref?.isStream?.())return null;const dict=deepObj(ref);return deepName(dict?.get?.('Subtype'))==='Form'?{ref,dict}:null}catch(_){return null}}
- const addPt=(p,q)=>{const x=q[0],y=q[1];if(x<p.x0)p.x0=x;if(y<p.y0)p.y0=y;if(x>p.x1)p.x1=x;if(y>p.y1)p.y1=y;if(!p.first)p.first=q;p.last=q};
- const addRange=(p,ref,a,b)=>{if(!p||a<0||b<=a)return;if(!p.editRanges)p.editRanges=[];p.editRanges.push({ref,start:a,end:b});if(deepKey(p.sourceRef)!==deepKey(ref))p.cross=true};
- function scanText(text,ref,res,st,chain,depth,trail,locator){
-  if(depth>12){ctx.incomplete=true;return}let i=0,args=[];const nums=k=>args.filter(x=>x.type==='num').slice(-k).map(x=>x.value),firstNumStart=k=>{const a=args.filter(x=>x.type==='num');return a[a.length-k]?.start??0},pathArgCount={m:2,l:2,c:6,v:4,y:4,re:4},clear=()=>{args=[]};
-  while(i<text.length){const t=nextToken(text,i);if(!t)break;i=t.next;if(t.type==='num'||t.type==='name'){args.push(t);continue}if(t.type!=='op')continue;const op=t.value;
-   if(st.path&&pathArgCount[op])addRange(st.path,ref,firstNumStart(pathArgCount[op]),t.end);else if(st.path&&op==='h')addRange(st.path,ref,t.start,t.end);
-   if(op==='q'){st.stack.push({ctm:[...st.ctm],rgb:[...st.rgb],width:st.width});clear();continue}
-   if(op==='Q'){const z=st.stack.pop();if(z){st.ctm=z.ctm;st.rgb=z.rgb;st.width=z.width}clear();continue}
-   if(op==='cm'){const a=nums(6);if(a.length===6)st.ctm=mul(st.ctm,a);clear();continue}
-   if(op==='RG'){const a=nums(3);if(a.length===3)st.rgb=a;clear();continue}
-   if(op==='G'){const a=nums(1);if(a.length===1)st.rgb=[a[0],a[0],a[0]];clear();continue}
-   if(op==='w'){const a=nums(1);if(a.length===1)st.width=a[0];clear();continue}
-   if(op==='m'){const a=nums(2);if(a.length===2){const q=tf(st.ctm,a[0],a[1]);if(st.path){if(deepKey(st.path.sourceRef)!==deepKey(ref))st.path.cross=true;addPt(st.path,q);st.path.subFirst=q}else{st.path={start:firstNumStart(2),sourceRef:ref,sourceBase:deepKey(ref),x0:Infinity,y0:Infinity,x1:-Infinity,y1:-Infinity,first:null,last:null,subFirst:q,lines:0,curves:0,rgb:[...st.rgb],width:st.width,cross:false,editRanges:[{ref,start:firstNumStart(2),end:t.end}],locator};addPt(st.path,q)}}clear();continue}
-   if(op==='re'){const a=nums(4);if(a.length===4){const[x,y,w,h]=a,p0=tf(st.ctm,x,y),p1=tf(st.ctm,x+w,y),p2=tf(st.ctm,x+w,y+h),p3=tf(st.ctm,x,y+h);if(!st.path)st.path={start:firstNumStart(4),sourceRef:ref,sourceBase:deepKey(ref),x0:Infinity,y0:Infinity,x1:-Infinity,y1:-Infinity,first:null,last:null,subFirst:p0,lines:3,curves:0,rgb:[...st.rgb],width:st.width,cross:false,editRanges:[{ref,start:firstNumStart(4),end:t.end}],locator};else st.path.lines+=3;for(const q of[p0,p1,p2,p3])addPt(st.path,q)}clear();continue}
-   if(st.path&&op==='l'){const a=nums(2);if(a.length===2){addPt(st.path,tf(st.ctm,a[0],a[1]));st.path.lines++}clear();continue}
-   if(st.path&&op==='c'){const a=nums(6);if(a.length===6){addPt(st.path,tf(st.ctm,a[0],a[1]));addPt(st.path,tf(st.ctm,a[2],a[3]));addPt(st.path,tf(st.ctm,a[4],a[5]));st.path.curves++}clear();continue}
-   if(st.path&&op==='v'){const a=nums(4);if(a.length===4){addPt(st.path,st.path.last);addPt(st.path,tf(st.ctm,a[0],a[1]));addPt(st.path,tf(st.ctm,a[2],a[3]));st.path.curves++}clear();continue}
-   if(st.path&&op==='y'){const a=nums(4);if(a.length===4){addPt(st.path,tf(st.ctm,a[0],a[1]));const q=tf(st.ctm,a[2],a[3]);addPt(st.path,q);addPt(st.path,q);st.path.curves++}clear();continue}
-   if(st.path&&op==='h'){clear();continue}
-   if(['S','s','B','B*','b','b*'].includes(op)){const q=st.path;if(q)addRange(q,ref,t.start,t.end);st.path=null;if(q&&(q.lines+q.curves)){q.end=t.end;q.bbox=[q.x0,q.y0,q.x1,q.y1];q.segs=q.lines+q.curves;q.fx=q.first?.[0]??0;q.fy=q.first?.[1]??0;q.lx=q.last?.[0]??0;q.ly=q.last?.[1]??0;q.editable=!!q.editRanges?.length;q.sourceKey=q.cross?'MULTI|'+q.editRanges.map(r=>deepKey(r.ref)+':'+r.start+'-'+r.end).join('|'):q.sourceBase+'|'+q.start+'|'+q.end;q.instanceKey=chain+'|'+q.sourceKey;if(emit)emit(q);if(collect)out.push(q)}clear();continue}
-   if(['n','f','F','f*'].includes(op)){st.path=null;clear();continue}
-   if(op==='Do'){const nt=[...args].reverse().find(x=>x.type==='name'),name=String(nt?.value||'').replace(/^\//,''),form=formFor(res,name);if(form){const fk=deepKey(form.ref);if(trail.includes(fk))ctx.incomplete=true;else try{const childLoc={root:locator.root,names:[...locator.names,name]};setLoc(form.ref,childLoc);const child={ctm:mul(st.ctm,deepArray(form.dict.get('Matrix'),[1,0,0,1,0,0])),rgb:[...st.rgb],width:st.width,path:null,stack:[]},fres=deepResources(form.dict,res);ctx.forms++;scanText(latin(form.ref.readStream()),form.ref,fres,child,chain+'>Do@'+deepKey(ref)+':'+t.start,depth+1,[...trail,fk],childLoc)}catch(_){ctx.incomplete=true}}clear();continue}
-   clear();
-  }
- }
- const rootState={ctm:[...pageBase],rgb:[0,0,0],width:1,path:null,stack:[]};for(let ri=0;ri<roots.length;ri++){if(epoch>=0&&epoch!==indexEpoch)throw new Error('índice cancelado');try{if(rootState.path&&deepKey(rootState.path.sourceRef)!==deepKey(roots[ri]))rootState.path.cross=true;scanText(latin(roots[ri].readStream()),roots[ri],rootRes,rootState,'P'+ri,0,[],{root:ri,names:[]})}catch(e){if(e?.message==='índice cancelado')throw e;ctx.incomplete=true}if((ri&31)===31)await uiYield()}
- if(rootState.path)ctx.incomplete=true;return{refs:roots,strokes:out||[],incomplete:ctx.incomplete,forms:ctx.forms,locators};
-}
-function compactGeomMatch(v,s,tol=.012){if(!v||!s||v.lines!==s.lines||v.curves!==s.curves)return false;for(let i=0;i<4;i++)if(Math.abs(Number(v.bbox[i])-Number(s.bbox[i]))>tol)return false;if(v.first&&s.first&&(Math.abs(v.first[0]-s.first[0])>tol||Math.abs(v.first[1]-s.first[1])>tol))return false;if(v.last&&s.last&&(Math.abs(v.last[0]-s.last[0])>tol||Math.abs(v.last[1]-s.last[1])>tol))return false;return true}
-async function startCompactIndex(){const my=++indexEpoch;indexReady=false;let p=null;try{p=doc.loadPage(0);const m=await compactModel(p,my);if(my!==indexEpoch)return null;let ordinal=m.strokes.length===classicVisual.length&&!m.incomplete;if(ordinal)for(let i=0;i<classicVisual.length;i++){if(!compactGeomMatch(classicVisual[i],m.strokes[i])){ordinal=false;break}if((i&8191)===8191)await uiYield()}m.ordinalSafe=ordinal;model=m;indexReady=true;if(!visualSelected.length)status.textContent='Selector listo · visual='+classicVisual.length+' · índice estructural='+m.strokes.length+' · '+(ordinal?'identidad ordinal exacta lista':'identidad ordinal no demostrada')+'. Haz clic sobre un arco.';return m}catch(e){if(my===indexEpoch){model=null;indexReady=false;if(e?.message!=='índice cancelado')status.textContent='Selector visual listo · índice estructural falló: '+e.message}return null}finally{try{p?.destroy?.()}catch(_){}}}
-function directResolveCompactStream(page,loc){if(!loc||!Number.isInteger(loc.root))throw new Error('localizador estructural inválido');const roots=refs(page);let ref=roots[loc.root];if(!ref?.isStream?.())throw new Error('stream raíz no disponible');let res=deepPageResources(page.getObject());for(const rawName of loc.names||[]){const name=String(rawName||'').replace(/^\//,''),xd=deepObj(deepObj(res)?.get?.('XObject'));if(!xd?.isDictionary?.())throw new Error('ruta XObject incompleta');const next=xd.get(name);if(!next?.isStream?.())throw new Error('/'+name+' no es stream');const dict=deepObj(next);if(deepName(dict?.get?.('Subtype'))!=='Form')throw new Error('/'+name+' no es Form');ref=next;res=deepResources(dict,res)}return ref}
-async function compactTextDigest(text){const d=await crypto.subtle.digest('SHA-256',raw(text));return Array.from(new Uint8Array(d),x=>x.toString(16).padStart(2,'0')).join('')}
-async function compactEditPlan(targets){const allCount=new Map(),selCount=new Map();for(const s of model.strokes)allCount.set(s.sourceKey,(allCount.get(s.sourceKey)||0)+1);for(const s of targets)selCount.set(s.sourceKey,(selCount.get(s.sourceKey)||0)+1);for(const[k,n]of selCount)if(n!==(allCount.get(k)||0))throw new Error('XObject compartido: una instancia no azul usa el mismo operador');const groups=strokeEditGroups(targets),plan=[];for(const g of groups.values()){const loc=model.locators.get(g.key);if(!loc)throw new Error('sin localizador estable para un stream seleccionado');const text=latin(g.ref.readStream()),ranges=[];for(const[a,b]of g.ranges){if(a<0||b>text.length||a>=b)throw new Error('rango seleccionado inválido');ranges.push({start:a,end:b,original:text.slice(a,b)})}plan.push({loc,length:text.length,digest:await compactTextDigest(text),ranges})}return plan}
-async function applyCompactPlan(work,plan){let page=null,touched=0;try{page=work.loadPage(0);for(const g of plan){const ref=directResolveCompactStream(page,g.loc);let text=latin(ref.readStream());if(text.length!==g.length||await compactTextDigest(text)!==g.digest)throw new Error('identidad del stream cambió en la copia');for(const r of g.ranges){if(text.slice(r.start,r.end)!==r.original)throw new Error('rango seleccionado cambió en la copia');text=text.slice(0,r.start)+text.slice(r.end)}ref.writeStream(raw(text));touched++}return touched}finally{try{page?.destroy?.()}catch(_){}}}
-function visualRecord(path,stroke,ctm,color){const pts=[];let first=null,last=null,lines=0,curves=0;const P=(x,y)=>tf(ctm,x,y),add=q=>{pts.push(q);if(!first)first=q;last=q};path.walk({moveTo(x,y){add(P(x,y))},lineTo(x,y){add(P(x,y));lines++},curveTo(x1,y1,x2,y2,x3,y3){const a=P(x1,y1),b=P(x2,y2),c=P(x3,y3);pts.push(a,b,c);if(!first)first=c;last=c;curves++},closePath(){}});if(!pts.length)return null;const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]);return{lines,curves,segs:lines+curves,bbox:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],first,last,width:Number(stroke?.lineWidth||0),rgb:Array.isArray(color)?color.slice(0,3).map(Number):[]}}
-function visualSigEqual(a,b){return sig(a)===sig(b)}
-function verifyVisualSequence(page,selectedOrdinals){const skip=new Set(selectedOrdinals);let expected=0,seen=0,ok=true,why='';const next=()=>{while(expected<classicVisual.length&&skip.has(expected))expected++};next();const cb={strokePath(path,stroke,ctm,cs,color){if(!ok)return;const r=visualRecord(path,stroke,ctm,color);if(!r)return;if(expected>=classicVisual.length){ok=false;why='apareció geometría adicional';return}if(!visualSigEqual(r,classicVisual[expected])){ok=false;why='la geometría restante diverge en el ordinal '+expected;return}expected++;seen++;next()}};let dev=null;try{dev=new mupdf.Device(cb);page.run(dev,mupdf.Matrix.identity)}finally{try{dev?.close?.()}catch(_){}try{dev?.destroy?.()}catch(_){}}next();if(expected!==classicVisual.length){ok=false;why=why||'faltan trazos no azules'}if(seen!==classicVisual.length-selectedOrdinals.length){ok=false;why=why||'conteo visual inesperado'}return{ok,why,seen}}
-async function verifyCompactStructure(page,selectedOrdinals){const skip=new Set(selectedOrdinals);let expected=0,seen=0,ok=true,why='';const next=()=>{while(expected<model.strokes.length&&skip.has(expected))expected++};next();const r=await compactModel(page,-1,q=>{if(!ok)return;if(expected>=model.strokes.length){ok=false;why='estructura adicional';return}if(!compactGeomMatch(model.strokes[expected],q)){ok=false;why='estructura restante diverge en '+expected;return}expected++;seen++;next()},false);next();if(r.incomplete){ok=false;why=why||'recorrido estructural incompleto'}if(expected!==model.strokes.length||seen!==model.strokes.length-selectedOrdinals.length){ok=false;why=why||'conteo estructural inesperado'}return{ok,why,seen}}
-'''
-          s=s.replace(anchor,insert+'\n'+anchor,1)
-
-          old_reset="clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;strokeIndexCache=null;analysisReady=false;setButtons();"
-          new_reset="clearDetail();visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];classicVisual=[];model=null;strokeIndexCache=null;analysisReady=false;indexReady=false;indexEpoch++;indexPromise=null;setButtons();"
-          assert old_reset in s
-          s=s.replace(old_reset,new_reset,1)
-          old_status="status.textContent='Selector listo · visual='+classicVisual.length+' · modelo estructural se calculará solo al eliminar. Haz clic sobre un arco.';"
-          new_status="status.textContent='Selector listo · visual='+classicVisual.length+' · construyendo índice estructural compacto…';"
-          assert old_status in s
-          s=s.replace(old_status,new_status,1)
-          old_tail="}finally{try{p.destroy?.()}catch(_){}}\n if('requestIdleCallback'in window)requestIdleCallback(()=>scheduleSharp(80),{timeout:4500});else scheduleSharp(2500)"
-          new_tail="}finally{try{p.destroy?.()}catch(_){}}\n indexPromise=startCompactIndex();\n if('requestIdleCallback'in window)requestIdleCallback(()=>scheduleSharp(80),{timeout:4500});else scheduleSharp(2500)"
-          assert old_tail in s
-          s=s.replace(old_tail,new_tail,1)
-
-          oldfn='async function removeGroup(){'
-          assert oldfn in s
-          s=s.replace(oldfn,'async function removeGroupLegacy(){',1)
-          anchor2='async function renderPage(){'
-          assert anchor2 in s
-          newremove=r'''
-async function removeGroup(){
- if(!doc||!activeBytes||!visualSelected.length)return;const t0=performance.now();
- if(!indexReady&&indexPromise){status.textContent='Borrado exacto · esperando que termine el índice estructural ya iniciado al abrir…';await indexPromise}
- if(!model||!indexReady){status.textContent='Borrado bloqueado sin modificar el PDF: el índice estructural no está disponible.';setButtons();return}
- if(!model.ordinalSafe||model.strokes.length!==classicVisual.length){status.textContent='Borrado bloqueado sin modificar el PDF: no se pudo demostrar una identidad visual→estructural ordinal única ('+classicVisual.length+'/'+model.strokes.length+'). No se probarán rutas alternativas ni causal.';setButtons();return}
- const ord=visualSelected.map(v=>Number(v._ordinal));if(ord.some(i=>!Number.isInteger(i)||i<0||i>=model.strokes.length)||new Set(ord).size!==ord.length){status.textContent='Borrado bloqueado: selección ordinal inestable.';return}
- const targets=ord.map(i=>model.strokes[i]);let plan;try{plan=await compactEditPlan(targets)}catch(e){status.textContent='Borrado bloqueado sin modificar el PDF: '+e.message;setButtons();return}
- let work=null,wp=null,check=null,cp=null;try{
-  status.textContent='Borrado exacto · una sola transacción sobre '+ord.length+' trazos…';await uiYield();
-  work=mupdf.PDFDocument.openDocument(new Uint8Array(activeBytes),'application/pdf');const touched=await applyCompactPlan(work,plan);wp=work.loadPage(0);
-  const vv=verifyVisualSequence(wp,ord);if(!vv.ok)throw new Error('original − azul falló: '+vv.why);await uiYield();
-  const sv=await verifyCompactStructure(wp,ord);if(!sv.ok)throw new Error('verificación estructural falló: '+sv.why);await uiYield();
-  const beforeSave=await rasterDigest(wp);if(work.canBeSavedIncrementally?.()===false)throw new Error('el PDF no admite guardado incremental seguro');
-  const outBuf=work.saveToBuffer('incremental'),out=new Uint8Array(U(outBuf));wp.destroy?.();wp=null;work.destroy();work=null;
-  check=mupdf.PDFDocument.openDocument(out,'application/pdf');cp=check.loadPage(0);if(await rasterDigest(cp)!==beforeSave)throw new Error('el render cambió después de guardar');cp.destroy?.();cp=null;check.destroy();check=null;
-  activeBytes=out;try{doc.destroy()}catch(_){}doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+ord.length+' trazos · '+touched+' stream(s) · ruta única · '+((performance.now()-t0)/1000).toFixed(1)+' s. Índice de la nueva copia reconstruyéndose en segundo plano.';
- }catch(e){status.textContent='Borrado cancelado sin modificar el PDF activo: '+e.message+' · '+((performance.now()-t0)/1000).toFixed(1)+' s · sin rutas alternativas ni causal.';setButtons()}
- finally{try{cp?.destroy?.()}catch(_){}try{check?.destroy?.()}catch(_){}try{wp?.destroy?.()}catch(_){}try{work?.destroy?.()}catch(_){}}
-}
-'''
-          s=s.replace(anchor2,newremove+'\n'+anchor2,1)
-          p.write_text(s)
-          print('patched',len(s))
-          PY
+      - name: Apply compact-index patch
+        run: python tools/lab_foxit_index_patch.py
       - name: Syntax check module
-        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -131,7 +30,6 @@ async function removeGroup(){
           grep -q 'compactModel' selector-nubes-multistream-core.html
           grep -q 'sin rutas alternativas ni causal' selector-nubes-multistream-core.html
       - name: Commit lab candidate
-        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
