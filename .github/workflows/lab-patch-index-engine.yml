@@ -1,0 +1,33 @@
+name: Lab Patch Index Engine
+
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - lab-tests/patch_engine_width.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+          fetch-depth: 0
+      - name: Apply reviewed patch
+        run: python lab-tests/patch_engine_width.py
+      - name: Commit patch if changed
+        run: |
+          if git diff --quiet -- foxit-index-engine.mjs; then
+            echo 'No change needed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add foxit-index-engine.mjs
+          git commit -m 'Treat unavailable visual stroke width as unknown'
+          git push origin HEAD:lab/foxit-index-v3
