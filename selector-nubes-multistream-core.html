@@ -40,7 +40,7 @@ async function compactModel(page,epoch=-1,emit=null,collect=true){
  const addRange=(p,ref,a,b)=>{if(!p||a<0||b<=a)return;if(!p.editRanges)p.editRanges=[];p.editRanges.push({ref,start:a,end:b});if(deepKey(p.sourceRef)!==deepKey(ref))p.cross=true};
  function scanText(text,ref,res,st,chain,depth,trail,locator){
   if(depth>12){ctx.incomplete=true;return}let i=0,args=[];const nums=k=>args.filter(x=>x.type==='num').slice(-k).map(x=>x.value),firstNumStart=k=>{const a=args.filter(x=>x.type==='num');return a[a.length-k]?.start??0},pathArgCount={m:2,l:2,c:6,v:4,y:4,re:4},clear=()=>{args=[]};
-  while(i<text.length){const t=nextToken(text,i);if(!t)break;i=t.next;if(t.type==='num'||t.type==='name'){args.push(t);continue}if(t.type!=='op')continue;const op=t.value;
+  while(i<text.length){const prev=i,t=nextToken(text,i);if(!t)break;if(t.next<=prev){i=prev+1;args=[];continue}i=t.next;if(t.type==='num'||t.type==='name'){args.push(t);continue}if(t.type!=='op')continue;const op=t.value;
    if(st.path&&pathArgCount[op])addRange(st.path,ref,firstNumStart(pathArgCount[op]),t.end);else if(st.path&&op==='h')addRange(st.path,ref,t.start,t.end);
    if(op==='q'){st.stack.push({ctm:[...st.ctm],rgb:[...st.rgb],width:st.width});clear();continue}
    if(op==='Q'){const z=st.stack.pop();if(z){st.ctm=z.ctm;st.rgb=z.rgb;st.width=z.width}clear();continue}
