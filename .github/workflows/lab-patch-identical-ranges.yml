@@ -1,0 +1,33 @@
+name: Lab patch identical ranges
+on:
+  push:
+    branches: [lab/foxit-index-v3]
+    paths: [.github/workflows/lab-patch-identical-ranges.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+      - name: Deduplicate only identical structural ranges
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old="function strokeEditGroups(targets){const groups=new Map();for(const t of targets||[]){for(const r of strokeEditRanges(t)){const key=deepKey(r.ref);let g=groups.get(key);if(!g){g={ref:r.ref,key,ranges:[],original:null};groups.set(key,g)}g.ranges.push([r.start,r.end])}}for(const g of groups.values()){g.ranges.sort((a,b)=>b[0]-a[0]||b[1]-a[1]);for(let i=1;i<g.ranges.length;i++)if(g.ranges[i-1][0]<g.ranges[i][1])throw new Error('rangos estructurales solapados en '+g.key)}return groups}"
+          new="function strokeEditGroups(targets){const groups=new Map();for(const t of targets||[]){for(const r of strokeEditRanges(t)){const key=deepKey(r.ref);let g=groups.get(key);if(!g){g={ref:r.ref,key,ranges:[],rangeKeys:new Set(),original:null};groups.set(key,g)}const rk=r.start+':'+r.end;if(g.rangeKeys.has(rk))continue;g.rangeKeys.add(rk);g.ranges.push([r.start,r.end])}}for(const g of groups.values()){g.ranges.sort((a,b)=>b[0]-a[0]||b[1]-a[1]);for(let i=1;i<g.ranges.length;i++)if(g.ranges[i-1][0]<g.ranges[i][1])throw new Error('rangos estructurales solapados en '+g.key);delete g.rangeKeys}return groups}"
+          if old not in s: raise SystemExit('target strokeEditGroups not found exactly')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Deduplicate identical shared Form edit ranges"
+          git push origin HEAD:lab/foxit-index-v3
