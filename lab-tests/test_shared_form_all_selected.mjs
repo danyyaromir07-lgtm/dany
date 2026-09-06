@@ -49,3 +49,4 @@ assert.doesNotMatch(result,/XObject compartido|Borrado cancelado|Borrado bloquea
 assert(seconds<20);
 assert(!errors.some(x=>/TypeError|ReferenceError|SyntaxError|out of memory|realloc|calloc/i.test(x)),errors.join('\n'));
 await browser.close(); console.log('SHARED_FORM_ALL_SELECTED_E2E_OK');
+
