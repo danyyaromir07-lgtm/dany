@@ -1,0 +1,64 @@
+name: Lab v4 fix mapper and publish isolated UI
+on:
+  push:
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: [.github/workflows/lab-v4-fix-and-publish.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v4-realpdf-map
+          fetch-depth: 0
+      - name: Patch strict mapper tolerance without heuristics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+          old="function compactGeomMatch(v,s,tol=.012){if(!v||!s||v.lines!==s.lines||v.curves!==s.curves)return false;for(let i=0;i<4;i++)if(Math.abs(Number(v.bbox[i])-Number(s.bbox[i]))>tol)return false;if(v.first&&s.first&&(Math.abs(v.first[0]-s.first[0])>tol||Math.abs(v.first[1]-s.first[1])>tol))return false;if(v.last&&s.last&&(Math.abs(v.last[0]-s.last[0])>tol||Math.abs(v.last[1]-s.last[1])>tol))return false;return true}"
+          new="function compactGeomMatch(v,s,tol=null){if(!v||!s||v.lines!==s.lines||v.curves!==s.curves)return false;const d=Math.max(.001,diag(v.bbox||[0,0,0,0]),diag(s.bbox||[0,0,0,0])),t=tol==null?Math.max(.06,Math.min(.35,d*.0008)):tol;for(let i=0;i<4;i++)if(Math.abs(Number(v.bbox[i])-Number(s.bbox[i]))>t)return false;if(v.first&&s.first&&(Math.abs(v.first[0]-s.first[0])>t||Math.abs(v.first[1]-s.first[1])>t))return false;if(v.last&&s.last&&(Math.abs(v.last[0]-s.last[0])>t||Math.abs(v.last[1]-s.last[1])>t))return false;const vw=Number(v.width),sw=Number(s.width);if(Number.isFinite(vw)&&Number.isFinite(sw)&&Math.abs(vw-sw)>Math.max(.03,Math.abs(sw)*.03))return false;if(Array.isArray(v.rgb)&&Array.isArray(s.rgb)&&v.rgb.length>=3&&s.rgb.length>=3&&colorDist(v.rgb,s.rgb)>.015)return false;return true}"
+          if old not in s: raise SystemExit('compactGeomMatch baseline not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Static checks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          assert 'Math.max(.06,Math.min(.35,d*.0008))' in s
+          assert 'colorDist(v.rgb,s.rgb)>.015' in s
+          assert 'strictCompactGeomMap' in s
+          assert 'Sin rutas alternativas ni causal' in s
+          print('MAPPER_PATCH_OK')
+          PY
+      - name: Commit mapper fix to lab branch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Lab: tolerate parser-rounding in strict 1:1 geometry" || true
+          git push origin HEAD:lab/foxit-index-v4-realpdf-map
+      - name: Publish isolated lab UI to gh-pages
+        run: |
+          cp selector-nubes-multistream-core.html /tmp/lab-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          mkdir -p lab-selector-v4
+          cp /tmp/lab-core.html lab-selector-v4/selector-nubes-multistream-core.html
+          cp selector-fast.html lab-selector-v4/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          s=s.replace('./selector-nubes-multistream-core.html?v=20260903-previewfast2','./selector-nubes-multistream-core.html?v=20260906-realpdf-map2')
+          s=s.replace('Selector de nubes · interfaz compacta','Selector de nubes · interfaz compacta · LAB v4')
+          p.write_text(s)
+          PY
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Publish isolated lab v4 with compact selector UI"
+          git push origin gh-pages
