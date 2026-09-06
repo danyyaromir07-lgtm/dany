@@ -1,4 +1,4 @@
-name: Lab v4 global banded mapper
+name: Lab v4 topology sequence mapper
 on:
   push:
     branches: [lab/foxit-index-v4-realpdf-map]
@@ -13,11 +13,11 @@ jobs:
         with:
           ref: lab/foxit-index-v4-realpdf-map
           fetch-depth: 0
-      - name: Apply patch
+      - name: Apply topology patch
         run: python3 .github/scripts/lab-v4-banded-map.py
-      - name: Check JS
-        run: python3 -c "from pathlib import Path; import re; s=Path('selector-nubes-multistream-core.html').read_text(); assert 'strictCompactBandedMap' in s; assert 'alineación global exacta por secuencia' in s; m=re.search(r'<script type=\"module\">(.*?)</script>',s,re.S); assert m; Path('/tmp/core.mjs').write_text(re.sub(r'^import .*?;\\s*','',m.group(1),count=1,flags=re.S))" && node --check /tmp/core.mjs
+      - name: Check JS and invariants
+        run: python3 -c "from pathlib import Path; import re; s=Path('selector-nubes-multistream-core.html').read_text(); assert \"return Number(x?.lines||0)+'|'+Number(x?.curves||0)\" in s; assert 'alineación global topológica única' in s; assert 'expansión por componente' in s; m=re.search(r'<script type=\"module\">(.*?)</script>',s,re.S); assert m; Path('/tmp/core.mjs').write_text(re.sub(r'^import .*?;\\s*','',m.group(1),count=1,flags=re.S))" && node --check /tmp/core.mjs
       - name: Commit candidate
-        run: git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add selector-nubes-multistream-core.html && git commit -m 'Lab global banded exact sequence mapping' && git push origin HEAD:lab/foxit-index-v4-realpdf-map
+        run: git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add selector-nubes-multistream-core.html && git commit -m 'Lab topology-only global sequence alignment for unequal counts' && git push origin HEAD:lab/foxit-index-v4-realpdf-map
       - name: Publish isolated lab
-        run: cp selector-nubes-multistream-core.html /tmp/core.html && git fetch origin gh-pages && git checkout -B lab-publish origin/gh-pages && mkdir -p lab-selector-v4 && cp /tmp/core.html lab-selector-v4/selector-nubes-multistream-core.html && sed -i -E 's#selector-nubes-multistream-core.html\?v=[^\"]+#selector-nubes-multistream-core.html?v=20260906-band12#' lab-selector-v4/index.html && git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html && git commit -m 'Publish isolated lab global banded sequence mapper' && git push origin HEAD:gh-pages
+        run: cp selector-nubes-multistream-core.html /tmp/core.html && git fetch origin gh-pages && git checkout -B lab-publish origin/gh-pages && mkdir -p lab-selector-v4 && cp /tmp/core.html lab-selector-v4/selector-nubes-multistream-core.html && sed -i -E 's#selector-nubes-multistream-core.html\?v=[^\"]+#selector-nubes-multistream-core.html?v=20260906-band13#' lab-selector-v4/index.html && git config user.name github-actions-bot && git config user.email 41898282+github-actions-bot@users.noreply.github.com && git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html && git commit -m 'Publish isolated lab topology sequence mapper' && git push origin HEAD:gh-pages
