@@ -1,0 +1,38 @@
+name: Lab compact scanner progress fix
+on:
+  push:
+    branches:
+      - lab/foxit-index-v3
+    paths:
+      - tools/lab_compact_progress_fix.py
+      - .github/workflows/lab-compact-progress-fix.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v3
+          fetch-depth: 0
+      - name: Apply progress guard
+        run: python tools/lab_compact_progress_fix.py
+      - name: Syntax check module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/core.mjs').write_text(s[a:b])
+          assert 't.next<=prev' in s[s.index('async function compactModel'):]
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit isolated candidate fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add selector-nubes-multistream-core.html
+          git commit -m 'Guarantee compact scanner token progress'
+          git push origin HEAD:lab/foxit-index-v3
