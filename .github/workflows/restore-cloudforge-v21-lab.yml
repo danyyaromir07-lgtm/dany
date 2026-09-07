@@ -1,0 +1,46 @@
+name: Restore CloudForge lab to V2.1 stable
+
+on:
+  push:
+    branches:
+      - lab/restore-v2.1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact V2.1 restore branch
+        uses: actions/checkout@v4
+        with:
+          ref: lab/restore-v2.1
+          fetch-depth: 0
+
+      - name: Stage exact stable lab files
+        run: |
+          test "$(git rev-parse HEAD^)" = "9a7642b05325391f0818b690b2a9f3bdbb29cf2c"
+          rm -rf /tmp/cloudforge-v21
+          mkdir -p /tmp/cloudforge-v21
+          git show 9a7642b05325391f0818b690b2a9f3bdbb29cf2c:lab-selector-v4/index.html > /tmp/cloudforge-v21/index.html
+          git show 9a7642b05325391f0818b690b2a9f3bdbb29cf2c:lab-selector-v4/selector-nubes-multistream-core.html > /tmp/cloudforge-v21/selector-nubes-multistream-core.html
+          test "$(git hash-object /tmp/cloudforge-v21/selector-nubes-multistream-core.html)" = "32fb3a5476129fe128e3f2faccfa651979c50dff"
+
+      - name: Restore only lab-selector-v4 on gh-pages
+        run: |
+          git config user.name "github-actions-bot"
+          git config user.email "41898282+github-actions-bot@users.noreply.github.com"
+          git fetch origin gh-pages
+          git reset --hard origin/gh-pages
+          git checkout -B gh-pages origin/gh-pages
+          cp /tmp/cloudforge-v21/index.html lab-selector-v4/index.html
+          cp /tmp/cloudforge-v21/selector-nubes-multistream-core.html lab-selector-v4/selector-nubes-multistream-core.html
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          if git diff --cached --quiet; then
+            echo "Lab already equals V2.1"
+          else
+            git commit -m "Restore CloudForge lab-selector-v4 to stable V2.1"
+            git push origin gh-pages
+          fi
