@@ -1,0 +1,68 @@
+name: Lab flatmem13 black component
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem13-black-component
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem13-black-component
+      - name: Patch black component grouping only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          anchor="function blackCloudSafe(g)"
+          ins="function blackSeedCompat(x,s){if(!isNearBlackStroke(x)||!isNearBlackStroke(s))return false;if((x.curves||0)<=0||(s.curves||0)<=0)return false;const sw=Math.max(.001,Math.abs(Number(s.width)||0)),xw=Math.max(.001,Math.abs(Number(x.width)||0));if(xw/sw<.58||xw/sw>1.72)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.34||dx/ds>2.95)return false;return true}\n"
+          i=s.index(anchor)
+          s=s[:i]+ins+s[i:]
+          old="const broad=classicVisual.filter(v=>seedCompat(v,best)),groups=seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];"
+          new="const broad=isNearBlackStroke(best)?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)),groups=seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem12' in h
+          h=h.replace('20260907-flatmem12','20260907-flatmem13',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -q "blackSeedCompat" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "20260907-flatmem13" lab-selector-v4/index.html
+          node --check <(python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.rindex('</script>')
+          print(s[a:b])
+          PY
+          )
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: broaden black cloud seed component safely'
+          git push origin HEAD:lab/v2.1-flatmem13-black-component
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem13
+          cp /tmp/index.html lab-selector-flatmem13/index.html
+          cp /tmp/core.html lab-selector-flatmem13/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem13
+          git commit -m 'Publish isolated CloudForge flatmem13 black-component candidate'
+          git push origin gh-pages
