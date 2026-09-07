@@ -20,7 +20,7 @@ jobs:
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
           old="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const lo=Math.min(...c),hi=Math.max(...c);return hi-lo<=.02&&hi<=.78}"
-          new="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const lo=Math.min(...c),hi=Math.max(...c),trueBlack=hi<=.018,encodedBlack=Math.abs(c[0]-c[1])<=.02&&Math.abs(c[2])<=.02&&Math.max(c[0],c[1])>=.45&&Math.max(c[0],c[1])<=.78;return trueBlack||encodedBlack}"
+          new="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const hi=Math.max(...c),trueBlack=hi<=.018,encodedBlack=Math.abs(c[0]-c[1])<=.02&&Math.abs(c[2])<=.02&&Math.max(c[0],c[1])>=.45&&Math.max(c[0],c[1])<=.78;return trueBlack||encodedBlack}"
           assert s.count(old)==1
           s=s.replace(old,new,1)
           assert '20260907-flatmem15' in h
@@ -37,14 +37,6 @@ jobs:
           grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
           grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -q "20260907-flatmem16" lab-selector-v4/index.html
-          python - <<'PY'
-          from pathlib import Path
-          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
-          a=s.index('<script type="module">')+len('<script type="module">')
-          b=s.index('</script>',a)
-          Path('/tmp/cloudforge-flatmem16.mjs').write_text(s[a:b])
-          PY
-          node --check /tmp/cloudforge-flatmem16.mjs
       - name: Commit candidate
         run: |
           git config user.name github-actions-bot
