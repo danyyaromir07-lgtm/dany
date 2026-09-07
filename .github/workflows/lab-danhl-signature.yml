@@ -1,0 +1,53 @@
+name: Lab DanHL signature
+on:
+  push:
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: [.github/workflows/lab-danhl-signature.yml]
+permissions:
+  contents: write
+jobs:
+  signature:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+      - name: Add DanHL signature to isolated lab header
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          css_old='.brandLogo{display:flex;align-items:center;min-width:0;height:40px}.brandLogo svg{display:block;width:205px;height:40px;max-width:100%}.brandLogo .cf-word{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:800;letter-spacing:-.6px}.brandLogo .cf-sub{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:650;letter-spacing:2.2px}.sideHead{min-height:42px}'
+          css_new='.brandWrap{display:flex;align-items:center;gap:9px;min-width:0}.brandLogo{display:flex;align-items:center;min-width:0;height:40px}.brandLogo svg{display:block;width:205px;height:40px;max-width:100%}.brandLogo .cf-word{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:800;letter-spacing:-.6px}.brandLogo .cf-sub{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:650;letter-spacing:2.2px}.brandBy{display:flex;align-items:center;gap:4px;padding-left:8px;border-left:1px solid rgba(128,149,170,.28);white-space:nowrap}.brandByLabel{font-size:8.5px;font-weight:700;letter-spacing:.35px;color:#6f8295}.danhlMark{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;font-weight:900;letter-spacing:-.45px;background:linear-gradient(180deg,#dce3ea 0%,#8b9bae 38%,#425467 72%,#b9c4ce 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 8px rgba(84,143,190,.12)}.sideHead{min-height:42px}@media(max-width:1050px){.brandBy{display:none}}'
+          if css_old not in s:
+              raise SystemExit('CloudForge brand CSS marker not found')
+          s=s.replace(css_old,css_new,1)
+          html_old='<div class="sideHead"><div class="brandLogo" title="CloudForge · Selector de nubes" aria-label="CloudForge · Selector de nubes"><svg'
+          html_new='<div class="sideHead"><div class="brandWrap"><div class="brandLogo" title="CloudForge · Selector de nubes" aria-label="CloudForge · Selector de nubes"><svg'
+          if html_old not in s:
+              raise SystemExit('CloudForge brand HTML marker not found')
+          s=s.replace(html_old,html_new,1)
+          close_old='</text></svg></div><span id="batchSummary" class="batchSummary">0 archivos</span>'
+          close_new='</text></svg></div><div class="brandBy" title="By: DanHL" aria-label="By: DanHL"><span class="brandByLabel">By:</span><span class="danhlMark">DanHL</span></div></div><span id="batchSummary" class="batchSummary">0 archivos</span>'
+          if close_old not in s:
+              raise SystemExit('CloudForge brand close marker not found')
+          s=s.replace(close_old,close_new,1)
+          for q in ['brandBy','brandByLabel','danhlMark','By: DanHL','>DanHL<']:
+              assert q in s, q
+          p.write_text(s)
+          PY
+      - name: Verify isolated-only change
+        run: |
+          git diff --check
+          git diff --name-only | grep -qx 'lab-selector-v4/index.html'
+          grep -q 'By: DanHL' lab-selector-v4/index.html
+          grep -q 'danhlMark' lab-selector-v4/index.html
+      - name: Publish DanHL signature
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html
+          git commit -m 'Add DanHL signature to isolated CloudForge lab UI'
+          git push origin HEAD:gh-pages
