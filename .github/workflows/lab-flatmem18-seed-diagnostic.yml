@@ -1,0 +1,55 @@
+name: Lab flatmem18 seed diagnostic
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem18-seed-diagnostic
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem18-seed-diagnostic
+      - name: Add click-only seed diagnostic
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="const vg=components(visualSelected);status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'}"
+          new="const vg=components(visualSelected),dbgRgb=(best.rgb||[]).slice(0,3).map(v=>Number(v).toFixed(3)).join('/'),dbgSafe=blackSeed?blackCloudSafe(seed):false,dbgRatio=seed.length?diag(componentBox(seed))/Math.max(.001,med(seed.map(v=>diag(v.bbox)).filter(Boolean))):0;status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)}"
+          assert old in s
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem17' in h
+          h=h.replace('20260907-flatmem17','20260907-flatmem18',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate unchanged core invariants
+        run: |
+          grep -Fq "DBG rgb=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem18" lab-selector-v4/index.html
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: add click-only seed diagnostics'
+          git push origin HEAD:lab/v2.1-flatmem18-seed-diagnostic
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem18
+          cp /tmp/index.html lab-selector-flatmem18/index.html
+          cp /tmp/core.html lab-selector-flatmem18/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem18
+          git commit -m 'Publish isolated CloudForge flatmem18 diagnostic candidate'
+          git push origin gh-pages
