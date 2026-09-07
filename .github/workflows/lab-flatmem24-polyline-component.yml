@@ -1,8 +1,8 @@
 name: Lab flatmem24 polyline component
 on:
   push:
-    branches: [lab/v2.1-flatmem24-polyline-component]
-    paths: ['.github/workflows/lab-flatmem24-polyline-component.yml']
+    branches:
+      - lab/v2.1-flatmem24-polyline-component
 permissions:
   contents: write
 jobs:
@@ -13,7 +13,6 @@ jobs:
         with:
           ref: lab/v2.1-flatmem24-polyline-component
       - name: Patch polyline component expansion only
-        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -21,30 +20,28 @@ jobs:
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
           anchor="function blackPolylineCloudSafe(v){if(!isNearBlackStroke(v)||(v.curves||0)!==0)return false;const lines=Number(v.lines||0),segs=Number(v.segs||0);if(lines<48||segs!==lines)return false;const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),d=Math.hypot(bw,bh);if(!Number.isFinite(d)||d<4||!bw||!bh)return false;const ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));if(ar>16)return false;const a=v.first,z=v.last;if(!a||!z)return false;const closure=Math.hypot(Number(a[0])-Number(z[0]),Number(a[1])-Number(z[1]));return v.closed===true||closure<=Math.max(1.5,d*.055)}"
-          assert anchor in s
+          assert anchor in s, 'polyline safe baseline not found'
           extra="""
 function blackPolylineCompat(x,s){if(!blackPolylineCloudSafe(x)||!blackPolylineCloudSafe(s))return false;if(colorDist(blackRgb3(x),blackRgb3(s))>.025)return false;const lx=Math.max(1,Number(x.lines||0)),ls=Math.max(1,Number(s.lines||0)),lr=lx/ls;if(lr<.28||lr>3.6)return false;const wx=Math.abs(Number(x.width)||0),ws=Math.abs(Number(s.width)||0);if(Math.max(wx,ws)>.05){const wr=Math.max(.001,wx)/Math.max(.001,ws);if(wr<.5||wr>2)return false}const bx=x.bbox||[],bs=s.bbox||[],mx=Math.max(.001,Math.min(Math.abs(bx[2]-bx[0]),Math.abs(bx[3]-bx[1]))),ms=Math.max(.001,Math.min(Math.abs(bs[2]-bs[0]),Math.abs(bs[3]-bs[1]))),mr=mx/ms;return mr>=.3&&mr<=3.3}
 function blackPolylineComponentGroups(items){if(!items.length)return[];const mins=items.map(v=>{const b=v.bbox||[];return Math.min(Math.abs(Number(b[2])-Number(b[0])),Math.abs(Number(b[3])-Number(b[1])))}).filter(v=>Number.isFinite(v)&&v>0),mm=med(mins),tol=Math.max(1.5,mm*.24),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(blackPolylineCompat(items[i],items[j])&&gap(items[i].bbox,items[j].bbox)<=tol)u(i,j);const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
 """
           if 'function blackPolylineCompat(' not in s:
-              s=s.replace(anchor,anchor+extra,1)
+            s=s.replace(anchor,anchor+extra,1)
           old="const blackSeed=isNearBlackStroke(best),blackPolyline=blackPolylineCloudSafe(best),broad=blackPolyline?[]:(prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)))),groups=blackPolyline?[]:(prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad))),seed=blackPolyline?[best]:(prefSeed||(groups.find(g=>g.includes(best))||[best]));let famVisual=[];if(blackPolyline){famVisual=[best]}"
           new="const blackSeed=isNearBlackStroke(best),blackPolyline=blackPolylineCloudSafe(best),broad=blackPolyline?classicVisual.filter(v=>blackPolylineCompat(v,best)):(prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)))),groups=blackPolyline?blackPolylineComponentGroups(broad):(prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad))),seed=blackPolyline?(groups.find(g=>g.includes(best))||[best]):(prefSeed||(groups.find(g=>g.includes(best))||[best]));let famVisual=[];if(blackPolyline){famVisual=seed}"
-          assert old in s
+          assert old in s, 'polyline single-path selection baseline not found'
           s=s.replace(old,new,1)
-          p.write_text(s)
           assert '20260907-flatmem23' in h
           h=h.replace('20260907-flatmem23','20260907-flatmem24',1)
-          w.write_text(h)
+          p.write_text(s); w.write_text(h)
           PY
       - name: Validate invariants
-        shell: bash
         run: |
           grep -Fq "function blackPolylineComponentGroups" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "famVisual=seed" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "20260907-flatmem24" lab-selector-v4/index.html
           python - <<'PY'
           from pathlib import Path
@@ -55,24 +52,21 @@ function blackPolylineComponentGroups(items){if(!items.length)return[];const min
           PY
           node --check /tmp/cloudforge-flatmem24.mjs
       - name: Commit candidate
-        shell: bash
         run: |
           git config user.name github-actions-bot
           git config user.email 41898282+github-actions-bot@users.noreply.github.com
-          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
-          git commit -m "Lab V2.2: expand validated black polyline cloud by connected component"
+          git add lab-selector-v4
+          git commit -m 'Lab V2.2: expand validated black polyline cloud by connected component'
           git push origin HEAD:lab/v2.1-flatmem24-polyline-component
       - name: Publish isolated path
-        shell: bash
         run: |
+          cp lab-selector-v4/index.html /tmp/index24.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core24.html
           git fetch origin gh-pages
-          mkdir -p /tmp/pub24
-          cp lab-selector-v4/index.html /tmp/pub24/index.html
-          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub24/selector-nubes-multistream-core.html
-          git checkout gh-pages
-          rm -rf lab-selector-flatmem24
+          git switch -C gh-pages origin/gh-pages
           mkdir -p lab-selector-flatmem24
-          cp /tmp/pub24/* lab-selector-flatmem24/
+          cp /tmp/index24.html lab-selector-flatmem24/index.html
+          cp /tmp/core24.html lab-selector-flatmem24/selector-nubes-multistream-core.html
           git add lab-selector-flatmem24
-          git commit -m "Publish isolated CloudForge flatmem24 polyline component"
+          git commit -m 'Publish isolated CloudForge flatmem24 polyline component candidate'
           git push origin gh-pages
