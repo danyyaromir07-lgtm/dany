@@ -29,14 +29,14 @@ jobs:
           PY
       - name: Validate invariants
         run: |
-          grep -q "encodedBlack" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "colorDist(x.rgb,s.rgb)>.025" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "boxTol=Math.max(.35,md*.80)" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -q "20260907-flatmem16" lab-selector-v4/index.html
+          grep -Fq "encodedBlack" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "colorDist(x.rgb,s.rgb)>.025" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "boxTol=Math.max(.35,md*.80)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem16" lab-selector-v4/index.html
       - name: Commit candidate
         run: |
           git config user.name github-actions-bot
