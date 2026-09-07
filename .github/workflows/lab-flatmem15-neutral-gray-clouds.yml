@@ -1,0 +1,74 @@
+name: Lab flatmem15 neutral gray clouds
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem15-neutral-gray-clouds
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem15-neutral-gray-clouds
+      - name: Patch neutral gray cloud classification only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="function isNearBlackStroke(v){const c=v?.rgb||[];return c.length>=3&&Math.max(Math.abs(Number(c[0])||0),Math.abs(Number(c[1])||0),Math.abs(Number(c[2])||0))<=.018}"
+          new="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const lo=Math.min(...c),hi=Math.max(...c);return hi-lo<=.02&&hi<=.78}"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          old2="function blackSeedCompat(x,s){if(!isNearBlackStroke(x)||!isNearBlackStroke(s))return false;if((x.curves||0)<=0||(s.curves||0)<=0)return false;const sw=Math.max(.001,Math.abs(Number(s.width)||0)),xw=Math.max(.001,Math.abs(Number(x.width)||0));if(xw/sw<.58||xw/sw>1.72)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.34||dx/ds>2.95)return false;return true}"
+          new2="function blackSeedCompat(x,s){if(!isNearBlackStroke(x)||!isNearBlackStroke(s)||colorDist(x.rgb,s.rgb)>.025)return false;if((x.curves||0)<=0||(s.curves||0)<=0)return false;const sw=Math.max(.001,Math.abs(Number(s.width)||0)),xw=Math.max(.001,Math.abs(Number(x.width)||0));if(xw/sw<.58||xw/sw>1.72)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.34||dx/ds>2.95)return false;return true}"
+          assert s.count(old2)==1
+          s=s.replace(old2,new2,1)
+          old3="endTol=Math.max(.55,md*.42),boxTol=Math.max(.35,md*.28)"
+          new3="endTol=Math.max(.55,md*.65),boxTol=Math.max(.35,md*.80)"
+          assert s.count(old3)==1
+          s=s.replace(old3,new3,1)
+          assert '20260907-flatmem14' in h
+          h=h.replace('20260907-flatmem14','20260907-flatmem15',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -q "hi-lo<=.02&&hi<=.78" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "colorDist(x.rgb,s.rgb)>.025" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "boxTol=Math.max(.35,md*.80)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "20260907-flatmem15" lab-selector-v4/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/cloudforge-flatmem15.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/cloudforge-flatmem15.mjs
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: recognize neutral gray revision-cloud families safely'
+          git push origin HEAD:lab/v2.1-flatmem15-neutral-gray-clouds
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem15
+          cp /tmp/index.html lab-selector-flatmem15/index.html
+          cp /tmp/core.html lab-selector-flatmem15/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem15
+          git commit -m 'Publish isolated CloudForge flatmem15 neutral-gray candidate'
+          git push origin gh-pages
