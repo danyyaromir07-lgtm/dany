@@ -148,8 +148,8 @@ async function strictCompactAnchoredMap(vs){
  const pairs=vs.map((v,i)=>[Number(v._ordinal),structOrd[i]]).sort((a,b)=>a[0]-b[0]);for(let i=1;i<pairs.length;i++)if(pairs[i][1]<=pairs[i-1][1])return{ok:false,why:'la correspondencia anclada rompe el orden estructural'};
  return{ok:true,targets:structOrd.map(i=>model.strokes[i]),structOrd};
 }
-async function strictCompactGeomMap(vs){
- if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
+async function strictCompactGeomMap(vs,allowIncomplete=false){
+ if(!model?.strokes?.length||(!allowIncomplete&&model.incomplete))return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};
  if(!vs?.length)return{ok:false,why:'sin selección azul'};
  const cell=.5,byCell=new Map(),cand=vs.map(()=>[]);
  for(let i=0;i<vs.length;i++){const[cx,cy]=compactCell(vs[i],cell);for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const k=compactCellKey(vs[i],cx+dx,cy+dy);let a=byCell.get(k);if(!a)byCell.set(k,a=[]);a.push(i)}}
@@ -169,7 +169,7 @@ async function applyCompactPlan(work,plan){let page=null,touched=0;try{page=work
 function visualRecord(path,stroke,ctm,color){const pts=[];let first=null,last=null,lines=0,curves=0;const P=(x,y)=>tf(ctm,x,y),add=q=>{pts.push(q);if(!first)first=q;last=q};path.walk({moveTo(x,y){add(P(x,y))},lineTo(x,y){add(P(x,y));lines++},curveTo(x1,y1,x2,y2,x3,y3){const a=P(x1,y1),b=P(x2,y2),c=P(x3,y3);pts.push(a,b,c);if(!first)first=c;last=c;curves++},closePath(){}});if(!pts.length)return null;const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]);return{lines,curves,segs:lines+curves,bbox:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],first,last,width:Number(stroke?.lineWidth||0),rgb:Array.isArray(color)?color.slice(0,3).map(Number):[]}}
 function visualSigEqual(a,b){return sig(a)===sig(b)}
 function verifyVisualSequence(page,selectedOrdinals){const skip=new Set(selectedOrdinals);let expected=0,seen=0,ok=true,why='';const next=()=>{while(expected<classicVisual.length&&skip.has(expected))expected++};next();const cb={strokePath(path,stroke,ctm,cs,color){if(!ok)return;const r=visualRecord(path,stroke,ctm,color);if(!r)return;if(expected>=classicVisual.length){ok=false;why='apareció geometría adicional';return}if(!visualSigEqual(r,classicVisual[expected])){ok=false;why='la geometría restante diverge en el ordinal '+expected;return}expected++;seen++;next()}};let dev=null;try{dev=new mupdf.Device(cb);page.run(dev,mupdf.Matrix.identity)}finally{try{dev?.close?.()}catch(_){}try{dev?.destroy?.()}catch(_){}}next();if(expected!==classicVisual.length){ok=false;why=why||'faltan trazos no azules'}if(seen!==classicVisual.length-selectedOrdinals.length){ok=false;why=why||'conteo visual inesperado'}return{ok,why,seen}}
-async function verifyCompactStructure(page,selectedOrdinals){const skip=new Set(selectedOrdinals);let expected=0,seen=0,ok=true,why='';const next=()=>{while(expected<model.strokes.length&&skip.has(expected))expected++};next();const r=await compactModel(page,-1,q=>{if(!ok)return;if(expected>=model.strokes.length){ok=false;why='estructura adicional';return}if(!compactGeomMatch(model.strokes[expected],q)){ok=false;why='estructura restante diverge en '+expected;return}expected++;seen++;next()},false);next();if(r.incomplete){ok=false;why=why||'recorrido estructural incompleto'}if(expected!==model.strokes.length||seen!==model.strokes.length-selectedOrdinals.length){ok=false;why=why||'conteo estructural inesperado'}return{ok,why,seen}}
+async function verifyCompactStructure(page,selectedOrdinals){const skip=new Set(selectedOrdinals);let expected=0,seen=0,ok=true,why='';const next=()=>{while(expected<model.strokes.length&&skip.has(expected))expected++};next();const r=await compactModel(page,-1,q=>{if(!ok)return;if(expected>=model.strokes.length){ok=false;why='estructura adicional';return}if(!compactGeomMatch(model.strokes[expected],q)){ok=false;why='estructura restante diverge en '+expected;return}expected++;seen++;next()},false);next();if(!!r.incomplete!==!!model.incomplete){ok=false;why=why||'cambió el estado de cobertura estructural'}if(expected!==model.strokes.length||seen!==model.strokes.length-selectedOrdinals.length){ok=false;why=why||'conteo estructural inesperado'}return{ok,why,seen}}
 
 function structStableKey(s){return String(s?.instanceKey||((s?.sourceKey||'')+'|'+(s?.start??'')+'|'+(s?.end??'')))}
 function strokeEditRanges(t){const a=Array.isArray(t?.editRanges)&&t.editRanges.length?t.editRanges:[{ref:t?.sourceRef,start:t?.start,end:t?.end}];return a.filter(r=>r?.ref&&Number.isInteger(r.start)&&Number.isInteger(r.end)&&r.start>=0&&r.end>r.start)}
@@ -256,7 +256,7 @@ async function mapBlueResponsive(vs,blocked=[]){
  }
  return{items:[],alternatives:[],mode:'sin asignación global 1:1 completa'}
 }
-function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||!analysisReady||!visualSelected.length||!!model?.incomplete;$('#save').disabled=!handle||!pending}
+function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||!analysisReady||!visualSelected.length;$('#save').disabled=!handle||!pending}
 function scheduleSharp(delay=180){clearTimeout(sharpTimer);if(!doc)return;sharpQueued=true;sharpTimer=setTimeout(()=>{sharpTimer=null;if(!doc)return;if(rendering){sharpQueued=true;return}sharpQueued=false;renderVisibleSharp()},delay)}
 function clearDetail(){sharpEpoch++;detail.removeAttribute('src');detail.style.display='none';if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}
 function sizeOverlay(){const dpr=Math.min(2,window.devicePixelRatio||1);overlay.width=Math.max(1,Math.round(viewport.clientWidth*dpr));overlay.height=Math.max(1,Math.round(viewport.clientHeight*dpr));overlay.style.width=viewport.clientWidth+'px';overlay.style.height=viewport.clientHeight+'px';overlay.dataset.dpr=String(dpr);drawSelection()}
@@ -273,7 +273,11 @@ async function removeGroup(){
  if(!model||!indexReady){status.textContent='Borrado bloqueado sin modificar el PDF: el índice estructural no está disponible.';setButtons();return}
  const visualOrd=visualSelected.map(v=>Number(v._ordinal));if(visualOrd.some(i=>!Number.isInteger(i)||i<0||i>=classicVisual.length)||new Set(visualOrd).size!==visualOrd.length){status.textContent='Borrado bloqueado: selección visual inestable.';return}
  let targets=[],structOrd=[],mapMode='ordinal';
- if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{
+ if(model.incomplete){
+  status.textContent='Borrado exacto · índice parcial: demostrando geometría exacta 1:1 para '+visualSelected.length+' trazos azules…';await uiYield();
+  const gm=await strictCompactGeomMap(visualSelected,true);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: índice parcial y '+gm.why+'. No se usará alineación ordinal ni rutas alternativas.';setButtons();return}
+  targets=gm.targets;structOrd=gm.structOrd;mapMode='geometría exacta 1:1 sobre índice parcial + verificación visual total';
+ }else if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{
   status.textContent='Borrado exacto · alineando secuencia visual↔estructural ordenada para '+visualSelected.length+' trazos azules…';await uiYield();
   const bm=await strictCompactBandedMap(visualSelected);if(!bm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: '+bm.why+' ('+classicVisual.length+'/'+model.strokes.length+'). Sin rutas alternativas ni causal.';setButtons();return}
   targets=bm.targets;structOrd=bm.structOrd;mapMode='alineación global ordenada única · coste '+bm.cost+' + verificación exacta';
