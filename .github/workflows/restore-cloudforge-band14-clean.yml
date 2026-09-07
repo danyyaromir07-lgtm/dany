@@ -1,0 +1,59 @@
+name: Restore exact CloudForge band14 clean room
+
+on:
+  push:
+    branches:
+      - lab/restore-v2.1
+    paths:
+      - .github/workflows/restore-cloudforge-band14-clean.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore-band14-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact historical band14 publish
+        uses: actions/checkout@v4
+        with:
+          ref: da28087d5f1ec210c520798c483b35c5ba3dff24
+          path: source
+
+      - name: Checkout gh-pages target
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+
+      - name: Copy exact historical lab to never-used path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "da28087d5f1ec210c520798c483b35c5ba3dff24"
+          rm -rf pages/lab-selector-band14-clean
+          mkdir -p pages/lab-selector-band14-clean
+          cp -a source/lab-selector-v4/. pages/lab-selector-band14-clean/
+          cmp source/lab-selector-v4/index.html pages/lab-selector-band14-clean/index.html
+          cmp source/lab-selector-v4/selector-nubes-multistream-core.html pages/lab-selector-band14-clean/selector-nubes-multistream-core.html
+
+      - name: Publish only clean-room lab path
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pages
+          git config user.name "github-actions-bot"
+          git config user.email "41898282+github-actions-bot@users.noreply.github.com"
+          git add -- lab-selector-band14-clean
+          if git diff --cached --quiet; then
+            echo "Clean-room path already exact; nothing to commit."
+            exit 0
+          fi
+          changed="$(git diff --cached --name-only)"
+          if echo "$changed" | grep -v '^lab-selector-band14-clean/' >/dev/null; then
+            echo "Refusing to publish: unexpected path changed"
+            echo "$changed"
+            exit 1
+          fi
+          git commit -m "Restore exact band14 CloudForge in clean-room lab path"
+          git push origin HEAD:gh-pages
