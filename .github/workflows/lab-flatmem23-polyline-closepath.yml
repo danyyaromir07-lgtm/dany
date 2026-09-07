@@ -1,0 +1,63 @@
+name: Lab flatmem23 polyline closepath
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem23-polyline-closepath
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem23-polyline-closepath
+      - name: Patch closePath-aware polyline detection only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="function visualRecord(path,stroke,ctm,color){const pts=[];let first=null,last=null,lines=0,curves=0;const P=(x,y)=>tf(ctm,x,y),add=q=>{pts.push(q);if(!first)first=q;last=q};path.walk({moveTo(x,y){add(P(x,y))},lineTo(x,y){add(P(x,y));lines++},curveTo(x1,y1,x2,y2,x3,y3){const a=P(x1,y1),b=P(x2,y2),c=P(x3,y3);pts.push(a,b,c);if(!first)first=c;last=c;curves++},closePath(){}});if(!pts.length)return null;const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]);return{lines,curves,segs:lines+curves,bbox:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],first,last,width:Number(stroke?.lineWidth||0),rgb:Array.isArray(color)?color.slice(0,3).map(Number):[]}}"
+          new="function visualRecord(path,stroke,ctm,color){const pts=[];let first=null,last=null,lines=0,curves=0,closed=false;const P=(x,y)=>tf(ctm,x,y),add=q=>{pts.push(q);if(!first)first=q;last=q};path.walk({moveTo(x,y){add(P(x,y))},lineTo(x,y){add(P(x,y));lines++},curveTo(x1,y1,x2,y2,x3,y3){const a=P(x1,y1),b=P(x2,y2),c=P(x3,y3);pts.push(a,b,c);if(!first)first=c;last=c;curves++},closePath(){closed=true}});if(!pts.length)return null;const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]);return{lines,curves,segs:lines+curves,bbox:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)],first,last,closed,width:Number(stroke?.lineWidth||0),rgb:Array.isArray(color)?color.slice(0,3).map(Number):[]}}"
+          assert old in s, 'visualRecord baseline not found'
+          s=s.replace(old,new,1)
+          old2="const a=v.first,z=v.last;if(!a||!z)return false;const closure=Math.hypot(Number(a[0])-Number(z[0]),Number(a[1])-Number(z[1]));return closure<=Math.max(1.5,d*.055)}"
+          new2="const a=v.first,z=v.last;if(!a||!z)return false;const closure=Math.hypot(Number(a[0])-Number(z[0]),Number(a[1])-Number(z[1]));return v.closed===true||closure<=Math.max(1.5,d*.055)}"
+          assert old2 in s, 'polyline closure gate not found'
+          s=s.replace(old2,new2,1)
+          old3="+' poly='+(blackPolyline?'1':'0')+' bw='+polyDiag.bw.toFixed(2)+' bh='+polyDiag.bh.toFixed(2)+' ar='+polyDiag.ar.toFixed(2)+' closure='+polyDiag.closure.toFixed(2)+' limit='+polyDiag.limit.toFixed(2)+' broad='"
+          if old3 in s:
+            s=s.replace(old3,"+' poly='+(blackPolyline?'1':'0')+' closed='+(best.closed?'1':'0')+' bw='+polyDiag.bw.toFixed(2)+' bh='+polyDiag.bh.toFixed(2)+' ar='+polyDiag.ar.toFixed(2)+' closure='+polyDiag.closure.toFixed(2)+' limit='+polyDiag.limit.toFixed(2)+' broad='",1)
+          assert '20260907-flatmem22' in h
+          h=h.replace('20260907-flatmem22','20260907-flatmem23',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -Fq "closed=false" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "v.closed===true||closure<=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem23" lab-selector-v4/index.html
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.2: honor explicit closePath for black polyline clouds'
+          git push origin HEAD:lab/v2.1-flatmem23-polyline-closepath
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem23
+          cp /tmp/index.html lab-selector-flatmem23/index.html
+          cp /tmp/core.html lab-selector-flatmem23/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem23
+          git commit -m 'Publish isolated CloudForge flatmem23 closePath candidate'
+          git push origin gh-pages
