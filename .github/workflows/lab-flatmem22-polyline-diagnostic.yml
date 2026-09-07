@@ -1,0 +1,55 @@
+name: Lab flatmem22 polyline diagnostic
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem22-polyline-diagnostic
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem22-polyline-diagnostic
+      - name: Add polyline predicate diagnostics only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="const vg=components(visualSelected),dbgRgb=(best.rgb||[]).slice(0,3).map(v=>Number(v).toFixed(3)).join('/'),dbgSafe=blackPolyline||(blackSeed?blackCloudSafe(seed):false),dbgRatio=seed.length?diag(componentBox(seed))/Math.max(.001,med(seed.map(v=>diag(v.bbox)).filter(Boolean))):0;status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' poly='+(blackPolyline?'1':'0')+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)}"
+          new="const vg=components(visualSelected),dbgRgb=(best.rgb||[]).slice(0,3).map(v=>Number(v).toFixed(3)).join('/'),dbgSafe=blackPolyline||(blackSeed?blackCloudSafe(seed):false),dbgRatio=seed.length?diag(componentBox(seed))/Math.max(.001,med(seed.map(v=>diag(v.bbox)).filter(Boolean))):0,db=(best.bbox||[]),dbw=Math.abs(Number(db[2])-Number(db[0])),dbh=Math.abs(Number(db[3])-Number(db[1])),ddd=Math.hypot(dbw,dbh),dar=Math.max(dbw,dbh)/Math.max(.001,Math.min(dbw,dbh)),dfa=best.first,dlz=best.last,dcl=(dfa&&dlz)?Math.hypot(Number(dfa[0])-Number(dlz[0]),Number(dfa[1])-Number(dlz[1])):NaN,dct=Math.max(1.5,ddd*.055);status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' poly='+(blackPolyline?'1':'0')+' bw='+dbw.toFixed(2)+' bh='+dbh.toFixed(2)+' ar='+dar.toFixed(2)+' closure='+Number(dcl).toFixed(2)+' limit='+dct.toFixed(2)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)}"
+          assert old in s
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem21' in h
+          h=h.replace('20260907-flatmem21','20260907-flatmem22',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate
+        run: |
+          grep -Fq "closure=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "blackPolylineCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem22" lab-selector-v4/index.html
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.2: add black polyline predicate diagnostics'
+          git push origin HEAD:lab/v2.1-flatmem22-polyline-diagnostic
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem22
+          cp /tmp/index.html lab-selector-flatmem22/index.html
+          cp /tmp/core.html lab-selector-flatmem22/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem22
+          git commit -m 'Publish isolated CloudForge flatmem22 polyline diagnostic'
+          git push origin gh-pages
