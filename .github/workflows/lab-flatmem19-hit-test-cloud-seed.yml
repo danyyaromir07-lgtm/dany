@@ -51,8 +51,9 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
-          a=s.index('<script type="module">')+len('<script type="module">')
-          b=s.rindex('</script>')
+          marker='<script type="module">'
+          a=s.index(marker)+len(marker)
+          b=s.index('</script>',a)
           Path('/tmp/cloudforge-flatmem19.mjs').write_text(s[a:b])
           PY
           node --check /tmp/cloudforge-flatmem19.mjs
