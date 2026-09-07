@@ -1,0 +1,68 @@
+name: Lab flatmem14 black chain
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem14-black-chain
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem14-black-chain
+      - name: Patch black cloud chain grouping only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          anchor='function blackCloudSafe(g)'
+          ins="function blackSeedComponentGroups(items){if(!items.length)return[];const md=med(items.map(x=>diag(x.bbox)).filter(Boolean)),endTol=Math.max(.55,md*.42),boxTol=Math.max(.35,md*.28),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const A=[items[i].first,items[i].last].filter(Boolean),B=[items[j].first,items[j].last].filter(Boolean);if(A.some(a=>B.some(b=>Math.hypot(a[0]-b[0],a[1]-b[1])<=endTol))||gap(items[i].bbox,items[j].bbox)<=boxTol)u(i,j)}const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}\n"
+          i=s.index(anchor)
+          s=s[:i]+ins+s[i:]
+          old="const broad=isNearBlackStroke(best)?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)),groups=seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];let famVisual=[];if(seed.length>=3){for(const g of groups)if(g===seed||componentLike(g,seed))famVisual.push(...g)}else{famVisual=classicVisual.filter(v=>similar(v,best))}if(isNearBlackStroke(best)&&blackCloudSafe(seed)){const blackFam=[];for(const g of groups)if(g===seed||blackCloudLike(g,seed))blackFam.push(...g);if(blackFam.length)famVisual=blackFam}"
+          new="const blackSeed=isNearBlackStroke(best),broad=blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)),groups=blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];let famVisual=[];if(blackSeed){if(blackCloudSafe(seed)){for(const g of groups)if(g===seed||blackCloudLike(g,seed))famVisual.push(...g)}else famVisual=[best]}else if(seed.length>=3){for(const g of groups)if(g===seed||componentLike(g,seed))famVisual.push(...g)}else{famVisual=classicVisual.filter(v=>similar(v,best))}"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem13' in h
+          h=h.replace('20260907-flatmem13','20260907-flatmem14',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -q "blackSeedComponentGroups" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "20260907-flatmem14" lab-selector-v4/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.rindex('</script>')
+          Path('/tmp/cloudforge-flatmem14.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/cloudforge-flatmem14.mjs
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: chain black cloud arcs conservatively'
+          git push origin HEAD:lab/v2.1-flatmem14-black-chain
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem14
+          cp /tmp/index.html lab-selector-flatmem14/index.html
+          cp /tmp/core.html lab-selector-flatmem14/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem14
+          git commit -m 'Publish isolated CloudForge flatmem14 black-chain candidate'
+          git push origin gh-pages
