@@ -1,0 +1,65 @@
+name: Lab flatmem20 grayscale black seed
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem20-grayscale-black-seed
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem20-grayscale-black-seed
+      - name: Normalize grayscale black seed only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const hi=Math.max(...c),trueBlack=hi<=.018,encodedBlack=Math.abs(c[0]-c[1])<=.02&&Math.abs(c[2])<=.02&&Math.max(c[0],c[1])>=.45&&Math.max(c[0],c[1])<=.78;return trueBlack||encodedBlack}\nfunction blackSeedCompat(x,s){if(!isNearBlackStroke(x)||!isNearBlackStroke(s)||colorDist(x.rgb,s.rgb)>.025)return false;"
+          new="function blackRgb3(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length===1&&Number.isFinite(c[0]))return[c[0],c[0],c[0]];if(c.length>=3&&c.slice(0,3).every(Number.isFinite))return c.slice(0,3);return[]}\nfunction isNearBlackStroke(v){const c=blackRgb3(v);if(c.length<3)return false;const hi=Math.max(...c),trueBlack=hi<=.018,encodedBlack=Math.abs(c[0]-c[1])<=.02&&Math.abs(c[2])<=.02&&Math.max(c[0],c[1])>=.45&&Math.max(c[0],c[1])<=.78;return trueBlack||encodedBlack}\nfunction blackSeedCompat(x,s){if(!isNearBlackStroke(x)||!isNearBlackStroke(s)||colorDist(blackRgb3(x),blackRgb3(s))>.025)return false;"
+          assert s.count(old)==1, 'black seed block not found exactly once'
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem19' in h
+          h=h.replace('20260907-flatmem19','20260907-flatmem20',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -Fq "function blackRgb3" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "colorDist(blackRgb3(x),blackRgb3(s))" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "blackHit=null" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem20" lab-selector-v4/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/cloudforge-flatmem20.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/cloudforge-flatmem20.mjs
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: normalize grayscale black seed without changing colored flow'
+          git push origin HEAD:lab/v2.1-flatmem20-grayscale-black-seed
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem20
+          cp /tmp/index.html lab-selector-flatmem20/index.html
+          cp /tmp/core.html lab-selector-flatmem20/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem20
+          git commit -m 'Publish isolated CloudForge flatmem20 grayscale-black candidate'
+          git push origin gh-pages
