@@ -16,13 +16,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
           p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
-          old="function blackCloudSafe(g){if(!g||g.length<12||g.some(v=>!isNearBlackStroke(v)))return false;const ds=g.map(v=>diag(v.bbox)).filter(Boolean),ws=g.map(v=>Math.abs(Number(v.width)||0));const md=med(ds),mw=med(ws);if(!md||diag(componentBox(g))/md<5.5)return false;if(g.filter(v=>(v.curves||0)>0&&(v.lines||0)===0).length/g.length<.88)return false;return Math.max(...ws)-Math.min(...ws)<=Math.max(.05,mw*.25)}"
           new="function blackCloudSafe(g){if(!g||g.length<12||g.some(v=>!isNearBlackStroke(v)))return false;const ds=g.map(v=>diag(v.bbox)).filter(Boolean),ws=g.map(v=>Math.abs(Number(v.width)||0)),cs=g.map(v=>Number(v.curves||0)),ss=g.map(v=>Number(v.segs||0));const md=med(ds),mw=med(ws),mc=med(cs),ms=med(ss);if(!md||diag(componentBox(g))/md<5.5)return false;if(g.filter(v=>(v.curves||0)>0).length/g.length<.96)return false;if(mc<1||ms<1)return false;if(cs.filter(v=>Math.abs(v-mc)<=Math.max(1,mc*.35)).length/g.length<.86)return false;if(ss.filter(v=>Math.abs(v-ms)<=Math.max(1,ms*.35)).length/g.length<.86)return false;return Math.max(...ws)-Math.min(...ws)<=Math.max(.05,mw*.25)}"
-          assert s.count(old)==1
-          s=s.replace(old,new,1)
+          s2,n=re.subn(r"function blackCloudSafe\(g\)\{.*?\}(?=\nfunction blackCloudLike)",new,s,count=1,flags=re.S)
+          assert n==1
+          s=s2
           assert '20260907-flatmem16' in h
           h=h.replace('20260907-flatmem16','20260907-flatmem17',1)
           p.write_text(s); w.write_text(h)
