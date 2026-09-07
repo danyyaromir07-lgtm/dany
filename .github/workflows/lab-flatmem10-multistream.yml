@@ -1,0 +1,68 @@
+name: Lab flat-memory V2.1 exact multi-stream scanner
+on:
+  push:
+    branches: [lab/v2.1-flatmem10]
+    paths:
+      - '.github/scripts/patch-flatmem10-multistream.py'
+      - '.github/workflows/lab-flatmem10-multistream.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem10
+          fetch-depth: 0
+      - name: Patch candidate
+        run: python .github/scripts/patch-flatmem10-multistream.py
+      - name: Syntax and invariant checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          w=Path('lab-selector-v4/index.html').read_text()
+          assert 'flatGiantMultiExactModel' in s
+          assert 'flatMultiExact:true' in s
+          assert 'flatStreamLengths' in s
+          assert 'r.originalBytes||t.originalBytes' in s
+          assert 'multi:!!model.flatMultiExact' in s
+          assert "ref.writeStream(buf)" in s
+          assert "saveToBuffer('compress')" in s
+          assert "saveToBuffer('incremental,compress')" not in s
+          assert 'compressed<8_000_000' in s
+          assert 'strictCompactBandedMap(visualSelected)' in s
+          assert 'flatCurveExact:true' in s
+          assert '20260907-flatmem10' in w
+          assert 'By: DanHL' in w
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          print('flatmem10 markers ok')
+          PY
+          node --check /tmp/core.mjs
+      - name: Commit candidate on isolated branch
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Lab V2.1: exact sequential multi-stream flat scanner'
+          git push origin HEAD:lab/v2.1-flatmem10
+          cp lab-selector-v4/index.html /tmp/flatmem10-index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/flatmem10-core.html
+      - name: Publish isolated lab path only
+        shell: bash
+        run: |
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem10
+          cp /tmp/flatmem10-index.html lab-selector-flatmem10/index.html
+          cp /tmp/flatmem10-core.html lab-selector-flatmem10/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem10
+          git commit -m 'Publish isolated CloudForge flatmem10 multi-stream candidate'
+          git push origin gh-pages
