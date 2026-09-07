@@ -1,0 +1,66 @@
+name: Lab v2.2 OOM guard
+
+on:
+  push:
+    branches:
+      - lab/v2.2-oom-guard
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout lab branch
+        uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-oom-guard
+          fetch-depth: 0
+
+      - name: Apply bounded-memory patch
+        run: python .github/scripts/v22_oom_guard.py
+
+      - name: Sanity checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          c=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          i=Path('lab-selector-v4/index.html').read_text()
+          checks=[
+            ('bounded counter', 'candCount=new Uint8Array' in c),
+            ('bounded reverse counter', 'hitCount=new Uint8Array' in c),
+            ('partial exact route', 'geometría exacta 1:1 acotada' in c),
+            ('HD release', 'sharpQueued=false;clearDetail();await uiYield();' in c),
+            ('no partial causal route', 'índice parcial y '+"'" not in ''),
+            ('wrapper cache key', '20260907-oom1' in i),
+          ]
+          for name,ok in checks:
+              if not ok: raise SystemExit('failed: '+name)
+          print('sanity checks OK')
+          PY
+
+      - name: Prepare isolated preview
+        run: |
+          rm -rf /tmp/cloudforge-v22-oom
+          mkdir -p /tmp/cloudforge-v22-oom
+          cp lab-selector-v4/index.html /tmp/cloudforge-v22-oom/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/cloudforge-v22-oom/selector-nubes-multistream-core.html
+
+      - name: Publish isolated preview to gh-pages
+        run: |
+          git config user.name "github-actions-bot"
+          git config user.email "41898282+github-actions-bot@users.noreply.github.com"
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-v22-oom
+          mkdir -p lab-selector-v22-oom
+          cp /tmp/cloudforge-v22-oom/* lab-selector-v22-oom/
+          git add lab-selector-v22-oom
+          if git diff --cached --quiet; then
+            echo "No preview changes"
+          else
+            git commit -m "Publish isolated CloudForge v2.2 bounded-memory OOM guard"
+            git push origin gh-pages
+          fi
