@@ -15,7 +15,7 @@
       const response=await fetch(HIST+'index-shell-v10.html?v=20260821-shell-direct1',{cache:'no-store'});
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
       let html=await response.text();
-      const marker='<base href="'+HIST+'"><script type="importmap">'+JSON.stringify({imports:{
+      const importMap='<script type="importmap">'+JSON.stringify({imports:{
         './revision-cloud-manual-force-v2.js?v=20260818-curvedgray2':'./revision-cloud-manual-force-v16.js?v=20260821-additive1',
         './revision-cloud-multicloud-v1.js?v=20260815-multicloud1':'./revision-cloud-multicloud-v3.js?v=20260821-additive1',
         './revision-cloud-additive-families-v1.js?v=20260821-additive1':'./revision-cloud-additive-families-v2.js?v=20260821-familyc1',
@@ -32,9 +32,9 @@
       }})+'</'+'script>';
       const signatureOld='signature-tools-v4.js?v=20260819-commentsafe2';
       const signatureNew='signature-tools-v5.js?v=20260819-signaturesingle5';
-      if(!html.includes('</head>'))throw new Error('No encontré </head> en la aplicación base.');
+      if(!html.includes('<head>'))throw new Error('No encontré <head> en la aplicación base.');
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
-      html=html.replace('</head>',marker+'</head>');
+      html=html.replace('<head>','<head><base href="'+HIST+'">'+importMap);
       html=html.replace(signatureOld,signatureNew);
       html=html.replaceAll('batch-apply-fallback.js?v=20260819-loaderboundary3','batch-apply-fallback.js?v=20260821-shell-direct1');
       const selectiveModules='<script type="module" src="./text-occurrence-selection-v1.js?v=20260821-selective1"></'+'script><script type="module" src="./batch-preview-selective-adapter-v1.js?v=20260821-selective1"></'+'script><script type="module" src="./batch-preview-difference-map-v1.js?v=20260821-clouddiff1"></'+'script>';
