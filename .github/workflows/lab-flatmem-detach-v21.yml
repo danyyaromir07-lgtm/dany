@@ -1,0 +1,59 @@
+name: Lab flat-memory V2.1 detached-buffer fix
+on:
+  push:
+    branches: [lab/v2.1-flatmem2]
+    paths:
+      - '.github/scripts/patch-flatmem-detach-v21.py'
+      - '.github/workflows/lab-flatmem-detach-v21.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem2
+          fetch-depth: 0
+      - name: Patch detached ArrayBuffer ownership
+        run: python .github/scripts/patch-flatmem-detach-v21.py
+      - name: Syntax and invariants
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          assert 'flatGiantExactModel' in s
+          assert 'flatCurveExact:true' in s
+          assert 'const mupdfOpenBytes=bytes.slice();doc=mupdf.PDFDocument.openDocument(mupdfOpenBytes' in s
+          assert "strictCompactBandedMap(visualSelected)" in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          PY
+          node --check /tmp/core.mjs
+          grep -q 'By: DanHL' lab-selector-v4/index.html
+          grep -q '20260907-flatmem2' lab-selector-v4/index.html
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Lab V2.1: keep active PDF bytes independent from MuPDF'
+          git push origin HEAD:lab/v2.1-flatmem2
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem2
+          cp /tmp/index.html lab-selector-flatmem2/index.html
+          cp /tmp/core.html lab-selector-flatmem2/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem2
+          git commit -m 'Publish isolated CloudForge flat-memory detached-buffer fix'
+          git push origin gh-pages
