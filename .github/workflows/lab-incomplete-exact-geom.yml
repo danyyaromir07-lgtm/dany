@@ -1,0 +1,78 @@
+name: Lab partial-index exact geometry recovery
+
+on:
+  push:
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: ['.github/workflows/lab-incomplete-exact-geom.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/foxit-index-v4-realpdf-map
+          fetch-depth: 0
+      - name: Apply safe partial-index recovery
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('selector-nubes-multistream-core.html')
+          s=p.read_text()
+
+          old="function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||!analysisReady||!visualSelected.length||!!model?.incomplete;$('#save').disabled=!handle||!pending}"
+          new="function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||!analysisReady||!visualSelected.length;$('#save').disabled=!handle||!pending}"
+          assert old in s, 'setButtons anchor missing'
+          s=s.replace(old,new,1)
+
+          old="async function strictCompactGeomMap(vs){\n if(!model?.strokes?.length||model.incomplete)return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};"
+          new="async function strictCompactGeomMap(vs,allowIncomplete=false){\n if(!model?.strokes?.length||(!allowIncomplete&&model.incomplete))return{ok:false,why:model?.incomplete?'recorrido estructural incompleto':'sin índice estructural'};"
+          assert old in s, 'strictCompactGeomMap anchor missing'
+          s=s.replace(old,new,1)
+
+          old="next();if(r.incomplete){ok=false;why=why||'recorrido estructural incompleto'}if(expected!==model.strokes.length||seen!==model.strokes.length-selectedOrdinals.length){ok=false;why=why||'conteo estructural inesperado'}return{ok,why,seen}}"
+          new="next();if(!!r.incomplete!==!!model.incomplete){ok=false;why=why||'cambió el estado de cobertura estructural'}if(expected!==model.strokes.length||seen!==model.strokes.length-selectedOrdinals.length){ok=false;why=why||'conteo estructural inesperado'}return{ok,why,seen}}"
+          assert old in s, 'verifyCompactStructure anchor missing'
+          s=s.replace(old,new,1)
+
+          old="let targets=[],structOrd=[],mapMode='ordinal';\n if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{"
+          new="let targets=[],structOrd=[],mapMode='ordinal';\n if(model.incomplete){\n  status.textContent='Borrado exacto · índice parcial: demostrando geometría exacta 1:1 para '+visualSelected.length+' trazos azules…';await uiYield();\n  const gm=await strictCompactGeomMap(visualSelected,true);if(!gm.ok){status.textContent='Borrado bloqueado sin modificar el PDF: índice parcial y '+gm.why+'. No se usará alineación ordinal ni rutas alternativas.';setButtons();return}\n  targets=gm.targets;structOrd=gm.structOrd;mapMode='geometría exacta 1:1 sobre índice parcial + verificación visual total';\n }else if(model.strokes.length===classicVisual.length){structOrd=visualOrd.slice();targets=structOrd.map(i=>model.strokes[i]);mapMode=model.ordinalSafe?'ordinal exacta':'ordinal por secuencia + verificación exacta'}else{"
+          assert old in s, 'removeGroup mapping anchor missing'
+          s=s.replace(old,new,1)
+
+          p.write_text(s)
+      - name: Verify core invariants
+        run: |
+          grep -q "strictCompactGeomMap(vs,allowIncomplete=false)" selector-nubes-multistream-core.html
+          grep -q "geometría exacta 1:1 sobre índice parcial" selector-nubes-multistream-core.html
+          grep -q "cambió el estado de cobertura estructural" selector-nubes-multistream-core.html
+          grep -q "Sin rutas alternativas" selector-nubes-multistream-core.html
+          ! grep -q "delete').disabled=!has||!analysisReady||!visualSelected.length||!!model?.incomplete" selector-nubes-multistream-core.html
+      - name: Commit lab candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add selector-nubes-multistream-core.html
+          git commit -m "Lab: exact geometry recovery for partial structural index"
+          git push origin HEAD:lab/foxit-index-v4-realpdf-map
+      - name: Publish isolated lab only
+        run: |
+          CORE=$(cat selector-nubes-multistream-core.html)
+          git fetch origin gh-pages
+          git checkout gh-pages
+          printf '%s' "$CORE" > lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          s=s.replace('selector-nubes-multistream-core.html?v=20260906-ui1','selector-nubes-multistream-core.html?v=20260907-partial1')
+          s=s.replace("else if(s.structuralIncomplete){badge.textContent='BLOQUEADO';badge.classList.add('bad')}else if(s.selected){", "else if(s.structuralIncomplete&&s.selected){badge.textContent=s.indexReady?'EXACTO PARCIAL · '+s.selected:'PREPARANDO · '+s.selected}else if(s.structuralIncomplete){badge.textContent='ÍNDICE PARCIAL'}else if(s.selected){")
+          p.write_text(s)
+          PY
+          git add lab-selector-v4/selector-nubes-multistream-core.html lab-selector-v4/index.html
+          git commit -m "Publish isolated partial-index exact geometry recovery"
+          git push origin gh-pages
