@@ -30,6 +30,9 @@ jobs:
           assert '20260907-flatmem12' in h
           h=h.replace('20260907-flatmem12','20260907-flatmem13',1)
           p.write_text(s); w.write_text(h)
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.rindex('</script>')
+          Path('/tmp/core.js').write_text(s[a:b])
           PY
       - name: Validate invariants
         run: |
@@ -39,14 +42,7 @@ jobs:
           grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
           grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -q "20260907-flatmem13" lab-selector-v4/index.html
-          node --check <(python - <<'PY'
-          from pathlib import Path
-          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
-          a=s.index('<script type="module">')+len('<script type="module">')
-          b=s.rindex('</script>')
-          print(s[a:b])
-          PY
-          )
+          node --check /tmp/core.js
       - name: Commit candidate
         run: |
           git config user.name github-actions-bot
@@ -66,4 +62,3 @@ jobs:
           git add lab-selector-flatmem13
           git commit -m 'Publish isolated CloudForge flatmem13 black-component candidate'
           git push origin gh-pages
-# trigger
