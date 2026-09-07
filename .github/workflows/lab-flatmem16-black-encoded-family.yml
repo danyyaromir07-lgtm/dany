@@ -1,0 +1,66 @@
+name: Lab flatmem16 black encoded family
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem16-black-encoded-family
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem16-black-encoded-family
+      - name: Patch encoded-black cloud classification only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const lo=Math.min(...c),hi=Math.max(...c);return hi-lo<=.02&&hi<=.78}"
+          new="function isNearBlackStroke(v){const c=(v?.rgb||[]).slice(0,3).map(Number);if(c.length<3||c.some(x=>!Number.isFinite(x)))return false;const lo=Math.min(...c),hi=Math.max(...c),trueBlack=hi<=.018,encodedBlack=Math.abs(c[0]-c[1])<=.02&&Math.abs(c[2])<=.02&&Math.max(c[0],c[1])>=.45&&Math.max(c[0],c[1])<=.78;return trueBlack||encodedBlack}"
+          assert s.count(old)==1
+          s=s.replace(old,new,1)
+          assert '20260907-flatmem15' in h
+          h=h.replace('20260907-flatmem15','20260907-flatmem16',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -q "encodedBlack" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "colorDist(x.rgb,s.rgb)>.025" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "boxTol=Math.max(.35,md*.80)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "20260907-flatmem16" lab-selector-v4/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/cloudforge-flatmem16.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/cloudforge-flatmem16.mjs
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: recognize encoded black cloud family safely'
+          git push origin HEAD:lab/v2.1-flatmem16-black-encoded-family
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem16
+          cp /tmp/index.html lab-selector-flatmem16/index.html
+          cp /tmp/core.html lab-selector-flatmem16/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem16
+          git commit -m 'Publish isolated CloudForge flatmem16 encoded-black candidate'
+          git push origin gh-pages
