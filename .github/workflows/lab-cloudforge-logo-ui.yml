@@ -1,0 +1,44 @@
+name: Lab CloudForge logo UI
+on:
+  push:
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: [.github/workflows/lab-cloudforge-logo-ui.yml]
+permissions:
+  contents: write
+jobs:
+  logo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch isolated lab brand header
+        shell: bash
+        run: |
+          git fetch origin gh-pages
+          git checkout -B lab-logo-publish origin/gh-pages
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          old='<h1 title="CloudForge · Selector de nubes">CloudForge</h1>'
+          if old not in s:
+              raise SystemExit('CloudForge text brand marker missing')
+          css='''.brandLogo{display:flex;align-items:center;min-width:0;height:40px}.brandLogo svg{display:block;width:205px;height:40px;max-width:100%}.brandLogo .cf-word{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:800;letter-spacing:-.6px}.brandLogo .cf-sub{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-weight:650;letter-spacing:2.2px}.sideHead{min-height:42px}'''
+          s=s.replace('</style></head>',css+'</style></head>',1)
+          svg='''<div class="brandLogo" title="CloudForge · Selector de nubes" aria-label="CloudForge · Selector de nubes"><svg viewBox="0 0 340 70" role="img" aria-hidden="true"><defs><linearGradient id="cfMetal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8edf3"/><stop offset=".28" stop-color="#8d9baa"/><stop offset=".58" stop-color="#46586b"/><stop offset="1" stop-color="#aab5bf"/></linearGradient><linearGradient id="cfBolt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b8d9ee"/><stop offset=".45" stop-color="#5b87a7"/><stop offset="1" stop-color="#253a4d"/></linearGradient><linearGradient id="cfText" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#eef2f6"/><stop offset=".48" stop-color="#c3ccd5"/><stop offset="1" stop-color="#708196"/></linearGradient><filter id="cfGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g transform="translate(5 8)"><path d="M12 43c-7 0-12-5-12-12s5-12 12-12h2C18 9 27 3 38 3c12 0 23 7 27 18h3c8 0 14 6 14 14s-6 14-14 14H13" fill="none" stroke="url(#cfMetal)" stroke-width="5.2" stroke-linecap="round"/><path d="M45 0 24 32h14L27 55l31-34H44z" fill="url(#cfBolt)" stroke="#9bc8e5" stroke-width="1.2" filter="url(#cfGlow)"/></g><text x="96" y="37" fill="url(#cfText)" font-size="29" class="cf-word">CloudForge</text><text x="98" y="55" fill="#8190a0" font-size="8.5" class="cf-sub">SELECTOR DE NUBES</text></svg></div>'''
+          s=s.replace(old,svg,1)
+          p.write_text(s)
+          PY
+      - name: Verify isolated UI only
+        run: |
+          grep -q 'class="brandLogo"' lab-selector-v4/index.html
+          grep -q 'CloudForge' lab-selector-v4/index.html
+          test -z "$(git diff --name-only | grep -v '^lab-selector-v4/index.html$')"
+      - name: Publish isolated logo
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html
+          git commit -m 'Integrate CloudForge metallic logo in isolated lab UI'
+          git push origin HEAD:gh-pages
