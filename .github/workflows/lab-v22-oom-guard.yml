@@ -33,7 +33,6 @@ jobs:
             ('bounded reverse counter', 'hitCount=new Uint8Array' in c),
             ('partial exact route', 'geometría exacta 1:1 acotada' in c),
             ('HD release', 'sharpQueued=false;clearDetail();await uiYield();' in c),
-            ('no partial causal route', 'índice parcial y '+"'" not in ''),
             ('wrapper cache key', '20260907-oom1' in i),
           ]
           for name,ok in checks:
@@ -53,6 +52,7 @@ jobs:
           git config user.name "github-actions-bot"
           git config user.email "41898282+github-actions-bot@users.noreply.github.com"
           git fetch origin gh-pages
+          git reset --hard HEAD
           git checkout gh-pages
           rm -rf lab-selector-v22-oom
           mkdir -p lab-selector-v22-oom
