@@ -1,0 +1,42 @@
+name: Lab CloudForge branding
+on:
+  push:
+    branches: [lab/foxit-index-v4-realpdf-map]
+    paths: [.github/workflows/lab-cloudforge-brand.yml]
+permissions:
+  contents: write
+jobs:
+  brand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+      - name: Apply CloudForge name to isolated lab UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/index.html')
+          s=p.read_text()
+          old_title='<title>Selector de nubes · LAB UI fase 1</title>'
+          old_head='<div class="sideHead"><h1>PDFs</h1><span id="batchSummary" class="batchSummary">0 archivos</span></div>'
+          new_title='<title>CloudForge · Selector de nubes</title>'
+          new_head='<div class="sideHead"><h1 title="CloudForge · Selector de nubes">CloudForge</h1><span id="batchSummary" class="batchSummary">0 archivos</span></div>'
+          if old_title not in s: raise SystemExit('lab title marker missing')
+          if old_head not in s: raise SystemExit('lab header marker missing')
+          s=s.replace(old_title,new_title,1).replace(old_head,new_head,1)
+          p.write_text(s)
+          PY
+      - name: Verify isolated-only branding
+        run: |
+          grep -q '<title>CloudForge · Selector de nubes</title>' lab-selector-v4/index.html
+          grep -q '>CloudForge</h1>' lab-selector-v4/index.html
+          git diff --exit-code -- selector-fast.html selector-nubes-multistream-core.html
+      - name: Publish branding
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html
+          git commit -m 'Brand isolated lab UI as CloudForge'
+          git push origin HEAD:gh-pages
