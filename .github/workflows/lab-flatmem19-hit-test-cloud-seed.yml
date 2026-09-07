@@ -20,28 +20,25 @@ jobs:
           p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
-          old=re.search(r"function chooseClassic\(e\)\{.*?\nconst r3=",s,re.S)
-          assert old, 'chooseClassic not found'
-          fn=old.group(0)[:-len('\nconst r3=')]
-          assert 'let best=null,bd=Infinity;' in fn
-          assert "const blackSeed=isNearBlackStroke(best),broad=" in fn
-          fn2=fn.replace(
-            'let best=null,bd=Infinity;',
-            'let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;'
-          )
-          fn2=fn2.replace(
-            "const d=distance(s,x,y);if(d<bd){bd=d;best=s}",
-            "const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}"
-          )
-          fn2=fn2.replace(
-            "const blackSeed=isNearBlackStroke(best),broad=blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)),groups=blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];",
-            "let prefBroad=null,prefGroups=null,prefSeed=null;if(!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){const bb=classicVisual.filter(v=>blackSeedCompat(v,blackHit)),gg=blackSeedComponentGroups(bb),ss=gg.find(g=>g.includes(blackHit))||[blackHit],switchTol=Math.max(2/Math.max(.1,baseRs*zoom),tol*.65);if(blackCloudSafe(ss)&&blackBd<=Math.max(bd+switchTol*.35,switchTol)){best=blackHit;bd=blackBd;prefBroad=bb;prefGroups=gg;prefSeed=ss}}const blackSeed=isNearBlackStroke(best),broad=prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best))),groups=prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad)),seed=prefSeed||(groups.find(g=>g.includes(best))||[best]);"
-          )
-          assert fn2!=fn
-          s=s[:old.start()]+fn2+'\nconst r3='+s[old.end():]
-          assert '20260907-flatmem18' in h
-          h=h.replace('20260907-flatmem18','20260907-flatmem19',1)
-          p.write_text(s); w.write_text(h)
+          if 'blackHit=null' not in s:
+            old=re.search(r"function chooseClassic\(e\)\{.*?\nconst r3=",s,re.S)
+            assert old, 'chooseClassic not found'
+            fn=old.group(0)[:-len('\nconst r3=')]
+            assert 'let best=null,bd=Infinity;' in fn
+            assert "const blackSeed=isNearBlackStroke(best),broad=" in fn
+            fn2=fn.replace('let best=null,bd=Infinity;','let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;')
+            fn2=fn2.replace("const d=distance(s,x,y);if(d<bd){bd=d;best=s}","const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}")
+            fn2=fn2.replace(
+              "const blackSeed=isNearBlackStroke(best),broad=blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)),groups=blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad),seed=groups.find(g=>g.includes(best))||[best];",
+              "let prefBroad=null,prefGroups=null,prefSeed=null;if(!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){const bb=classicVisual.filter(v=>blackSeedCompat(v,blackHit)),gg=blackSeedComponentGroups(bb),ss=gg.find(g=>g.includes(blackHit))||[blackHit],switchTol=Math.max(2/Math.max(.1,baseRs*zoom),tol*.65);if(blackCloudSafe(ss)&&blackBd<=Math.max(bd+switchTol*.35,switchTol)){best=blackHit;bd=blackBd;prefBroad=bb;prefGroups=gg;prefSeed=ss}}const blackSeed=isNearBlackStroke(best),broad=prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best))),groups=prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad)),seed=prefSeed||(groups.find(g=>g.includes(best))||[best]);"
+            )
+            assert fn2!=fn
+            s=s[:old.start()]+fn2+'\nconst r3='+s[old.end():]
+            p.write_text(s)
+          if '20260907-flatmem19' not in h:
+            assert '20260907-flatmem18' in h
+            h=h.replace('20260907-flatmem18','20260907-flatmem19',1)
+            w.write_text(h)
           PY
       - name: Validate invariants
         run: |
@@ -51,21 +48,20 @@ jobs:
           grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "20260907-flatmem19" lab-selector-v4/index.html
-          node --check <(python - <<'PY'
+          python - <<'PY'
           from pathlib import Path
           s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
           a=s.index('<script type="module">')+len('<script type="module">')
           b=s.rindex('</script>')
-          print(s[a:b])
+          Path('/tmp/cloudforge-flatmem19.mjs').write_text(s[a:b])
           PY
-          )
+          node --check /tmp/cloudforge-flatmem19.mjs
       - name: Commit candidate
         run: |
           git config user.name github-actions-bot
           git config user.email 41898282+github-actions-bot@users.noreply.github.com
           git add lab-selector-v4
-          git commit -m 'Lab V2.1: prefer validated cloud seed in overlapping hit-test'
-          git push origin HEAD:lab/v2.1-flatmem19-hit-test-cloud-seed
+          if git diff --cached --quiet; then echo 'candidate already patched'; else git commit -m 'Lab V2.1: prefer validated cloud seed in overlapping hit-test'; git push origin HEAD:lab/v2.1-flatmem19-hit-test-cloud-seed; fi
       - name: Publish isolated path
         run: |
           cp lab-selector-v4/index.html /tmp/index.html
@@ -76,5 +72,4 @@ jobs:
           cp /tmp/index.html lab-selector-flatmem19/index.html
           cp /tmp/core.html lab-selector-flatmem19/selector-nubes-multistream-core.html
           git add lab-selector-flatmem19
-          git commit -m 'Publish isolated CloudForge flatmem19 hit-test candidate'
-          git push origin gh-pages
+          if git diff --cached --quiet; then echo 'publication already current'; else git commit -m 'Publish isolated CloudForge flatmem19 hit-test candidate'; git push origin gh-pages; fi
