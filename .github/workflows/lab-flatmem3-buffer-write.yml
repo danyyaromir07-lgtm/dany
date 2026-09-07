@@ -1,0 +1,56 @@
+name: Lab flat-memory V2.1 native buffer write
+on:
+  push:
+    branches: [lab/v2.1-flatmem2]
+    paths:
+      - '.github/scripts/patch-flatmem3-buffer-write.py'
+      - '.github/workflows/lab-flatmem3-buffer-write.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem2
+          fetch-depth: 0
+      - name: Patch native MuPDF buffer write
+        run: python .github/scripts/patch-flatmem3-buffer-write.py
+      - name: Syntax and invariant checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          assert 'ref.writeStream(buf);touched++;continue' in s
+          assert 'ref.writeStream(u);touched++;continue' not in s
+          assert 'flatCurveExact:true' in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          PY
+          node --check /tmp/core.mjs
+          sed -i 's/20260907-flatmem2/20260907-flatmem3/g; s/20260907-flatmem1/20260907-flatmem3/g' lab-selector-v4/index.html
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Lab V2.1: write native MuPDF buffer without detached view'
+          git push origin HEAD:lab/v2.1-flatmem2
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+      - name: Publish isolated lab path
+        shell: bash
+        run: |
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem3
+          cp /tmp/index.html lab-selector-flatmem3/index.html
+          cp /tmp/core.html lab-selector-flatmem3/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem3
+          git commit -m 'Publish isolated CloudForge flatmem3 native-buffer fix'
+          git push origin gh-pages
