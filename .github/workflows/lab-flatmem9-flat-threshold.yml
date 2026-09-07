@@ -1,0 +1,64 @@
+name: Lab flat-memory V2.1 broaden existing flat exact threshold
+on:
+  push:
+    branches: [lab/v2.1-flatmem9]
+    paths:
+      - '.github/scripts/patch-flatmem9-flat-threshold.py'
+      - '.github/workflows/lab-flatmem9-flat-threshold.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem9
+          fetch-depth: 0
+      - name: Patch candidate
+        run: python .github/scripts/patch-flatmem9-flat-threshold.py
+      - name: Syntax and invariant checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          assert 'compressed<8_000_000' in s
+          assert 'compressed<10_000_000' not in s
+          assert 'flatGiantExactModel' in s
+          assert 'flatCurveExact:true' in s
+          assert 'ref.writeStream(buf)' in s
+          assert "saveToBuffer('compress')" in s
+          assert "saveToBuffer('incremental,compress')" not in s
+          assert "strictCompactBandedMap(visualSelected)" in s
+          m=re.search(r'<script type="module">(.*?)</script>',s,re.S)
+          assert m
+          Path('/tmp/core.mjs').write_text(m.group(1))
+          print('flatmem9 invariants ok')
+          PY
+          node --check /tmp/core.mjs
+          grep -q 'By: DanHL' lab-selector-v4/index.html
+          grep -q '20260907-flatmem9' lab-selector-v4/index.html
+      - name: Commit candidate on isolated branch
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m 'Lab V2.1: broaden existing flat exact threshold to 8 MB'
+          git push origin HEAD:lab/v2.1-flatmem9
+          cp lab-selector-v4/index.html /tmp/flatmem9-index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/flatmem9-core.html
+      - name: Publish isolated lab path only
+        shell: bash
+        run: |
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem9
+          cp /tmp/flatmem9-index.html lab-selector-flatmem9/index.html
+          cp /tmp/flatmem9-core.html lab-selector-flatmem9/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem9
+          git commit -m 'Publish isolated CloudForge flatmem9 threshold candidate'
+          git push origin gh-pages
