@@ -1,0 +1,57 @@
+name: Lab flatmem12 black cloud selection fix
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem12-black-cloud-fix
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem12-black-cloud-fix
+      - name: Patch black selection only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="let famVisual=[];if(isNearBlackStroke(best)&&blackCloudSafe(seed)){for(const g of groups)if(g===seed||blackCloudLike(g,seed))famVisual.push(...g)}else if(seed.length>=3){for(const g of groups)if(g===seed||componentLike(g,seed))famVisual.push(...g)}else{famVisual=classicVisual.filter(v=>similar(v,best))}famVisual=[...new Set(famVisual)];"
+          new="let famVisual=[];if(seed.length>=3){for(const g of groups)if(g===seed||componentLike(g,seed))famVisual.push(...g)}else{famVisual=classicVisual.filter(v=>similar(v,best))}if(isNearBlackStroke(best)&&blackCloudSafe(seed)){const blackFam=[];for(const g of groups)if(g===seed||blackCloudLike(g,seed))blackFam.push(...g);if(blackFam.length)famVisual=blackFam}famVisual=[...new Set(famVisual)];if(!famVisual.length)famVisual=[best];"
+          if s.count(old)!=1: raise SystemExit(f'expected one flatmem11 selection marker, found {s.count(old)}')
+          s=s.replace(old,new,1)
+          if '20260907-flatmem11' not in h: raise SystemExit('flatmem11 cache marker missing')
+          h=h.replace('20260907-flatmem11','20260907-flatmem12',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        run: |
+          grep -q "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "if(!famVisual.length)famVisual=\[best\]" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "blackCloudSafe(seed)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -q "20260907-flatmem12" lab-selector-v4/index.html
+          node -e "const fs=require('fs');const s=fs.readFileSync('lab-selector-v4/selector-nubes-multistream-core.html','utf8');const m=s.match(/<script type=\"module\">([\\s\\S]*?)<\\/script>/);if(!m)process.exit(2);new Function(m[1].replace(/^import .*$/m,''));"
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.1: repair black cloud selection without changing delete path'
+          git push origin HEAD:lab/v2.1-flatmem12-black-cloud-fix
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem12
+          cp /tmp/index.html lab-selector-flatmem12/index.html
+          cp /tmp/core.html lab-selector-flatmem12/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem12
+          git commit -m 'Publish isolated CloudForge flatmem12 black-cloud selection fix'
+          git push origin gh-pages
