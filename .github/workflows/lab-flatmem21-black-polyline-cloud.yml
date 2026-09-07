@@ -1,0 +1,63 @@
+name: Lab flatmem21 black polyline cloud
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem21-black-polyline-cloud
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem21-black-polyline-cloud
+      - name: Patch candidate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          marker='function blackCloudLike(a,b)'
+          i=s.index(marker)
+          j=s.index('\nfunction chooseClassic',i)
+          block=s[i:j]
+          assert 'blackPolylineCloudSafe' not in s
+          s=s[:j]+"\nfunction blackPolylineCloudSafe(v){if(!isNearBlackStroke(v)||(v.curves||0)!==0)return false;const lines=Number(v.lines||0),segs=Number(v.segs||0);if(lines<48||segs!==lines)return false;const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),d=Math.hypot(bw,bh);if(!Number.isFinite(d)||d<4||!bw||!bh)return false;const ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));if(ar>16)return false;const a=v.first,z=v.last;if(!a||!z)return false;const closure=Math.hypot(Number(a[0])-Number(z[0]),Number(a[1])-Number(z[1]));return closure<=Math.max(1.5,d*.055)}\n"+s[j:]
+          old="const blackSeed=isNearBlackStroke(best),broad=prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best))),groups=prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad)),seed=prefSeed||(groups.find(g=>g.includes(best))||[best]);let famVisual=[];if(blackSeed){if(blackCloudSafe(seed)){for(const g of groups)if(g===seed||blackCloudLike(g,seed))famVisual.push(...g)}else famVisual=[best]}else if(seed.length>=3)"
+          new="const blackSeed=isNearBlackStroke(best),blackPolyline=blackPolylineCloudSafe(best),broad=blackPolyline?[]:(prefBroad||(blackSeed?classicVisual.filter(v=>blackSeedCompat(v,best)):classicVisual.filter(v=>seedCompat(v,best)))),groups=blackPolyline?[]:(prefGroups||(blackSeed?blackSeedComponentGroups(broad):seedComponentGroups(broad))),seed=blackPolyline?[best]:(prefSeed||(groups.find(g=>g.includes(best))||[best]));let famVisual=[];if(blackPolyline){famVisual=[best]}else if(blackSeed){if(blackCloudSafe(seed)){for(const g of groups)if(g===seed||blackCloudLike(g,seed))famVisual.push(...g)}else famVisual=[best]}else if(seed.length>=3)"
+          assert old in s
+          s=s.replace(old,new,1)
+          s=s.replace('dbgSafe=blackSeed?blackCloudSafe(seed):false','dbgSafe=blackPolyline||(blackSeed?blackCloudSafe(seed):false)',1)
+          s=s.replace("+' broad='+broad.length", "+' poly='+(blackPolyline?'1':'0')+' broad='+broad.length",1)
+          assert '20260907-flatmem20' in h
+          h=h.replace('20260907-flatmem20','20260907-flatmem21',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate
+        run: |
+          grep -Fq "function blackPolylineCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "blackPolyline?[best]" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260907-flatmem21" lab-selector-v4/index.html
+      - name: Commit candidate
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4
+          git commit -m 'Lab V2.2: recognize safe single-path black polyline clouds'
+          git push origin HEAD:lab/v2.1-flatmem21-black-polyline-cloud
+      - name: Publish isolated path
+        run: |
+          cp lab-selector-v4/index.html /tmp/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/core.html
+          git fetch origin gh-pages
+          git switch -C gh-pages origin/gh-pages
+          mkdir -p lab-selector-flatmem21
+          cp /tmp/index.html lab-selector-flatmem21/index.html
+          cp /tmp/core.html lab-selector-flatmem21/selector-nubes-multistream-core.html
+          git add lab-selector-flatmem21
+          git commit -m 'Publish isolated CloudForge flatmem21 black-polyline candidate'
+          git push origin gh-pages
