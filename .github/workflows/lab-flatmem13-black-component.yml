@@ -66,3 +66,4 @@ jobs:
           git add lab-selector-flatmem13
           git commit -m 'Publish isolated CloudForge flatmem13 black-component candidate'
           git push origin gh-pages
+# trigger
