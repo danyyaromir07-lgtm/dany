@@ -20,30 +20,9 @@ jobs:
           p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
-          anchor='function redCloudComponentSafe(g,seed){'
-          pos=s.index(anchor)
+          pos=s.index('function redCloudComponentSafe(g,seed){')
           end=s.index('\n\nfunction chooseClassic',pos)
-          block=r'''
-function redScallopStats(v){
- if(!isRedStroke(v)||(v.curves||0)!==0)return null;
- const dirs=[],lens=[];let cur=null;
- for(const c of v.cmds||[]){
-  if(c[0]==='M'){cur=[Number(c[1]),Number(c[2])];continue}
-  if(c[0]!=='L'||!cur)continue;
-  const q=[Number(c[1]),Number(c[2])],dx=q[0]-cur[0],dy=q[1]-cur[1],ln=Math.hypot(dx,dy);
-  if(ln>.0001){dirs.push(Math.atan2(dy,dx));lens.push(ln)}cur=q
- }
- if(dirs.length<2)return null;
- const turns=[];for(let i=1;i<dirs.length;i++){let t=dirs[i]-dirs[i-1];while(t>Math.PI)t-=Math.PI*2;while(t<=-Math.PI)t+=Math.PI*2;turns.push(t)}
- let signed=0,rev=0,last=0;for(const t of turns){signed+=t;const sg=t>.12?1:t<-.12?-1:0;if(sg){if(last&&sg!==last)rev++;last=sg}}
- const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),dg=Math.hypot(bw,bh),plen=lens.reduce((a,x)=>a+x,0),ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));
- return{n:dirs.length,signed,rev,ratio:plen/Math.max(.001,dg),diag:dg,ar}
-}
-function redScallopPrimitive(v){const m=redScallopStats(v);return!!m&&m.n>=9&&m.n<=16&&Math.abs(m.signed)>=2.65&&Math.abs(m.signed)<=3.65&&m.rev<=2&&m.ratio>=3.2&&m.diag>=12&&m.ar<=7}
-function redScallopCompat(x,s){if(!redScallopPrimitive(x)||!redScallopPrimitive(s)||colorDist(redRgb3(x),redRgb3(s))>.055)return false;const dx=Math.max(.001,diag(x.bbox)),ds=Math.max(.001,diag(s.bbox)),dr=dx/ds;if(dr<.45||dr>2.2)return false;const nx=Math.max(1,Number(x.lines||0)),ns=Math.max(1,Number(s.lines||0)),nr=nx/ns;if(nr<.6||nr>1.7)return false;const wx=Math.abs(Number(x.width)||0),ws=Math.abs(Number(s.width)||0);if(Math.max(wx,ws)>.04){const wr=Math.max(.001,wx)/Math.max(.001,ws);if(wr<.55||wr>1.8)return false}return true}
-function redScallopGroups(items){if(!items.length)return[];const md=med(items.map(v=>diag(v.bbox)).filter(v=>Number.isFinite(v)&&v>0)),tol=Math.max(5,md*.53),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(redScallopCompat(items[i],items[j])&&gap(items[i].bbox,items[j].bbox)<=tol)u(i,j);const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
-function redScallopSafe(g,seed){if(!g||g.length<6||!g.includes(seed)||g.some(v=>!redScallopPrimitive(v)))return false;const md=med(g.map(v=>diag(v.bbox)).filter(Boolean));if(!md||diag(componentBox(g))/md<3.4)return false;const widths=g.map(v=>Math.abs(Number(v.width)||0)),mw=med(widths);if(Math.max(...widths)-Math.min(...widths)>Math.max(.08,mw*.4))return false;const base=redRgb3(seed);return g.filter(v=>colorDist(redRgb3(v),base)<=.055).length/g.length>=.96}
-'''
+          block="function redScallopStats(v){if(!isRedStroke(v)||(v.curves||0)!==0)return null;const dirs=[],lens=[];let cur=null;for(const c of v.cmds||[]){if(c[0]==='M'){cur=[Number(c[1]),Number(c[2])];continue}if(c[0]!=='L'||!cur)continue;const q=[Number(c[1]),Number(c[2])],dx=q[0]-cur[0],dy=q[1]-cur[1],ln=Math.hypot(dx,dy);if(ln>.0001){dirs.push(Math.atan2(dy,dx));lens.push(ln)}cur=q}if(dirs.length<2)return null;const turns=[];for(let i=1;i<dirs.length;i++){let t=dirs[i]-dirs[i-1];while(t>Math.PI)t-=Math.PI*2;while(t<=-Math.PI)t+=Math.PI*2;turns.push(t)}let signed=0,rev=0,last=0;for(const t of turns){signed+=t;const sg=t>.12?1:t<-.12?-1:0;if(sg){if(last&&sg!==last)rev++;last=sg}}const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),dg=Math.hypot(bw,bh),plen=lens.reduce((a,x)=>a+x,0),ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));return{n:dirs.length,signed,rev,ratio:plen/Math.max(.001,dg),diag:dg,ar}}\nfunction redScallopPrimitive(v){const m=redScallopStats(v);return!!m&&m.n>=9&&m.n<=16&&Math.abs(m.signed)>=2.65&&Math.abs(m.signed)<=3.65&&m.rev<=2&&m.ratio>=3.2&&m.diag>=12&&m.ar<=7}\nfunction redScallopCompat(x,s){if(!redScallopPrimitive(x)||!redScallopPrimitive(s)||colorDist(redRgb3(x),redRgb3(s))>.055)return false;const dx=Math.max(.001,diag(x.bbox)),ds=Math.max(.001,diag(s.bbox)),dr=dx/ds;if(dr<.45||dr>2.2)return false;const nx=Math.max(1,Number(x.lines||0)),ns=Math.max(1,Number(s.lines||0)),nr=nx/ns;if(nr<.6||nr>1.7)return false;const wx=Math.abs(Number(x.width)||0),ws=Math.abs(Number(s.width)||0);if(Math.max(wx,ws)>.04){const wr=Math.max(.001,wx)/Math.max(.001,ws);if(wr<.55||wr>1.8)return false}return true}\nfunction redScallopGroups(items){if(!items.length)return[];const md=med(items.map(v=>diag(v.bbox)).filter(v=>Number.isFinite(v)&&v>0)),tol=Math.max(5,md*.53),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(redScallopCompat(items[i],items[j])&&gap(items[i].bbox,items[j].bbox)<=tol)u(i,j);const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}\nfunction redScallopSafe(g,seed){if(!g||g.length<6||!g.includes(seed)||g.some(v=>!redScallopPrimitive(v)))return false;const md=med(g.map(v=>diag(v.bbox)).filter(Boolean));if(!md||diag(componentBox(g))/md<3.4)return false;const widths=g.map(v=>Math.abs(Number(v.width)||0)),mw=med(widths);if(Math.max(...widths)-Math.min(...widths)>Math.max(.08,mw*.4))return false;const base=redRgb3(seed);return g.filter(v=>colorDist(redRgb3(v),base)<=.055).length/g.length>=.96}\n"
           s=s[:end]+block+s[end:]
           old='let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity;'
           new='let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity,redScallopHit=null,redScallopBd=Infinity;'
@@ -61,16 +40,9 @@ function redScallopSafe(g,seed){if(!g||g.length<6||!g.includes(seed)||g.some(v=>
           new3='let famVisual=[];if(prefRedScallop){famVisual=prefRedScallop}else if(redSafe){famVisual=redSeed}else if(blackPolyline)'
           assert old3 in s
           s=s.replace(old3,new3,1)
-          old4="+(blackSeed?' · DBG rgb='"
-          new4="+(prefRedScallop?' · DBG redScallop=1 seed='+prefRedScallop.length+' rgb='+dbgRgb:(blackSeed?' · DBG rgb='"
-          assert old4 in s
-          s=s.replace(old4,new4,1)
-          # close one extra ternary parenthesis at the end of the debug expression
-          tail="' · DBG blackSeed=0 rgb='+dbgRgb))}"
-          if tail in s:s=s.replace(tail,"' · DBG blackSeed=0 rgb='+dbgRgb)))}",1)
           if '20260908-flatmem30' in h:h=h.replace('20260908-flatmem30','20260908-flatmem31',1)
           else:h=h.replace('flatmem30','flatmem31')
-          p.write_text(s);w.write_text(h)
+          p.write_text(s); w.write_text(h)
           PY
       - name: Validate invariants
         shell: bash
