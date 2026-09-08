@@ -1,0 +1,42 @@
+name: flatmem49
+on:
+  push:
+    branches: [lab/v2.2-flatmem49-red-wide-hit]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem49-red-wide-hit
+      - run: python .github/scripts/flatmem49_patch.py
+      - run: |
+          grep -Fq "DBG49 uniqueRed=1" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/f49.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f49.mjs
+      - run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2 flatmem49 red-only wider hit"
+          git push origin HEAD:lab/v2.2-flatmem49-red-wide-hit
+      - run: |
+          mkdir -p /tmp/pub49
+          cp lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub49/
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem49
+          mkdir -p lab-selector-flatmem49
+          cp /tmp/pub49/* lab-selector-flatmem49/
+          git add lab-selector-flatmem49
+          git commit -m "Publish flatmem49"
+          git push origin gh-pages
