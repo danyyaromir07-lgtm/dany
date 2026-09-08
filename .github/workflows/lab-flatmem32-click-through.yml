@@ -1,0 +1,75 @@
+name: Lab flatmem32 click through
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem32-click-through
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem32-click-through
+      - name: Patch click-through only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,pageBounds=[0,0,1,1],pageW=1,pageH=1,baseRs=1,baseW=1,baseH=1,zoom=1,panX=0,panY=0,pending=false,rendering=false,detailPixelBudget=36_000_000,classicVisual=[],visualSelected=[],structSelected=[],model=null,selectionMapSafe=false,selectionFamilies=0,selectionAlternatives=[],sharpTimer=null,sharpEpoch=0,sharpQueued=false,analysisReady=false,indexPromise=null,indexEpoch=0,indexReady=false;"
+          new=old[:-1]+",clickCycle={x:NaN,y:NaN,i:0,t:0};"
+          assert old in s
+          s=s.replace(old,new,1)
+          old2="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}}const tol=14/Math.max(.1,baseRs*zoom);if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}let prefBroad=null,prefGroups=null,prefSeed=null;if(!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){"
+          new2="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,hitList=[];const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}if(Number.isFinite(d))hitList.push({s,d})}const tol=14/Math.max(.1,baseRs*zoom);if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}hitList=hitList.filter(q=>q.d<=tol).sort((a,b)=>a.d-b.d||a.s._ordinal-b.s._ordinal);const now=performance.now(),cycleTol=8/Math.max(.1,baseRs*zoom),same=Number.isFinite(clickCycle.x)&&Math.hypot(x-clickCycle.x,y-clickCycle.y)<=cycleTol&&now-clickCycle.t<=3000;let cycled=false;if(same&&hitList.length>1){clickCycle.i=(clickCycle.i+1)%hitList.length;best=hitList[clickCycle.i].s;bd=hitList[clickCycle.i].d;cycled=clickCycle.i>0}else{clickCycle.i=0}clickCycle.x=x;clickCycle.y=y;clickCycle.t=now;let prefBroad=null,prefGroups=null,prefSeed=null;if(!cycled&&!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){"
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          old3="status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?"
+          new3="status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(hitList.length>1?' · clic repetido atraviesa superpuestos '+(clickCycle.i+1)+'/'+hitList.length:'')+(blackSeed?"
+          assert old3 in s
+          s=s.replace(old3,new3,1)
+          if 'flatmem20' in h:h=h.replace('flatmem20','flatmem32')
+          elif 'stable21' in h:h=h.replace('stable21','flatmem32')
+          else:h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem32-')
+          p.write_text(s);w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "clickCycle={x:NaN" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "clic repetido atraviesa superpuestos" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(!cycled&&!isNearBlackStroke(best)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f32.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f32.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: click through overlapping visual paths"
+          git push origin HEAD:lab/v2.2-flatmem32-click-through
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub32
+          cp lab-selector-v4/index.html /tmp/pub32/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub32/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem32
+          mkdir -p lab-selector-flatmem32
+          cp /tmp/pub32/* lab-selector-flatmem32/
+          git add lab-selector-flatmem32
+          git commit -m "Publish isolated CloudForge flatmem32 click-through"
+          git push origin gh-pages
