@@ -1,0 +1,111 @@
+name: Lab flatmem31 red scallop turns
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem31-red-scallop-turns
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem31-red-scallop-turns
+      - name: Patch safe red scallop hit only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          anchor='function redCloudComponentSafe(g,seed){'
+          pos=s.index(anchor)
+          end=s.index('\n\nfunction chooseClassic',pos)
+          block=r'''
+function redScallopStats(v){
+ if(!isRedStroke(v)||(v.curves||0)!==0)return null;
+ const dirs=[],lens=[];let cur=null;
+ for(const c of v.cmds||[]){
+  if(c[0]==='M'){cur=[Number(c[1]),Number(c[2])];continue}
+  if(c[0]!=='L'||!cur)continue;
+  const q=[Number(c[1]),Number(c[2])],dx=q[0]-cur[0],dy=q[1]-cur[1],ln=Math.hypot(dx,dy);
+  if(ln>.0001){dirs.push(Math.atan2(dy,dx));lens.push(ln)}cur=q
+ }
+ if(dirs.length<2)return null;
+ const turns=[];for(let i=1;i<dirs.length;i++){let t=dirs[i]-dirs[i-1];while(t>Math.PI)t-=Math.PI*2;while(t<=-Math.PI)t+=Math.PI*2;turns.push(t)}
+ let signed=0,rev=0,last=0;for(const t of turns){signed+=t;const sg=t>.12?1:t<-.12?-1:0;if(sg){if(last&&sg!==last)rev++;last=sg}}
+ const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),dg=Math.hypot(bw,bh),plen=lens.reduce((a,x)=>a+x,0),ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));
+ return{n:dirs.length,signed,rev,ratio:plen/Math.max(.001,dg),diag:dg,ar}
+}
+function redScallopPrimitive(v){const m=redScallopStats(v);return!!m&&m.n>=9&&m.n<=16&&Math.abs(m.signed)>=2.65&&Math.abs(m.signed)<=3.65&&m.rev<=2&&m.ratio>=3.2&&m.diag>=12&&m.ar<=7}
+function redScallopCompat(x,s){if(!redScallopPrimitive(x)||!redScallopPrimitive(s)||colorDist(redRgb3(x),redRgb3(s))>.055)return false;const dx=Math.max(.001,diag(x.bbox)),ds=Math.max(.001,diag(s.bbox)),dr=dx/ds;if(dr<.45||dr>2.2)return false;const nx=Math.max(1,Number(x.lines||0)),ns=Math.max(1,Number(s.lines||0)),nr=nx/ns;if(nr<.6||nr>1.7)return false;const wx=Math.abs(Number(x.width)||0),ws=Math.abs(Number(s.width)||0);if(Math.max(wx,ws)>.04){const wr=Math.max(.001,wx)/Math.max(.001,ws);if(wr<.55||wr>1.8)return false}return true}
+function redScallopGroups(items){if(!items.length)return[];const md=med(items.map(v=>diag(v.bbox)).filter(v=>Number.isFinite(v)&&v>0)),tol=Math.max(5,md*.53),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++)if(redScallopCompat(items[i],items[j])&&gap(items[i].bbox,items[j].bbox)<=tol)u(i,j);const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
+function redScallopSafe(g,seed){if(!g||g.length<6||!g.includes(seed)||g.some(v=>!redScallopPrimitive(v)))return false;const md=med(g.map(v=>diag(v.bbox)).filter(Boolean));if(!md||diag(componentBox(g))/md<3.4)return false;const widths=g.map(v=>Math.abs(Number(v.width)||0)),mw=med(widths);if(Math.max(...widths)-Math.min(...widths)>Math.max(.08,mw*.4))return false;const base=redRgb3(seed);return g.filter(v=>colorDist(redRgb3(v),base)<=.055).length/g.length>=.96}
+'''
+          s=s[:end]+block+s[end:]
+          old='let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity;'
+          new='let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity,redScallopHit=null,redScallopBd=Infinity;'
+          assert old in s
+          s=s.replace(old,new,1)
+          old2='if(redCloudPrimitive(s)&&d<redBd){redBd=d;redHit=s}}'
+          new2="if(redCloudPrimitive(s)&&d<redBd){redBd=d;redHit=s}if(redScallopPrimitive(s)&&d<redScallopBd){redScallopBd=d;redScallopHit=s}}"
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          marker='const redSeedFlag=redCloudPrimitive(best),redBroad='
+          m=s.index(marker)
+          insert="let prefRedScallop=null;if(redScallopHit&&redScallopBd<=tol){const sb=classicVisual.filter(v=>redScallopCompat(v,redScallopHit)),sg=redScallopGroups(sb),ss=sg.find(g=>g.includes(redScallopHit))||[redScallopHit],switchTol=Math.max(2/Math.max(.1,baseRs*zoom),tol*.65);if(redScallopSafe(ss,redScallopHit)&&redScallopBd<=Math.max(bd+switchTol*.85,switchTol*1.2)){best=redScallopHit;bd=redScallopBd;prefRedScallop=ss}}"
+          s=s[:m]+insert+s[m:]
+          old3='let famVisual=[];if(redSafe){famVisual=redSeed}else if(blackPolyline)'
+          new3='let famVisual=[];if(prefRedScallop){famVisual=prefRedScallop}else if(redSafe){famVisual=redSeed}else if(blackPolyline)'
+          assert old3 in s
+          s=s.replace(old3,new3,1)
+          old4="+(blackSeed?' · DBG rgb='"
+          new4="+(prefRedScallop?' · DBG redScallop=1 seed='+prefRedScallop.length+' rgb='+dbgRgb:(blackSeed?' · DBG rgb='"
+          assert old4 in s
+          s=s.replace(old4,new4,1)
+          # close one extra ternary parenthesis at the end of the debug expression
+          tail="' · DBG blackSeed=0 rgb='+dbgRgb))}"
+          if tail in s:s=s.replace(tail,"' · DBG blackSeed=0 rgb='+dbgRgb)))}",1)
+          if '20260908-flatmem30' in h:h=h.replace('20260908-flatmem30','20260908-flatmem31',1)
+          else:h=h.replace('flatmem30','flatmem31')
+          p.write_text(s);w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "function redScallopPrimitive" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "redScallopHit=null,redScallopBd=Infinity" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(prefRedScallop){famVisual=prefRedScallop}" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackPolylineCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f31.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f31.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: select red cloud scallops by turn signature"
+          git push origin HEAD:lab/v2.1-flatmem31-red-scallop-turns
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub31
+          cp lab-selector-v4/index.html /tmp/pub31/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub31/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem31
+          mkdir -p lab-selector-flatmem31
+          cp /tmp/pub31/* lab-selector-flatmem31/
+          git add lab-selector-flatmem31
+          git commit -m "Publish isolated CloudForge flatmem31 red scallop turns"
+          git push origin gh-pages
