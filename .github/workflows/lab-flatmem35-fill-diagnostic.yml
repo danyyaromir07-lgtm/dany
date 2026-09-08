@@ -12,49 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: lab/v2.2-flatmem35-fill-diagnostic
-      - name: Add fill diagnostic only
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
-          w=Path('lab-selector-v4/index.html')
-          s=p.read_text(); h=w.read_text()
-          old="let doc=null,handle=null,activeBytes=null,baseUrl=null,detailUrl=null,pageBounds=[0,0,1,1],pageW=1,pageH=1,baseRs=1,baseW=1,baseH=1,zoom=1,panX=0,panY=0,pending=false,rendering=false,detailPixelBudget=36_000_000,classicVisual=[],visualSelected=[],structSelected=[],model=null,selectionMapSafe=false,selectionFamilies=0,selectionAlternatives=[],sharpTimer=null,sharpEpoch=0,sharpQueued=false,analysisReady=false,indexPromise=null,indexEpoch=0,indexReady=false;"
-          assert old in s, 'state anchor missing'
-          s=s.replace(old,old[:-1]+",redFillDebug=[];",1)
-          anchor='function collectVisual(page){'
-          pos=s.index(anchor)
-          helpers=r'''
-function redFillDebugRecord(path,ctm,color){
- const rgb=Array.isArray(color)?color.slice(0,3).map(Number):[];if(rgb.length<3||rgb.some(v=>!Number.isFinite(v))||rgb[0]<.55||rgb[0]-rgb[1]<.20||rgb[0]-rgb[2]<.20)return null;
- let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,lines=0,curves=0,pts=0;const P=(x,y)=>tf(ctm,x,y),add=q=>{if(!q||!Number.isFinite(q[0])||!Number.isFinite(q[1]))return;x0=Math.min(x0,q[0]);y0=Math.min(y0,q[1]);x1=Math.max(x1,q[0]);y1=Math.max(y1,q[1]);pts++};
- path.walk({moveTo(x,y){add(P(x,y))},lineTo(x,y){add(P(x,y));lines++},curveTo(x1,y1,x2,y2,x3,y3){add(P(x1,y1));add(P(x2,y2));add(P(x3,y3));curves++},closePath(){}});
- if(!pts||!Number.isFinite(x0))return null;return{bbox:[x0,y0,x1,y1],rgb,lines,curves,segs:lines+curves}
-}
-function redFillDiagInfo(x,y,tol){let inside=0,near=0,dist=Infinity,best=null;for(const f of redFillDebug){const b=f.bbox,dx=Math.max(0,b[0]-x,x-b[2]),dy=Math.max(0,b[1]-y,y-b[3]),d=Math.hypot(dx,dy);if(x>=b[0]&&x<=b[2]&&y>=b[1]&&y<=b[3])inside++;if(d<=tol){near++;if(d<dist){dist=d;best=f}}}return{inside,near,dist,best}}
-function redFillDiagText(x,y,tol){const q=redFillDiagInfo(x,y,tol),f=q.best;if(!f)return' · DBG fillRed='+redFillDebug.length+' fillNear='+q.near+' fillInside='+q.inside;const b=f.bbox,bw=Math.abs(b[2]-b[0]),bh=Math.abs(b[3]-b[1]),rgb=f.rgb.map(v=>v.toFixed(3)).join('/');return' · DBG fillRed='+redFillDebug.length+' fillNear='+q.near+' fillInside='+q.inside+' fillBd='+q.dist.toFixed(2)+' fillBox='+bw.toFixed(2)+'x'+bh.toFixed(2)+' fillS='+f.segs+' fillC='+f.curves+' fillRgb='+rgb}
-'''
-          s=s[:pos]+helpers+s[pos:]
-          start=s.index(anchor)
-          end=s.index('function similar(',start)
-          part=s[start:end]
-          part=part.replace('function collectVisual(page){const out=[],cb={','function collectVisual(page){redFillDebug=[];const out=[],cb={',1)
-          close='})}};let dev=null;try{dev=new mupdf.Device(cb);'
-          assert close in part, 'collectVisual callback close missing'
-          fill="})},fillPath(path,evenOdd,ctm,cs,color,alpha){if(redFillDebug.length<100000){const r=redFillDebugRecord(path,ctm,color);if(r)redFillDebug.push(r)}}};let dev=null;try{dev=new mupdf.Device(cb);"
-          part=part.replace(close,fill,1)
-          s=s[:start]+part+s[end:]
-          old_no="if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}"
-          assert old_no in s, 'no-hit anchor missing'
-          s=s.replace(old_no,"if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.'+redFillDiagText(x,y,tol);return}",1)
-          tail=":' · DBG blackSeed=0 rgb='+dbgRgb)}"
-          assert tail in s, 'status tail missing'
-          s=s.replace(tail,":' · DBG blackSeed=0 rgb='+dbgRgb);status.textContent+=redFillDiagText(x,y,tol)}",1)
-          if 'flatmem20' in h:h=h.replace('flatmem20','flatmem35',1)
-          else:h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem35-',1)
-          p.write_text(s);w.write_text(h)
-          PY
+      - name: Patch diagnostic only
+        run: python .github/scripts/patch-flatmem35-fill-diagnostic.py
       - name: Validate diagnostic isolation
         shell: bash
         run: |
@@ -66,7 +25,10 @@ function redFillDiagText(x,y,tol){const q=redFillDiagInfo(x,y,tol),f=q.best;if(!
           grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
           python - <<'PY'
           from pathlib import Path
-          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f35.mjs').write_text(s[a:b])
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/f35.mjs').write_text(s[a:b])
           PY
           node --check /tmp/f35.mjs
       - name: Commit diagnostic candidate
