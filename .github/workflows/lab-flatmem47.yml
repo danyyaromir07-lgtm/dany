@@ -1,0 +1,42 @@
+name: flatmem47
+on:
+  push:
+    branches: [lab/v2.2-flatmem47-red-fill-after-hatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem47-red-fill-after-hatch
+      - run: python .github/scripts/flatmem47_patch.py
+      - run: |
+          grep -Fq "DBG47 fillRed=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/core47.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/core47.mjs
+      - run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2 flatmem47 red fill diagnostic"
+          git push origin HEAD:lab/v2.2-flatmem47-red-fill-after-hatch
+      - run: |
+          mkdir -p /tmp/pub47
+          cp lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub47/
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem47
+          mkdir -p lab-selector-flatmem47
+          cp /tmp/pub47/* lab-selector-flatmem47/
+          git add lab-selector-flatmem47
+          git commit -m "Publish flatmem47"
+          git push origin gh-pages
