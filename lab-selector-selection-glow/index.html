@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CloudForge · Selection Glow Lab</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111d}
+#base{display:block;width:100%;height:100%;border:0}
+</style>
+</head>
+<body>
+<iframe id="base" src="../lab-selector-flatmem50/?v=selection-glow-lab" allow="fullscreen"></iframe>
+<script>
+(()=>{
+  const host=document.getElementById('base');
+  const STYLE_ID='selection-glow-lab-css';
+  const CSS=`#overlay{filter:drop-shadow(0 0 2px rgba(40,170,255,.98)) drop-shadow(0 0 6px rgba(25,145,255,.68)) drop-shadow(0 0 12px rgba(25,145,255,.30));}`;
+
+  function install(){
+    try{
+      const shellDoc=host.contentDocument;
+      const app=shellDoc?.getElementById('app');
+      const coreDoc=app?.contentDocument;
+      if(!coreDoc?.head)return false;
+      let style=coreDoc.getElementById(STYLE_ID);
+      if(!style){
+        style=coreDoc.createElement('style');
+        style.id=STYLE_ID;
+        style.textContent=CSS;
+        coreDoc.head.appendChild(style);
+      }
+      return true;
+    }catch(_){return false}
+  }
+
+  function bind(){
+    try{
+      const app=host.contentDocument?.getElementById('app');
+      if(!app)return false;
+      app.addEventListener('load',install);
+      install();
+      return true;
+    }catch(_){return false}
+  }
+
+  host.addEventListener('load',()=>{
+    let tries=0;
+    const timer=setInterval(()=>{
+      bind();
+      if(install()||++tries>60)clearInterval(timer);
+    },100);
+  });
+})();
+</script>
+</body>
+</html>
