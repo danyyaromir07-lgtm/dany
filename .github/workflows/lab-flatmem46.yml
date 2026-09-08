@@ -1,0 +1,36 @@
+name: flatmem46
+on:
+  push:
+    branches: [lab/v2.2-flatmem46-red-arc-hit-diagnostic]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem46-red-arc-hit-diagnostic
+      - run: python .github/scripts/flatmem46_patch.py
+      - run: |
+          grep -Fq "DBG46 redHits=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
+          node --check <(python -c "from pathlib import Path;s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type=\"module\">')+len('<script type=\"module\">');b=s.index('</script>',a);print(s[a:b])")
+        shell: bash
+      - run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2 flatmem46 red arc diagnostic"
+          git push origin HEAD:lab/v2.2-flatmem46-red-arc-hit-diagnostic
+      - run: |
+          mkdir -p /tmp/pub46
+          cp lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub46/
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem46
+          mkdir -p lab-selector-flatmem46
+          cp /tmp/pub46/* lab-selector-flatmem46/
+          git add lab-selector-flatmem46
+          git commit -m "Publish flatmem46"
+          git push origin gh-pages
