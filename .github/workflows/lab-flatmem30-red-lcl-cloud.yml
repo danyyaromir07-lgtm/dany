@@ -1,0 +1,66 @@
+name: Lab flatmem30 red l-c-l cloud
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem30-red-lcl-cloud
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem30-red-lcl-cloud
+      - name: Patch exact red l-c-l cloud primitive only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="if(c>=1&&n<=24)return c/n>=.45&&l<=Math.max(3,c*2);"
+          new="if(c===1&&l===2&&n===3)return true;if(c>=1&&n<=24)return c/n>=.45&&l<=Math.max(3,c*2);"
+          assert old in s, 'red curve ratio anchor missing'
+          s=s.replace(old,new,1)
+          assert '20260908-flatmem29' in h, 'flatmem29 wrapper cache key missing'
+          h=h.replace('20260908-flatmem29','20260908-flatmem30',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "if(c===1&&l===2&&n===3)return true" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "redHit=null,redBd=Infinity" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "redCloudComponentSafe(rs,redHit)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f30.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f30.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: recognize red l-c-l cloud arcs over hatch"
+          git push origin HEAD:lab/v2.1-flatmem30-red-lcl-cloud
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub30
+          cp lab-selector-v4/index.html /tmp/pub30/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub30/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem30
+          mkdir -p lab-selector-flatmem30
+          cp /tmp/pub30/* lab-selector-flatmem30/
+          git add lab-selector-flatmem30
+          git commit -m "Publish isolated CloudForge flatmem30 red l-c-l cloud"
+          git push origin gh-pages
