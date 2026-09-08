@@ -21,33 +21,52 @@ jobs:
           w=Path('lab-selector-v4/index.html')
           s=p.read_text(); h=w.read_text()
           anchor="overlay.addEventListener('click',chooseClassic);"
-          diag=r'''function dbg28(e){try{if(!classicVisual.length)return;const r=viewport.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top,bx=(sx-panX)/zoom,by=(sy-panY)/zoom,x=pageBounds[0]+bx/baseRs,y=pageBounds[1]+by/baseRs;const arr=[];for(const v of classicVisual){const d=distance(v,x,y);if(!Number.isFinite(d))continue;const c=(v.rgb||[]).slice(0,3).map(Number),redish=c.length>=3&&Number.isFinite(c[0])&&c[0]>=.25&&c[0]>c[1]*1.35+.03&&c[0]>c[2]*1.35+.03;arr.push({v,d,c,redish})}arr.sort((a,b)=>a.d-b.d);const top=arr.slice(0,6).map((q,i)=>{const v=q.v,c=q.c;return i+':d='+q.d.toFixed(2)+',rgb='+(c.length?c.map(n=>Number(n).toFixed(3)).join('/'):'[]')+',w='+Number(v.width||0).toFixed(3)+',c='+Number(v.curves||0)+',l='+Number(v.lines||0)+',s='+Number(v.segs||0)+',red='+(q.redish?1:0)}).join(' | '),rr=arr.find(q=>q.redish),tail=rr?' · nearestRed d='+rr.d.toFixed(2)+' rgb='+rr.c.map(n=>Number(n).toFixed(3)).join('/')+' c='+Number(rr.v.curves||0)+' l='+Number(rr.v.lines||0)+' s='+Number(rr.v.segs||0):' · nearestRed=none';setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 '+top+tail},0)}catch(err){setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 error='+err.message},0)}}
+          diag='''
+function dbg28(e){
+ try{
+  if(!classicVisual.length)return;
+  const r=viewport.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top,bx=(sx-panX)/zoom,by=(sy-panY)/zoom,x=pageBounds[0]+bx/baseRs,y=pageBounds[1]+by/baseRs,arr=[];
+  for(const v of classicVisual){
+   const d=distance(v,x,y);if(!Number.isFinite(d))continue;
+   const c=(v.rgb||[]).slice(0,3).map(Number),redish=c.length>=3&&Number.isFinite(c[0])&&c[0]>=.25&&c[0]>c[1]*1.35+.03&&c[0]>c[2]*1.35+.03;
+   arr.push({v,d,c,redish});
+  }
+  arr.sort((a,b)=>a.d-b.d);
+  const fmt=q=>{const v=q.v,c=q.c;return 'd='+q.d.toFixed(2)+',rgb='+(c.length?c.map(n=>Number(n).toFixed(3)).join('/'):'[]')+',w='+Number(v.width||0).toFixed(3)+',c='+Number(v.curves||0)+',l='+Number(v.lines||0)+',s='+Number(v.segs||0)+',red='+(q.redish?1:0)},top=arr.slice(0,5).map(fmt).join(' | '),rr=arr.find(q=>q.redish),tail=rr?' nearestRed{'+fmt(rr)+'}':' nearestRed=none';
+  setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 '+top+' · '+tail},0);
+ }catch(err){setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 error='+err.message},0)}
+}
 '''
-          assert anchor in s
+          assert anchor in s, 'click anchor missing'
           s=s.replace(anchor,diag+anchor+"overlay.addEventListener('click',dbg28,true);",1)
-          if '20260908-flatmem27' in h:h=h.replace('20260908-flatmem27','20260908-flatmem28',1)
-          else:h=h.replace('flatmem27','flatmem28')
+          assert '20260908-flatmem27' in h, 'flatmem27 cache key missing'
+          h=h.replace('20260908-flatmem27','20260908-flatmem28',1)
           p.write_text(s); w.write_text(h)
           PY
       - name: Validate invariants
         shell: bash
         run: |
           grep -Fq "function dbg28" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function redCloudComponentSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackPolylineComponentGroups" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
           python - <<'PY'
           from pathlib import Path
-          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f28.mjs').write_text(s[a:b])
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/cloudforge-flatmem28.mjs').write_text(s[a:b])
           PY
-          node --check /tmp/f28.mjs
+          node --check /tmp/cloudforge-flatmem28.mjs
       - name: Commit candidate
         shell: bash
         run: |
           git config user.name github-actions-bot
           git config user.email 41898282+github-actions-bot@users.noreply.github.com
           git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
-          git commit -m "Lab V2.2: diagnose nearest visual candidates on red cloud click"
+          git commit -m "Lab V2.2: diagnose nearest visual candidates on click"
           git push origin HEAD:lab/v2.1-flatmem28-hit-candidates
       - name: Publish isolated path
         shell: bash
