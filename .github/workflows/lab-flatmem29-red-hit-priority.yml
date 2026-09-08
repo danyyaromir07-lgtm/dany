@@ -1,0 +1,70 @@
+name: Lab flatmem29 red hit priority
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem29-red-hit-priority
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem29-red-hit-priority
+      - name: Patch red cloud hit priority only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}}"
+          new="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}if(redCloudPrimitive(s)&&d<redBd){redBd=d;redHit=s}}"
+          assert old in s, 'hit-loop anchor missing'
+          s=s.replace(old,new,1)
+          anchor="const redSeedFlag=redCloudPrimitive(best),redBroad=redSeedFlag?classicVisual.filter(v=>redCloudCompat(v,best)):[],redGroups=redSeedFlag?redCloudComponentGroups(redBroad):[],redSeed=redSeedFlag?(redGroups.find(g=>g.includes(best))||[best]):[],redSafe=redSeedFlag&&redCloudComponentSafe(redSeed,best),blackSeed=isNearBlackStroke(best)"
+          insert="if(!redCloudPrimitive(best)&&redHit&&redBd<=tol){const rb=classicVisual.filter(v=>redCloudCompat(v,redHit)),rg=redCloudComponentGroups(rb),rs=rg.find(g=>g.includes(redHit))||[redHit],switchTol=Math.max(2/Math.max(.1,baseRs*zoom),tol*.65);if(redCloudComponentSafe(rs,redHit)&&redBd<=Math.max(bd+switchTol*.45,switchTol)){best=redHit;bd=redBd}}"
+          assert anchor in s, 'red seed anchor missing'
+          s=s.replace(anchor,insert+anchor,1)
+          if '20260908-flatmem27' in h:h=h.replace('20260908-flatmem27','20260908-flatmem29',1)
+          else:h=h.replace('flatmem27','flatmem29')
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "redHit=null,redBd=Infinity" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(redCloudPrimitive(s)&&d<redBd)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "redCloudComponentSafe(rs,redHit)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f29.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f29.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: prefer safe red cloud hit over overlapping hatch"
+          git push origin HEAD:lab/v2.1-flatmem29-red-hit-priority
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub29
+          cp lab-selector-v4/index.html /tmp/pub29/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub29/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem29
+          mkdir -p lab-selector-flatmem29
+          cp /tmp/pub29/* lab-selector-flatmem29/
+          git add lab-selector-flatmem29
+          git commit -m "Publish isolated CloudForge flatmem29 red hit priority"
+          git push origin gh-pages
