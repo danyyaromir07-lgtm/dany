@@ -15,7 +15,8 @@ jobs:
       - run: |
           grep -Fq "DBG46 redHits=" lab-selector-v4/selector-nubes-multistream-core.html
           grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
-          node --check <(python -c "from pathlib import Path;s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type=\"module\">')+len('<script type=\"module\">');b=s.index('</script>',a);print(s[a:b])")
+          python -c "from pathlib import Path;s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type=\"module\">')+len('<script type=\"module\">');b=s.index('</script>',a);Path('/tmp/f46.mjs').write_text(s[a:b])"
+          node --check /tmp/f46.mjs
         shell: bash
       - run: |
           git config user.name github-actions-bot
