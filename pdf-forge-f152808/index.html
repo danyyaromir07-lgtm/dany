@@ -11,7 +11,6 @@
   (async()=>{
     const boot=document.getElementById('boot');
     const HIST='https://cdn.jsdelivr.net/gh/danyyaromir07-lgtm/dany@f152808c29b9df8c3e3b3ced6a6814c8cdeaa10c/';
-    const LOCAL='https://danyyaromir07-lgtm.github.io/dany/pdf-forge-f152808/';
     try{
       const response=await fetch(HIST+'index-shell-v10.html?v=20260821-shell-direct1',{cache:'no-store'});
       if(!response.ok)throw new Error('No se pudo cargar la aplicación: '+response.status);
@@ -36,7 +35,6 @@
       if(!html.includes('<head>'))throw new Error('No encontré <head> en la aplicación base.');
       if(!html.includes(signatureOld))throw new Error('No encontré el módulo de firmas esperado en la aplicación base.');
       html=html.replace('<head>','<head><base href="'+HIST+'">'+importMap);
-      html=html.replace('styles.css?v=20260812-adaptive2',LOCAL+'styles.css?v=local4');
       html=html.replace(signatureOld,signatureNew);
       html=html.replaceAll('batch-apply-fallback.js?v=20260819-loaderboundary3','batch-apply-fallback.js?v=20260821-shell-direct1');
       const selectiveModules='<script type="module" src="./text-occurrence-selection-v1.js?v=20260821-selective1"></'+'script><script type="module" src="./batch-preview-selective-adapter-v1.js?v=20260821-selective1"></'+'script><script type="module" src="./batch-preview-difference-map-v1.js?v=20260821-clouddiff1"></'+'script>';
