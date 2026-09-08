@@ -1,0 +1,43 @@
+name: flatmem51
+on:
+  push:
+    branches: [lab/v2.2-flatmem51-red-closed-diagnostic]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem51-red-closed-diagnostic
+      - run: python .github/scripts/flatmem50_patch.py
+      - run: python .github/scripts/flatmem51_patch.py
+      - run: |
+          grep -Fq "DBG51 red=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/core51.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/core51.mjs
+      - run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2 flatmem51 red closed-path diagnostic"
+          git push origin HEAD:lab/v2.2-flatmem51-red-closed-diagnostic
+      - run: |
+          mkdir -p /tmp/pub51
+          cp lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub51/
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem51
+          mkdir -p lab-selector-flatmem51
+          cp /tmp/pub51/* lab-selector-flatmem51/
+          git add lab-selector-flatmem51
+          git commit -m "Publish flatmem51"
+          git push origin gh-pages
