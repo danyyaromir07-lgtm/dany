@@ -1,0 +1,68 @@
+name: Lab flatmem45 ignore degenerate strokes
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem45-ignore-degenerate-strokes
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem45-ignore-degenerate-strokes
+      - name: Patch verifier only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="const r=visualRecord(path,stroke,ctm,color);if(!r)return;if(expected>=classicVisual.length)"
+          new="const r=visualRecord(path,stroke,ctm,color);if(!r||r.segs<=0)return;if(expected>=classicVisual.length)"
+          assert old in s, 'verifier anchor not found'
+          s=s.replace(old,new,1)
+          if 'flatmem20' in h:
+              h=h.replace('flatmem20','flatmem45',1)
+          else:
+              h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem45-',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate exact isolation
+        shell: bash
+        run: |
+          grep -Fq "if(!r||r.segs<=0)return" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/f45.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f45.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: ignore degenerate zero-segment strokes during exact visual verification"
+          git push origin HEAD:lab/v2.2-flatmem45-ignore-degenerate-strokes
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub45
+          cp lab-selector-v4/index.html /tmp/pub45/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub45/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem45
+          mkdir -p lab-selector-flatmem45
+          cp /tmp/pub45/* lab-selector-flatmem45/
+          git add lab-selector-flatmem45
+          git commit -m "Publish isolated CloudForge flatmem45 verifier fix"
+          git push origin gh-pages
