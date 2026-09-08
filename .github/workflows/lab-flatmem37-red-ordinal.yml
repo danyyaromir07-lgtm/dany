@@ -13,7 +13,14 @@ jobs:
         with:
           ref: lab/v2.2-flatmem37-red-ordinal-diagnostic
       - name: Patch candidate
-        run: python .github/scripts/patch-flatmem37-red-ordinal.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/patch-flatmem37-red-ordinal.py')
+          s=p.read_text().replace("q.push(j)}}}}}}const group","q.push(j)}}}}}const group",1)
+          p.write_text(s)
+          PY
+          python .github/scripts/patch-flatmem37-red-ordinal.py
       - name: Validate
         run: |
           grep -Fq "_ordinal:out.length" lab-selector-v4/selector-nubes-multistream-core.html
@@ -39,6 +46,7 @@ jobs:
           mkdir -p /tmp/pub37
           cp lab-selector-v4/index.html /tmp/pub37/index.html
           cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub37/selector-nubes-multistream-core.html
+          git checkout -- .github/scripts/patch-flatmem37-red-ordinal.py
           git fetch origin gh-pages
           git checkout gh-pages
           rm -rf lab-selector-flatmem37
