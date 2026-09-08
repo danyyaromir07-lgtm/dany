@@ -13,7 +13,16 @@ jobs:
         with:
           ref: lab/v2.2-flatmem34-red-exploded
       - name: Patch exploded red cloud selection only
-        run: python .github/scripts/patch-flatmem34-red-exploded.py
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/patch-flatmem34-red-exploded.py')
+          s=p.read_text()
+          s=s.replace("}}}}}}\n const group=","}}}}}\n const group=",1)
+          p.write_text(s)
+          PY
+          python .github/scripts/patch-flatmem34-red-exploded.py
       - name: Validate invariants
         shell: bash
         run: |
