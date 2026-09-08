@@ -1,0 +1,65 @@
+name: Lab flatmem28 hit candidates
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem28-hit-candidates
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem28-hit-candidates
+      - name: Add click candidate diagnostics only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          anchor="overlay.addEventListener('click',chooseClassic);"
+          diag=r'''function dbg28(e){try{if(!classicVisual.length)return;const r=viewport.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top,bx=(sx-panX)/zoom,by=(sy-panY)/zoom,x=pageBounds[0]+bx/baseRs,y=pageBounds[1]+by/baseRs;const arr=[];for(const v of classicVisual){const d=distance(v,x,y);if(!Number.isFinite(d))continue;const c=(v.rgb||[]).slice(0,3).map(Number),redish=c.length>=3&&Number.isFinite(c[0])&&c[0]>=.25&&c[0]>c[1]*1.35+.03&&c[0]>c[2]*1.35+.03;arr.push({v,d,c,redish})}arr.sort((a,b)=>a.d-b.d);const top=arr.slice(0,6).map((q,i)=>{const v=q.v,c=q.c;return i+':d='+q.d.toFixed(2)+',rgb='+(c.length?c.map(n=>Number(n).toFixed(3)).join('/'):'[]')+',w='+Number(v.width||0).toFixed(3)+',c='+Number(v.curves||0)+',l='+Number(v.lines||0)+',s='+Number(v.segs||0)+',red='+(q.redish?1:0)}).join(' | '),rr=arr.find(q=>q.redish),tail=rr?' · nearestRed d='+rr.d.toFixed(2)+' rgb='+rr.c.map(n=>Number(n).toFixed(3)).join('/')+' c='+Number(rr.v.curves||0)+' l='+Number(rr.v.lines||0)+' s='+Number(rr.v.segs||0):' · nearestRed=none';setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 '+top+tail},0)}catch(err){setTimeout(()=>{status.textContent=(status.textContent||'')+' · DBG28 error='+err.message},0)}}
+'''
+          assert anchor in s
+          s=s.replace(anchor,diag+anchor+"overlay.addEventListener('click',dbg28,true);",1)
+          if '20260908-flatmem27' in h:h=h.replace('20260908-flatmem27','20260908-flatmem28',1)
+          else:h=h.replace('flatmem27','flatmem28')
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "function dbg28" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f28.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f28.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: diagnose nearest visual candidates on red cloud click"
+          git push origin HEAD:lab/v2.1-flatmem28-hit-candidates
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub28
+          cp lab-selector-v4/index.html /tmp/pub28/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub28/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem28
+          mkdir -p lab-selector-flatmem28
+          cp /tmp/pub28/* lab-selector-flatmem28/
+          git add lab-selector-flatmem28
+          git commit -m "Publish isolated CloudForge flatmem28 hit diagnostics"
+          git push origin gh-pages
