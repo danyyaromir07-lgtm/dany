@@ -1,0 +1,15 @@
+from pathlib import Path
+p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+w=Path('lab-selector-v4/index.html')
+s=p.read_text(); h=w.read_text()
+old="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}}const tol=14/Math.max(.1,baseRs*zoom);if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}"
+new="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,red48=[];const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}const rc=(s.rgb||[]).slice(0,3).map(Number);if((s.segs||0)>0&&rc.length===3&&rc.every(Number.isFinite)&&rc[0]>=.70&&rc[0]-rc[1]>=.35&&rc[0]-rc[2]>=.35&&rc[1]<=.42&&rc[2]<=.42)red48.push({s,d})}red48.sort((a,b)=>a.d-b.d);const tol=14/Math.max(.1,baseRs*zoom);let red48Used=false;if((!best||bd>tol)&&red48.length===1&&red48[0].d<=pad){best=red48[0].s;bd=red48[0].d;red48Used=true}if(!best||bd>Math.max(tol,red48Used?pad:tol)){status.textContent='No encontré un trazo visual suficientemente cerca.';return}"
+assert old in s, 'scan anchor missing'
+s=s.replace(old,new,1)
+old2="status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)}"
+new2="status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)+(red48Used?' · DBG48 uniqueRed=1 d='+bd.toFixed(2)+' l='+Number(best.lines||0)+' c='+Number(best.curves||0)+' s='+Number(best.segs||0):'')}"
+assert old2 in s, 'status anchor missing'
+s=s.replace(old2,new2,1)
+if 'flatmem45' in h:h=h.replace('flatmem45','flatmem48',1)
+else:h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem48-',1)
+p.write_text(s);w.write_text(h)
