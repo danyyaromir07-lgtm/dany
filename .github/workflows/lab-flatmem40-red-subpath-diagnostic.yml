@@ -1,0 +1,68 @@
+name: Lab flatmem40 red subpath diagnostic
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem40-red-subpath-diagnostic
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem40-red-subpath-diagnostic
+      - name: Patch click-only red subpath diagnostic
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}}const tol=14/Math.max(.1,baseRs*zoom);"
+          new="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,red40Hits=[];const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}const rc=(s.rgb||[]).slice(0,3).map(Number);if(rc.length===3&&rc.every(Number.isFinite)&&rc[0]>=.72&&rc[0]-rc[1]>=.42&&rc[0]-rc[2]>=.42&&rc[1]<=.36&&rc[2]<=.36)red40Hits.push({s,d})}const tol=14/Math.max(.1,baseRs*zoom);"
+          assert old in s
+          s=s.replace(old,new,1)
+          old2="const vg=components(visualSelected),dbgRgb=(best.rgb||[]).slice(0,3).map(v=>Number(v).toFixed(3)).join('/'),dbgSafe=blackSeed?blackCloudSafe(seed):false,dbgRatio=seed.length?diag(componentBox(seed))/Math.max(.001,med(seed.map(v=>diag(v.bbox)).filter(Boolean))):0;status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)}"
+          new2="const vg=components(visualSelected),dbgRgb=(best.rgb||[]).slice(0,3).map(v=>Number(v).toFixed(3)).join('/'),dbgSafe=blackSeed?blackCloudSafe(seed):false,dbgRatio=seed.length?diag(componentBox(seed))/Math.max(.001,med(seed.map(v=>diag(v.bbox)).filter(Boolean))):0,moveCount=v=>(v?.cmds||[]).reduce((n,c)=>n+(c&&c[0]==='M'?1:0),0),redNear=red40Hits.filter(q=>q.d<=tol).sort((a,b)=>a.d-b.d),redTop=[...redNear].sort((a,b)=>Number(b.s._ordinal)-Number(a.s._ordinal)||a.d-b.d)[0],redFew=[...redNear].sort((a,b)=>moveCount(a.s)-moveCount(b.s)||a.d-b.d)[0],dbg40=' · DBG40 bestOrd='+Number(best._ordinal)+' bestD='+bd.toFixed(3)+' moves='+moveCount(best)+' cmds='+(best.cmds?.length||0)+' l='+Number(best.lines||0)+' c='+Number(best.curves||0)+' redNear='+redNear.length+(redTop?' topOrd='+Number(redTop.s._ordinal)+' topD='+redTop.d.toFixed(3)+' topM='+moveCount(redTop.s)+' topL='+Number(redTop.s.lines||0)+' topC='+Number(redTop.s.curves||0):'')+(redFew?' fewOrd='+Number(redFew.s._ordinal)+' fewD='+redFew.d.toFixed(3)+' fewM='+moveCount(redFew.s):'');status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?' · DBG rgb='+dbgRgb+' w='+Number(best.width||0).toFixed(3)+' c='+Number(best.curves||0)+' l='+Number(best.lines||0)+' s='+Number(best.segs||0)+' broad='+broad.length+' groups='+groups.length+' seed='+seed.length+' ratio='+dbgRatio.toFixed(2)+' safe='+(dbgSafe?'1':'0'):' · DBG blackSeed=0 rgb='+dbgRgb)+dbg40"
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          if 'flatmem20' in h:h=h.replace('flatmem20','flatmem40',1)
+          else:h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem40-',1)
+          p.write_text(s);w.write_text(h)
+          PY
+      - name: Validate isolation and syntax
+        shell: bash
+        run: |
+          grep -Fq "DBG40 bestOrd=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f40.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f40.mjs
+      - name: Commit diagnostic candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: diagnose red stroke subpaths under click"
+          git push origin HEAD:lab/v2.2-flatmem40-red-subpath-diagnostic
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub40
+          cp lab-selector-v4/index.html /tmp/pub40/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub40/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem40
+          mkdir -p lab-selector-flatmem40
+          cp /tmp/pub40/* lab-selector-flatmem40/
+          git add lab-selector-flatmem40
+          git commit -m "Publish isolated CloudForge flatmem40 red subpath diagnostic"
+          git push origin gh-pages
