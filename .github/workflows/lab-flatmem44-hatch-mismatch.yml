@@ -1,0 +1,46 @@
+name: Lab flatmem44 hatch mismatch diagnostic
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem44-hatch-mismatch
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem44-hatch-mismatch
+      - name: Patch diagnostic
+        run: python .github/scripts/flatmem44_patch.py
+      - name: Validate
+        shell: bash
+        run: |
+          grep -Fq "esperado{" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python -c "from pathlib import Path;s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type=\"module\">')+len('<script type=\"module\">');b=s.index('</script>',a);Path('/tmp/f44.mjs').write_text(s[a:b])"
+          node --check /tmp/f44.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: diagnose exact hatch verification mismatch"
+          git push origin HEAD:lab/v2.2-flatmem44-hatch-mismatch
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub44
+          cp lab-selector-v4/index.html /tmp/pub44/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub44/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem44
+          mkdir -p lab-selector-flatmem44
+          cp /tmp/pub44/* lab-selector-flatmem44/
+          git add lab-selector-flatmem44
+          git commit -m "Publish isolated CloudForge flatmem44 hatch mismatch diagnostic"
+          git push origin gh-pages
