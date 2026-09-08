@@ -1,0 +1,94 @@
+name: Lab flatmem33 red 8seg scallops
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem33-red-8seg-scallops
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem33-red-8seg-scallops
+      - name: Patch safe red scallop selection only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          pos=s.index('function chooseClassic(e){')
+          block=r'''
+function red3(v){const c=(v?.rgb||[]).slice(0,3).map(Number);return c.length===3&&c.every(Number.isFinite)?c:[]}
+function redScallopColor(v){const c=red3(v);return c.length===3&&c[0]>=.82&&c[1]<=.18&&c[2]<=.18&&c[0]-c[1]>=.62&&c[0]-c[2]>=.62}
+function redScallopStats(v){
+ if(!redScallopColor(v)||(v.curves||0)!==0)return null;
+ const cmds=v.cmds||[];let cur=null;const dirs=[],lens=[];
+ for(const c of cmds){if(c[0]==='M'){cur=[Number(c[1]),Number(c[2])];continue}if(c[0]!=='L'||!cur)continue;const q=[Number(c[1]),Number(c[2])],dx=q[0]-cur[0],dy=q[1]-cur[1],ln=Math.hypot(dx,dy);if(ln>.0001){dirs.push(Math.atan2(dy,dx));lens.push(ln)}cur=q}
+ if(dirs.length<6||dirs.length>14)return null;
+ let signed=0,rev=0,last=0;for(let i=1;i<dirs.length;i++){let t=dirs[i]-dirs[i-1];while(t>Math.PI)t-=Math.PI*2;while(t<=-Math.PI)t+=Math.PI*2;signed+=t;const sg=t>.12?1:t<-.12?-1:0;if(sg){if(last&&sg!==last)rev++;last=sg}}
+ const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),dg=Math.hypot(bw,bh),plen=lens.reduce((a,x)=>a+x,0),ratio=plen/Math.max(.001,dg);return{n:dirs.length,turn:Math.abs(signed),rev,ratio,diag:dg}
+}
+function redScallopPrimitive(v){const m=redScallopStats(v);return!!m&&m.turn>=2.80&&m.turn<=3.50&&m.rev<=2&&m.ratio>=3.45&&m.ratio<=5.85&&m.diag>=5.5}
+function redScallopCompat(x,s){if(!redScallopPrimitive(x)||!redScallopPrimitive(s)||colorDist(red3(x),red3(s))>.025)return false;const dx=Math.max(.001,diag(x.bbox)),ds=Math.max(.001,diag(s.bbox)),dr=dx/ds;if(dr<.30||dr>3.25)return false;const wx=Math.abs(Number(x.width)||0),ws=Math.abs(Number(s.width)||0);if(Math.max(wx,ws)>.04){const wr=Math.max(.001,wx)/Math.max(.001,ws);if(wr<.55||wr>1.8)return false}return true}
+function redScallopGroups(items){if(!items.length)return[];const md=med(items.map(v=>diag(v.bbox)).filter(v=>Number.isFinite(v)&&v>0)),tol=Math.max(2.5,md*.20),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i},gap=(a,b)=>{const dx=Math.max(0,a[0]-b[2],b[0]-a[2]),dy=Math.max(0,a[1]-b[3],b[1]-a[3]);return Math.hypot(dx,dy)},endTol=Math.max(2.2,md*.16);for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){if(!redScallopCompat(items[i],items[j]))continue;const A=[items[i].first,items[i].last].filter(Boolean),B=[items[j].first,items[j].last].filter(Boolean),touch=A.some(a=>B.some(b=>Math.hypot(a[0]-b[0],a[1]-b[1])<=endTol));if(touch||gap(items[i].bbox,items[j].bbox)<=tol)u(i,j)}const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
+function redScallopSafe(g,seed){if(!g||g.length<6||!g.includes(seed)||g.some(v=>!redScallopPrimitive(v)))return false;const ds=g.map(v=>diag(v.bbox)).filter(Boolean),md=med(ds);if(!md||diag(componentBox(g))/md<3.5)return false;const widths=g.map(v=>Math.abs(Number(v.width)||0)),mw=med(widths);if(Math.max(...widths)-Math.min(...widths)>Math.max(.08,mw*.40))return false;const base=red3(seed);return g.filter(v=>colorDist(red3(v),base)<=.025).length/g.length>=.96}
+'''
+          s=s[:pos]+block+s[pos:]
+          old="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}}const tol=14/Math.max(.1,baseRs*zoom);if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}let prefBroad=null,prefGroups=null,prefSeed=null;if(!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){"
+          new="let best=null,bd=Infinity,blackHit=null,blackBd=Infinity,redHit=null,redBd=Infinity;const pad=15/Math.max(.1,baseRs*zoom);for(const s of classicVisual){if(x<s.bbox[0]-pad||x>s.bbox[2]+pad||y<s.bbox[1]-pad||y>s.bbox[3]+pad)continue;const d=distance(s,x,y);if(d<bd){bd=d;best=s}if(isNearBlackStroke(s)&&d<blackBd){blackBd=d;blackHit=s}if(redScallopPrimitive(s)&&d<redBd){redBd=d;redHit=s}}const tol=14/Math.max(.1,baseRs*zoom);if(!best||bd>tol){status.textContent='No encontré un trazo visual suficientemente cerca.';return}let prefRed=null,prefBroad=null,prefGroups=null,prefSeed=null;if(redHit&&redBd<=tol){const rb=classicVisual.filter(v=>redScallopColor(v)&&(v.curves||0)===0&&(v.lines||0)>=6&&(v.lines||0)<=14&&redScallopCompat(v,redHit)),rg=redScallopGroups(rb),rs=rg.find(g=>g.includes(redHit))||[redHit],switchTol=Math.max(2/Math.max(.1,baseRs*zoom),tol*.65);if(redScallopSafe(rs,redHit)&&redBd<=Math.max(bd+switchTol*.9,switchTol*1.25)){best=redHit;bd=redBd;prefRed=rs}}if(!prefRed&&!isNearBlackStroke(best)&&blackHit&&blackBd<=tol){"
+          assert old in s, 'chooseClassic hit anchor missing'
+          s=s.replace(old,new,1)
+          old2="let famVisual=[];if(blackSeed){"
+          assert old2 in s
+          s=s.replace(old2,"let famVisual=[];if(prefRed){famVisual=prefRed}else if(blackSeed){",1)
+          old3="status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(blackSeed?"
+          assert old3 in s
+          s=s.replace(old3,"status.textContent='Selección acumulada · familias='+selectionFamilies+' · resaltados='+visualSelected.length+' · grupos≈'+vg+' · expansión por componente · azul listo · correspondencia estructural se calculará al pulsar Eliminar · Ctrl/Shift+clic añade otro tipo'+(prefRed?' · DBG redScallop=1 seed='+prefRed.length+' rgb='+dbgRgb:(blackSeed?",1)
+          tail="' · DBG blackSeed=0 rgb='+dbgRgb)}"
+          assert tail in s
+          s=s.replace(tail,"' · DBG blackSeed=0 rgb='+dbgRgb))}",1)
+          if 'flatmem20' in h:h=h.replace('flatmem20','flatmem33')
+          else:h=h.replace('selector-nubes-multistream-core.html?v=', 'selector-nubes-multistream-core.html?v=20260908-flatmem33-')
+          p.write_text(s);w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "function redScallopPrimitive" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "dirs.length<6||dirs.length>14" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(prefRed){famVisual=prefRed}" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type="module">')+len('<script type="module">');b=s.index('</script>',a);Path('/tmp/f33.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f33.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: select red 8-segment scallop clouds safely"
+          git push origin HEAD:lab/v2.2-flatmem33-red-8seg-scallops
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub33
+          cp lab-selector-v4/index.html /tmp/pub33/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub33/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem33
+          mkdir -p lab-selector-flatmem33
+          cp /tmp/pub33/* lab-selector-flatmem33/
+          git add lab-selector-flatmem33
+          git commit -m "Publish isolated CloudForge flatmem33 red scallop selector"
+          git push origin gh-pages
