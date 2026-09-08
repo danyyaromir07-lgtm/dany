@@ -1,4 +1,4 @@
-name: Lab flatmem42 red angle exclusion
+name: Roll back isolated flatmem42 to protected candidate
 on:
   push:
     branches:
@@ -6,43 +6,29 @@ on:
 permissions:
   contents: write
 jobs:
-  patch:
+  rollback:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: lab/v2.2-flatmem42-red-angle-exclusion
-      - name: Patch candidate
-        run: python .github/scripts/flatmem42_patch.py
-      - name: Validate
+          fetch-depth: 0
+      - name: Restore protected candidate files to isolated URL
         shell: bash
         run: |
-          grep -Fq "function red42Build" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -Fq "if(prefRed42){famVisual=prefRed42}" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -Fq "function blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
-          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
-          python -c "from pathlib import Path;s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text();a=s.index('<script type=\"module\">')+len('<script type=\"module\">');b=s.index('</script>',a);Path('/tmp/f42.mjs').write_text(s[a:b])"
-          node --check /tmp/f42.mjs
-      - name: Commit candidate
-        shell: bash
-        run: |
-          git config user.name github-actions-bot
-          git config user.email 41898282+github-actions-bot@users.noreply.github.com
-          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
-          git commit -m "Lab V2.2: exclude dominant red hatch angle and grow cloud chain"
-          git push origin HEAD:lab/v2.2-flatmem42-red-angle-exclusion
-      - name: Publish isolated path
-        shell: bash
-        run: |
-          mkdir -p /tmp/pub42
-          cp lab-selector-v4/index.html /tmp/pub42/index.html
-          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub42/selector-nubes-multistream-core.html
-          git fetch origin gh-pages
+          git fetch origin candidate/v2.2 gh-pages
+          mkdir -p /tmp/flatmem42-safe
+          git show origin/candidate/v2.2:lab-selector-v4/index.html > /tmp/flatmem42-safe/index.html
+          git show origin/candidate/v2.2:lab-selector-v4/selector-nubes-multistream-core.html > /tmp/flatmem42-safe/selector-nubes-multistream-core.html
+          grep -Fq "flatmem20" /tmp/flatmem42-safe/index.html
+          grep -Fq "function blackCloudSafe" /tmp/flatmem42-safe/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" /tmp/flatmem42-safe/selector-nubes-multistream-core.html
           git checkout gh-pages
           rm -rf lab-selector-flatmem42
           mkdir -p lab-selector-flatmem42
-          cp /tmp/pub42/* lab-selector-flatmem42/
+          cp /tmp/flatmem42-safe/* lab-selector-flatmem42/
           git add lab-selector-flatmem42
-          git commit -m "Publish isolated CloudForge flatmem42 red angle-exclusion selector"
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git commit -m "Rollback isolated flatmem42 URL to protected V2.2 candidate"
           git push origin gh-pages
