@@ -1,0 +1,71 @@
+name: Lab flatmem27 red polyline cloud
+on:
+  push:
+    branches:
+      - lab/v2.1-flatmem27-red-polyline-cloud
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.1-flatmem27-red-polyline-cloud
+      - name: Patch red polyline cloud selection only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lab-selector-v4/selector-nubes-multistream-core.html')
+          w=Path('lab-selector-v4/index.html')
+          s=p.read_text(); h=w.read_text()
+          old="function redCloudPrimitive(v){if(!isRedStroke(v))return false;const c=Math.max(0,Number(v.curves||0)),l=Math.max(0,Number(v.lines||0)),n=Math.max(1,Number(v.segs||0));if(c<1||n>24)return false;return c/n>=.45&&l<=Math.max(3,c*2)}"
+          new="function redCloudPrimitive(v){if(!isRedStroke(v))return false;const c=Math.max(0,Number(v.curves||0)),l=Math.max(0,Number(v.lines||0)),n=Math.max(1,Number(v.segs||0));if(c>=1&&n<=24)return c/n>=.45&&l<=Math.max(3,c*2);if(c===0&&l===n&&l>=5&&l<=14){const b=v.bbox||[],bw=Math.abs(Number(b[2])-Number(b[0])),bh=Math.abs(Number(b[3])-Number(b[1])),d=Math.hypot(bw,bh);if(!Number.isFinite(d)||d<1||!bw||!bh)return false;const ar=Math.max(bw,bh)/Math.max(.001,Math.min(bw,bh));return ar<=4.5}return false}"
+          assert old in s, 'redCloudPrimitive anchor missing'
+          s=s.replace(old,new,1)
+          assert '20260908-flatmem25' in h, 'flatmem25 wrapper cache key missing'
+          h=h.replace('20260908-flatmem25','20260908-flatmem27',1)
+          p.write_text(s); w.write_text(h)
+          PY
+      - name: Validate invariants
+        shell: bash
+        run: |
+          grep -Fq "if(c===0&&l===n&&l>=5&&l<=14)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function redCloudComponentSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "if(redSafe){famVisual=redSeed}" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackPolylineComponentGroups" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "flatGiantExactModel" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "strictCompactBandedMap(visualSelected)" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "20260908-flatmem27" lab-selector-v4/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/cloudforge-flatmem27.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/cloudforge-flatmem27.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: recognize connected red polyline cloud scallops"
+          git push origin HEAD:lab/v2.1-flatmem27-red-polyline-cloud
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub27
+          cp lab-selector-v4/index.html /tmp/pub27/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub27/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem27
+          mkdir -p lab-selector-flatmem27
+          cp /tmp/pub27/* lab-selector-flatmem27/
+          git add lab-selector-flatmem27
+          git commit -m "Publish isolated CloudForge flatmem27 red polyline cloud"
+          git push origin gh-pages
