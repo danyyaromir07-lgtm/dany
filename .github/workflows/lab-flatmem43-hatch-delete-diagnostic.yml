@@ -1,0 +1,53 @@
+name: Lab flatmem43 hatch delete diagnostic
+on:
+  push:
+    branches:
+      - lab/v2.2-flatmem43-hatch-delete-diagnostic
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab/v2.2-flatmem43-hatch-delete-diagnostic
+      - name: Patch diagnostic only
+        run: python .github/scripts/flatmem43_hatch_delete_diag.py
+      - name: Validate isolation and syntax
+        shell: bash
+        run: |
+          grep -Fq "ORD mismatch=" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "function blackCloudSafe" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "saveToBuffer('compress')" lab-selector-v4/selector-nubes-multistream-core.html
+          grep -Fq "Borrado cancelado sin modificar el PDF activo" lab-selector-v4/selector-nubes-multistream-core.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('lab-selector-v4/selector-nubes-multistream-core.html').read_text()
+          a=s.index('<script type="module">')+len('<script type="module">')
+          b=s.index('</script>',a)
+          Path('/tmp/f43.mjs').write_text(s[a:b])
+          PY
+          node --check /tmp/f43.mjs
+      - name: Commit candidate
+        shell: bash
+        run: |
+          git config user.name github-actions-bot
+          git config user.email 41898282+github-actions-bot@users.noreply.github.com
+          git add lab-selector-v4/index.html lab-selector-v4/selector-nubes-multistream-core.html
+          git commit -m "Lab V2.2: add exact hatch deletion mismatch diagnostic"
+          git push origin HEAD:lab/v2.2-flatmem43-hatch-delete-diagnostic
+      - name: Publish isolated path
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub43
+          cp lab-selector-v4/index.html /tmp/pub43/index.html
+          cp lab-selector-v4/selector-nubes-multistream-core.html /tmp/pub43/selector-nubes-multistream-core.html
+          git fetch origin gh-pages
+          git checkout gh-pages
+          rm -rf lab-selector-flatmem43
+          mkdir -p lab-selector-flatmem43
+          cp /tmp/pub43/* lab-selector-flatmem43/
+          git add lab-selector-flatmem43
+          git commit -m "Publish isolated CloudForge flatmem43 hatch deletion diagnostic"
+          git push origin gh-pages
