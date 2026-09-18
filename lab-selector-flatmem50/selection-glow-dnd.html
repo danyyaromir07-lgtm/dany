@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CloudForge · Selection Glow Lab</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111d}
+#base{display:block;width:100%;height:100%;border:0}
+</style>
+</head>
+<body>
+<iframe id="base" src="./?v=selection-glow-lab" allow="fullscreen"></iframe>
+<script>
+(()=>{
+  const host=document.getElementById('base');
+  const STYLE_ID='selection-glow-lab-css';
+  const CSS=`#overlay{filter:drop-shadow(0 0 2px rgba(40,170,255,.98)) drop-shadow(0 0 6px rgba(25,145,255,.68)) drop-shadow(0 0 12px rgba(25,145,255,.30));}`;
+
+  function install(){
+    try{
+      const shellDoc=host.contentDocument;
+      const app=shellDoc?.getElementById('app');
+      const coreDoc=app?.contentDocument;
+      if(!coreDoc?.head)return false;
+      let style=coreDoc.getElementById(STYLE_ID);
+      if(!style){
+        style=coreDoc.createElement('style');
+        style.id=STYLE_ID;
+        style.textContent=CSS;
+        coreDoc.head.appendChild(style);
+      }
+      return true;
+    }catch(_){return false}
+  }
+
+  function bind(){
+    try{
+      const app=host.contentDocument?.getElementById('app');
+      if(!app)return false;
+      app.addEventListener('load',install);
+      install();
+      return true;
+    }catch(_){return false}
+  }
+
+  host.addEventListener('load',()=>{
+    let tries=0;
+    const timer=setInterval(()=>{
+      bind();
+      if(install()||++tries>60)clearInterval(timer);
+    },100);
+  });
+})();
+</script>
+
+<script>
+(()=>{
+  const host=document.getElementById('base');
+  const SCRIPT_ID='selection-dnd-lab-script';
+
+  const INNER=`
+(()=>{
+  if(window.__cloudForgePdfDropInstalled)return;
+  window.__cloudForgePdfDropInstalled=true;
+
+  const app=document.getElementById('app');
+  const boundDocs=new WeakSet();
+  let hideTimer=0;
+
+  const style=document.createElement('style');
+  style.id='selection-dnd-lab-css';
+  style.textContent=`
+    #pdfDropOverlay{
+      position:fixed;inset:10px;z-index:99999;display:none;place-items:center;
+      pointer-events:none;border:2px dashed #3a9cff;border-radius:14px;
+      background:rgba(7,17,29,.86);box-shadow:inset 0 0 0 1px rgba(120,190,255,.16);
+      color:#eef7ff;font:800 18px Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+      letter-spacing:.01em;text-align:center
+    }
+    #pdfDropOverlay.show{display:grid}
+    #pdfDropOverlay small{display:block;margin-top:7px;color:#9fb8cf;font-size:11px;font-weight:650}
+  `;
+  document.head.appendChild(style);
+
+  const overlay=document.createElement('div');
+  overlay.id='pdfDropOverlay';
+  overlay.innerHTML='<div>Suelta los PDF para cargar el lote<small>Se abrirá automáticamente el primero</small></div>';
+  document.body.appendChild(overlay);
+
+  const isPdf=f=>!!f&&(f.type==='application/pdf'||/\\.pdf$/i.test(f.name||''));
+  const hasFiles=e=>Array.from(e?.dataTransfer?.types||[]).includes('Files');
+
+  function showDrop(){
+    clearTimeout(hideTimer);
+    overlay.classList.add('show');
+  }
+  function hideDropSoon(){
+    clearTimeout(hideTimer);
+    hideTimer=setTimeout(()=>overlay.classList.remove('show'),80);
+  }
+  function hideDrop(){
+    clearTimeout(hideTimer);
+    overlay.classList.remove('show');
+  }
+
+  function fallbackHandle(file){
+    return{
+      kind:'file',
+      name:file.name,
+      getFile:async()=>file,
+      createWritable:async()=>{
+        if(!('showSaveFilePicker'in window))throw new Error('Este navegador no permite guardar directamente un PDF arrastrado.');
+        const h=await window.showSaveFilePicker({
+          suggestedName:file.name,
+          types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]
+        });
+        return h.createWritable();
+      }
+    };
+  }
+
+  async function fromItem(item){
+    if(!item||item.kind!=='file')return null;
+    try{
+      if(typeof item.getAsFileSystemHandle==='function'){
+        const h=await item.getAsFileSystemHandle();
+        if(h?.kind==='file'){
+          const f=await h.getFile();
+          if(isPdf(f))return{handle:h,file:f};
+        }
+      }
+    }catch(_){}
+    const f=item.getAsFile?.();
+    return isPdf(f)?{handle:fallbackHandle(f),file:f}:null;
+  }
+
+  async function collectDropped(dt){
+    const items=Array.from(dt?.items||[]).filter(x=>x.kind==='file');
+    if(items.length){
+      const got=await Promise.all(items.map(fromItem));
+      const out=got.filter(Boolean);
+      if(out.length)return out;
+    }
+    return Array.from(dt?.files||[]).filter(isPdf).map(file=>({handle:fallbackHandle(file),file}));
+  }
+
+  async function loadDropped(dt){
+    const dropped=await collectDropped(dt);
+    if(!dropped.length)return;
+
+    if(activeIndex>=0&&hasUnsaved()){
+      const old=entries[activeIndex];
+      const ok=confirm('Hay cambios sin guardar en “'+old.name+'”.\\n\\nSi cargas el lote arrastrado ahora, esos cambios se descartarán.\\n\\n¿Continuar?');
+      if(!ok)return;
+    }
+
+    entries=dropped.map(({handle,file})=>({
+      handle,
+      name:file.name||handle.name||'PDF sin nombre',
+      state:'Sin abrir',
+      size:Number.isFinite(file.size)?file.size:null,
+      pages:null
+    }));
+    activeIndex=-1;
+    queuedHandle=null;
+    searchEl.value='';
+    renderList();
+
+    if(!childDoc){
+      for(let i=0;i<40&&!childDoc;i++)await new Promise(r=>setTimeout(r,50));
+    }
+    if(childDoc)await activate(0);
+    hydrateMetadata();
+  }
+
+  function bindDropDocument(doc){
+    if(!doc||boundDocs.has(doc))return;
+    boundDocs.add(doc);
+
+    doc.addEventListener('dragenter',e=>{
+      if(!hasFiles(e))return;
+      e.preventDefault();
+      showDrop();
+    },true);
+
+    doc.addEventListener('dragover',e=>{
+      if(!hasFiles(e))return;
+      e.preventDefault();
+      try{e.dataTransfer.dropEffect='copy'}catch(_){}
+      showDrop();
+    },true);
+
+    doc.addEventListener('dragleave',e=>{
+      if(!hasFiles(e))return;
+      hideDropSoon();
+    },true);
+
+    doc.addEventListener('drop',e=>{
+      if(!hasFiles(e))return;
+      e.preventDefault();
+      e.stopPropagation();
+      hideDrop();
+      loadDropped(e.dataTransfer).catch(err=>{
+        console.error('PDF drag/drop',err);
+        alert('No pude cargar los PDF arrastrados: '+(err?.message||err));
+      });
+    },true);
+  }
+
+  function bindCore(){
+    try{bindDropDocument(app?.contentDocument)}catch(_){}
+  }
+
+  bindDropDocument(document);
+  if(app){
+    app.addEventListener('load',bindCore);
+    bindCore();
+  }
+})();
+`;
+
+  function inject(){
+    try{
+      const d=host.contentDocument;
+      if(!d?.head)return false;
+      if(d.getElementById(SCRIPT_ID))return true;
+      const s=d.createElement('script');
+      s.id=SCRIPT_ID;
+      s.textContent=INNER;
+      d.head.appendChild(s);
+      return true;
+    }catch(_){return false}
+  }
+
+  host.addEventListener('load',()=>{
+    let tries=0;
+    const timer=setInterval(()=>{
+      if(inject()||++tries>60)clearInterval(timer);
+    },100);
+  });
+})();
+</script>
+
+</body>
+</html>
