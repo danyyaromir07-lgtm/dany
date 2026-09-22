@@ -17,6 +17,12 @@ async function hydrateMetadata(){for(let i=0;i<entries.length;i++){const e=entri
 async function hydrateActivePageCount(i){if(i<0||!entries[i]||entries[i].pages!=null)return;const run=async()=>{if(i!==activeIndex||!entries[i]||entries[i].pages!=null)return;let mupdf=null,d=null;try{mupdf=await getMupdfMeta();const f=await entries[i].handle.getFile(),bytes=new Uint8Array(await f.arrayBuffer());d=mupdf.PDFDocument.openDocument(bytes,'application/pdf');entries[i].pages=Number(d.countPages?.()||0)}catch(_){}finally{try{d?.destroy?.()}catch(_){}renderList()}};if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:6000});else setTimeout(run,3500)}
 let dragging=false;resizer.addEventListener('pointerdown',e=>{if(shell.classList.contains('batchCollapsed'))return;dragging=true;resizer.classList.add('dragging');resizer.setPointerCapture(e.pointerId)});resizer.addEventListener('pointermove',e=>{if(!dragging)return;const w=Math.max(240,Math.min(520,e.clientX));document.documentElement.style.setProperty('--side',w+'px')});resizer.addEventListener('pointerup',()=>{dragging=false;resizer.classList.remove('dragging')});toggleBtn.addEventListener('click',()=>{shell.classList.toggle('batchCollapsed');toggleBtn.querySelector('span').textContent=shell.classList.contains('batchCollapsed')?'':'‹'});batchBtn.addEventListener('click',loadBatch);searchEl.addEventListener('input',renderList);prevBtn.addEventListener('click',()=>activate(activeIndex-1));nextBtn.addEventListener('click',()=>activate(activeIndex+1));frame.addEventListener('load',()=>{try{installChildHooks()}catch(e){console.error('phase1 hooks',e)}});window.addEventListener('beforeunload',e=>{if(hasUnsaved()){e.preventDefault();e.returnValue=''}});renderList();
 </script>
+<script id="bluecloud-preview-router">
+/* The stable iframe source is unchanged unless this explicit test flag is present. */
+if(new URLSearchParams(location.search).get('bluecloud')==='1'){
+ document.getElementById('app').src='./selector-nubes-multistream-bluecloud-preview.html?v=20260922-bluecloud-preview1';
+}
+</script>
 <script id="selection-glow-dnd-addon">
 (()=>{
   const appFrame=document.getElementById('app');
