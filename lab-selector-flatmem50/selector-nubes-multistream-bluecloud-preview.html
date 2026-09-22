@@ -503,7 +503,7 @@ async function removeBlueFilledGroup(){
   status.textContent='Borrado bloqueado: operadores superpuestos, incompletos o sin identidad exacta.';return;
  }
  blueCloudDeleting=true;setButtons();$('#delete').disabled=true;
- let work=null,wp=null,check=null,cp=null;
+ let work=null,wp=null,check=null,cp=null,committed=false;
  try{
   status.textContent='Verificando '+parts.length+' polígonos azules en una copia del PDF…';
   await new Promise(resolve=>setTimeout(resolve,0));
@@ -528,6 +528,8 @@ async function removeBlueFilledGroup(){
   if(copyText!==original)throw new Error('el stream de trabajo difiere del origen');
   editRef.writeStream(raw(output));
   if(latin(editRef.readStream())!==output)throw new Error('la edición no coincide byte a byte con el objetivo');
+  try{wp?.destroy?.()}catch(_){}wp=null;
+  wp=work.loadPage(0);
   const beforeSave=await rasterDigest(wp);
   const outBuf=work.saveToBuffer('compress'),out=new Uint8Array(U(outBuf));
   if(!out.length)throw new Error('no se pudo generar un PDF de salida');
@@ -544,11 +546,11 @@ async function removeBlueFilledGroup(){
   try{work?.destroy?.()}catch(_){}work=null;
   const prev=doc;activeBytes=out;doc=mupdf.PDFDocument.openDocument(new Uint8Array(out),'application/pdf');
   try{prev?.destroy?.()}catch(_){}
-  pending=true;
+  pending=true;committed=true;
   await renderPage();
   status.textContent='Nube azul eliminada y verificada: '+parts.length+' polígonos. Pulsa Guardar cambios para sustituir el PDF original, o cierra sin guardar para descartarlos.';
  }catch(err){
-  status.textContent='Borrado azul cancelado: '+(err?.message||String(err))+' · el PDF activo no se ha modificado.';
+  status.textContent=(committed?'La nube se eliminó, pero falló la actualización de la vista: ':'Borrado azul cancelado sin modificar el PDF activo: ')+(err?.message||String(err));
  }finally{
   try{cp?.destroy?.()}catch(_){}
   try{check?.destroy?.()}catch(_){}
