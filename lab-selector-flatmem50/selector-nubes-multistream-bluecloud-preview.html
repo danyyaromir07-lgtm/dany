@@ -411,60 +411,71 @@ let blueCloudPreviewSelection=false;
 /* BCNUBE_FILL_V3: isolated detection of the blue filled, triangulated revision clouds.
    Diagnostic preview only. Existing stroke selection and PDF surgery remain untouched. */
 let blueFilledCloudCache=null;
+/* BCNUBE_ROTATION_V5: identify blue triangulated revision cloud paths independent of axis.
+   Read only a bounded tail from unusually large streams; never decode 150 MB to text. */
 function blueFilledCloudParts(page){
- const roots=refs(page),parts=[];
- let pageBase=[1,0,0,1,0,0];
+ const roots=refs(page),blue='0.12941 0.15294 0.87059 RG',
+       pattern=/q\s+0\s+j\s+10\s+M\s+0\s+w\s+([\s\S]*?)\s+b\s+Q/g,
+       point=/([-\d.]+)\s+([-\d.]+)\s+([ml])\b|\bh\b/g,
+       colorChange=/[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+RG\b/g;
+ let pageBase=[1,0,0,1,0,0],initial=[1,0,0,1,0,0];
  try{pageBase=mupdf.Matrix.invert(page.getTransform())}catch(_){}
- let initial=[1,0,0,1,0,0];
  try{
-  const first=latin(roots[0].readStream()).slice(0,600);
-  const m=first.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+cm\b/);
+  const firstBuffer=roots[0].readStream(),head=latin(U(firstBuffer).subarray(0,600));
+  try{firstBuffer?.destroy?.()}catch(_){}
+  const m=head.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+cm\b/);
   if(m)initial=m.slice(1).map(Number);
  }catch(_){}
  const transform=mul(pageBase,initial),P=(x,y)=>tf(transform,x,y);
- const blueColor='0.12941 0.15294 0.87059 RG';
- const colorChange=/[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+RG\b/g;
- const filledPath=/q\s+0\s+j\s+10\s+M\s+0\s+w\s+([\s\S]*?)\s+b\s+Q/g;
- const point=/([-\d.]+)\s+([-\d.]+)\s+([ml])\b|\bh\b/g;
- for(const ref of roots){
-  let n=NaN;
-  try{n=deepNum(deepObj(ref)?.get?.('Length'))}catch(_){}
-  if(!Number.isFinite(n)||n>750000)continue;
-  let content='';
-  try{content=latin(ref.readStream())}catch(_){continue}
-  if(content.length>1800000||!content.includes(blueColor))continue;
-  let cursor=0;
-  while((cursor=content.indexOf(blueColor,cursor))>=0){
-   const start=cursor+blueColor.length;
-   colorChange.lastIndex=start;
-   const next=colorChange.exec(content);
-   const region=content.slice(start,next?next.index:content.length);
-   filledPath.lastIndex=0;
-   let match;
-   while((match=filledPath.exec(region))){
-    const cmds=[];let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,npts=0;
-    point.lastIndex=0;
-    let q;
-    while((q=point.exec(match[1]))){
-     if(q[0]==='h'){cmds.push(['Z']);continue}
-     const p=P(Number(q[1]),Number(q[2]));
-     if(!p.every(Number.isFinite)){npts=0;break}
-     cmds.push([q[3]==='m'?'M':'L',p[0],p[1]]);
-     x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);
-     x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);npts++;
-    }
-    if(npts<20||npts>90||x1-x0>32||y1-y0>20)continue;
-    if(x0<pageBounds[0]-10||x0>pageBounds[0]+pageW*.94)continue;
-    if(y0<pageBounds[1]-10||y0>pageBounds[1]+pageH+10)continue;
-    parts.push({cmds,bbox:[x0,y0,x1,y1],first:[x0,y0],last:[x1,y1],lines:npts,curves:0,segs:npts,width:0,rgb:[.12941,.15294,.87059],closed:true,_ordinal:parts.length,rootIndex:roots.indexOf(ref),start:start+match.index,end:start+match.index+match[0].length,original:match[0]});
+ const families=[];
+ for(let rootIndex=0;rootIndex<roots.length;rootIndex++){
+  const ref=roots[rootIndex];let compressed=NaN;
+  try{compressed=deepNum(deepObj(ref)?.get?.('Length'))}catch(_){}
+  if(!Number.isFinite(compressed)||compressed>25_000_000)continue;
+  let content='',offset=0;
+  try{
+   const streamBuffer=ref.readStream(),bytes=U(streamBuffer);
+   if(!bytes||bytes.length>210_000_000){try{streamBuffer?.destroy?.()}catch(_){}continue}
+   offset=Math.max(0,bytes.length-4_000_000);
+   content=latin(bytes.subarray(offset));
+   try{streamBuffer?.destroy?.()}catch(_){}
+  }catch(err){console.warn('blue cloud source unavailable',rootIndex,err);continue}
+  const colorOffset=content.lastIndexOf(blue);
+  if(colorOffset<0)continue;
+  const regionStart=colorOffset+blue.length;
+  colorChange.lastIndex=regionStart;
+  const next=colorChange.exec(content);
+  const regionEnd=next?next.index:content.length;
+  const region=content.slice(regionStart,regionEnd),parts=[];
+  pattern.lastIndex=0;let match;
+  while((match=pattern.exec(region))){
+   const cmds=[],start=offset+regionStart+match.index,
+         end=start+match[0].length;
+   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,npts=0;
+   point.lastIndex=0;let q;
+   while((q=point.exec(match[1]))){
+    if(q[0]==='h'){cmds.push(['Z']);continue}
+    const p=P(Number(q[1]),Number(q[2]));
+    if(!p.every(Number.isFinite)){npts=0;break}
+    cmds.push([q[3]==='m'?'M':'L',p[0],p[1]]);
+    x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);
+    x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);npts++;
    }
-   cursor=start;
+   if(npts<3||npts>90||x1-x0>32||y1-y0>20)continue;
+   if(x0<pageBounds[0]-10||x0>pageBounds[2]+10||y0<pageBounds[1]-10||y0>pageBounds[3]+10)continue;
+   parts.push({cmds,bbox:[x0,y0,x1,y1],first:[x0,y0],last:[x1,y1],
+    lines:npts,curves:0,segs:npts,width:0,rgb:[.12941,.15294,.87059],
+    closed:true,_ordinal:parts.length,rootIndex,start,end,original:match[0]});
   }
+  if(parts.length<150||parts.length>10000)continue;
+  const minX=Math.min(...parts.map(p=>p.bbox[0])),maxX=Math.max(...parts.map(p=>p.bbox[2])),
+        minY=Math.min(...parts.map(p=>p.bbox[1])),maxY=Math.max(...parts.map(p=>p.bbox[3]));
+  if(Math.hypot(maxX-minX,maxY-minY)<350)continue;
+  parts.sort((a,b)=>a.start-b.start);
+  if(parts.some((p,i)=>i&&parts[i-1].end>p.start))continue;
+  families.push(parts);
  }
- if(parts.length<150||parts.length>2000)return[];
- const minX=Math.min(...parts.map(p=>p.bbox[0])),maxX=Math.max(...parts.map(p=>p.bbox[2]));
- if(maxX-minX<700)return[];
- return parts;
+ return families.length===1?families[0]:[];
 }
 function blueFilledCloudLoad(){
  if(blueFilledCloudCache!==null)return blueFilledCloudCache;
