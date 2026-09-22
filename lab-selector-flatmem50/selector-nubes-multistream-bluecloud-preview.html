@@ -496,73 +496,98 @@ function blueFilledSelect(family,mode){
  return true;
 }
 
-/* BCNUBE_SAFE_EDIT_V4: independent, fail-closed transaction for filled blue clouds.
-   Only previously clicked, individually located q...b Q polygons may be edited. */
+/* BCNUBE_SAFE_EDIT_V5: byte-exact, fail-closed deletion of manually selected
+   filled blue revision-cloud polygons, including streams larger than 100 MB. */
 let blueCloudDeleting=false;
+function blueCloudChecksum(u){
+ let a=2166136261,b=0x9e3779b9;
+ for(let i=0;i<u.length;i++){
+  a=Math.imul(a^u[i],16777619);
+  b=Math.imul(b^u[i],2246822519);
+ }
+ return u.length+':'+(a>>>0)+':'+(b>>>0);
+}
+function blueCloudBytesAt(u,start,text){
+ if(!Number.isSafeInteger(start)||start<0||start+text.length>u.length)return false;
+ for(let i=0;i<text.length;i++)if(u[start+i]!==text.charCodeAt(i))return false;
+ return true;
+}
 async function removeBlueFilledGroup(){
  if(blueCloudDeleting||!blueCloudPreviewSelection||!doc||!activeBytes)return;
  const selected=visualSelected.slice(),all=blueFilledCloudCache;
  if(!all||selected.length!==all.length||selected.some((v,i)=>v!==all[i])||selected.length<150){
-  status.textContent='Borrado bloqueado: la selección no representa una familia azul íntegra y estable.';return;
+  status.textContent='Borrado bloqueado: la familia azul seleccionada no está completa.';return;
  }
  const indices=[...new Set(selected.map(p=>p.rootIndex))];
- if(indices.length!==1||!Number.isInteger(indices[0])||indices[0]<0){
-  status.textContent='Borrado bloqueado: los polígonos seleccionados no tienen una fuente estructural única.';return;
+ if(indices.length!==1||!Number.isSafeInteger(indices[0])||indices[0]<0){
+  status.textContent='Borrado bloqueado: la nube no tiene un flujo gráfico único.';return;
  }
  const rootIndex=indices[0],parts=selected.slice().sort((a,b)=>a.start-b.start);
- if(parts.some((p,i)=>p.start<0||p.end<=p.start||(i&&p.start<parts[i-1].end)||!p.original)){
-  status.textContent='Borrado bloqueado: operadores superpuestos, incompletos o sin identidad exacta.';return;
+ if(parts.some((p,i)=>!Number.isSafeInteger(p.start)||!Number.isSafeInteger(p.end)||
+    p.start<0||p.end<=p.start||(i&&p.start<parts[i-1].end)||
+    !p.original||p.original.length!==p.end-p.start||
+    !/^\s*q\b/.test(p.original)||!/\bb\s+Q\s*$/.test(p.original))){
+  status.textContent='Borrado bloqueado: rangos gráficos solapados o incompletos.';return;
  }
- blueCloudDeleting=true;setButtons();$('#delete').disabled=true;
- let work=null,wp=null,check=null,cp=null,committed=false;
+ blueCloudDeleting=true;setButtons();
+ let work=null,wp=null,check=null,cp=null,editBuffer=null,savedBuffer=null,committed=false;
  try{
-  status.textContent='Verificando '+parts.length+' polígonos azules en una copia del PDF…';
+  status.textContent='Borrado de nube azul · comprobando '+parts.length+' polígonos originales…';
   await new Promise(resolve=>setTimeout(resolve,0));
-  const sourcePage=doc.loadPage(0);
-  let original='',sourceRoots=null;
-  try{
-   sourceRoots=refs(sourcePage);
-   if(rootIndex>=sourceRoots.length)throw new Error('el stream de origen ya no existe');
-   original=latin(sourceRoots[rootIndex].readStream());
-  }finally{try{sourcePage.destroy?.()}catch(_){}}
-  if(parts.some(p=>p.end>original.length||original.slice(p.start,p.end)!==p.original))
-   throw new Error('los operadores no coinciden con los bytes originales');
-  const expected=Array.from(original);
-  for(const p of parts)expected.fill(' ',p.start,p.end);
-  const output=expected.join('');
-  if(output.length!==original.length||output===original)throw new Error('la sustitución exacta no es válida');
   work=mupdf.PDFDocument.openDocument(new Uint8Array(activeBytes),'application/pdf');
   wp=work.loadPage(0);
-  let copyRoots=refs(wp);
-  if(rootIndex>=copyRoots.length)throw new Error('falta el stream en la copia');
-  const editRef=copyRoots[rootIndex],copyText=latin(editRef.readStream());
-  if(copyText!==original)throw new Error('el stream de trabajo difiere del origen');
-  editRef.writeStream(raw(output));
-  if(latin(editRef.readStream())!==output)throw new Error('la edición no coincide byte a byte con el objetivo');
+  const workRoots=refs(wp);
+  if(rootIndex>=workRoots.length)throw new Error('no existe el flujo gráfico de origen en la copia');
+  const editRef=workRoots[rootIndex];
+  editBuffer=editRef.readStream();
+  const bytes=U(editBuffer);
+  if(!bytes||!bytes.length||bytes.length>210_000_000)throw new Error('el flujo gráfico supera el límite seguro de memoria');
+  for(const p of parts){
+   if(p.end>bytes.length||!blueCloudBytesAt(bytes,p.start,p.original))
+    throw new Error('la geometría ya no coincide exactamente con la selección');
+  }
+  for(const p of parts)bytes.fill(32,p.start,p.end);
+  const expectedDigest=blueCloudChecksum(bytes);
+  editRef.writeStream(editBuffer);
   try{wp?.destroy?.()}catch(_){}wp=null;
   wp=work.loadPage(0);
   const beforeSave=await rasterDigest(wp);
+  try{wp?.destroy?.()}catch(_){}wp=null;
   const outBuf=work.saveToBuffer('compress'),out=new Uint8Array(U(outBuf));
-  if(!out.length)throw new Error('no se pudo generar un PDF de salida');
-  check=mupdf.PDFDocument.openDocument(out,'application/pdf');
+  if(!out.length)throw new Error('la copia modificada no se pudo guardar');
+  try{editBuffer?.destroy?.()}catch(_){}editBuffer=null;
+  try{work?.destroy?.()}catch(_){}work=null;
+  check=mupdf.PDFDocument.openDocument(new Uint8Array(out),'application/pdf');
   cp=check.loadPage(0);
   const savedRoots=refs(cp);
-  if(rootIndex>=savedRoots.length||latin(savedRoots[rootIndex].readStream())!==output)
-   throw new Error('el PDF guardado no conserva la edición exacta');
+  if(rootIndex>=savedRoots.length)throw new Error('el flujo gráfico desapareció del PDF guardado');
+  savedBuffer=savedRoots[rootIndex].readStream();
+  const saved=U(savedBuffer);
+  if(!saved||blueCloudChecksum(saved)!==expectedDigest)
+   throw new Error('los bytes del flujo gráfico no coinciden con la copia comprobada');
+  for(const p of parts){
+   if(p.end>saved.length)throw new Error('un rango azul quedó fuera del PDF guardado');
+   for(let i=p.start;i<p.end;i++)if(saved[i]!==32)
+    throw new Error('queda un operador azul después de guardar');
+  }
+  try{savedBuffer?.destroy?.()}catch(_){}savedBuffer=null;
   if(await rasterDigest(cp)!==beforeSave)
-   throw new Error('el renderizado cambió después de serializar el PDF');
+   throw new Error('el renderizado cambió al serializar la copia');
   try{cp?.destroy?.()}catch(_){}cp=null;
   try{check?.destroy?.()}catch(_){}check=null;
-  try{wp?.destroy?.()}catch(_){}wp=null;
-  try{work?.destroy?.()}catch(_){}work=null;
-  const prev=doc;activeBytes=out;doc=mupdf.PDFDocument.openDocument(new Uint8Array(out),'application/pdf');
-  try{prev?.destroy?.()}catch(_){}
-  pending=true;committed=true;
+  const previous=doc;
+  const reopened=mupdf.PDFDocument.openDocument(new Uint8Array(out),'application/pdf');
+  activeBytes=out;doc=reopened;pending=true;committed=true;
+  try{previous?.destroy?.()}catch(_){}
   await renderPage();
-  status.textContent='Nube azul eliminada y verificada: '+parts.length+' polígonos. Pulsa Guardar cambios para sustituir el PDF original, o cierra sin guardar para descartarlos.';
+  status.textContent='Nube azul eliminada y verificada: '+parts.length+
+   ' polígonos. Revisa el plano; pulsa Guardar cambios solo si el resultado es correcto.';
  }catch(err){
-  status.textContent=(committed?'La nube se eliminó, pero falló la actualización de la vista: ':'Borrado azul cancelado sin modificar el PDF activo: ')+(err?.message||String(err));
+  status.textContent=(committed?'El PDF modificado está en memoria, pero falló su visualización: ':
+   'Borrado cancelado sin modificar el PDF activo: ')+(err?.message||String(err));
  }finally{
+  try{savedBuffer?.destroy?.()}catch(_){}
+  try{editBuffer?.destroy?.()}catch(_){}
   try{cp?.destroy?.()}catch(_){}
   try{check?.destroy?.()}catch(_){}
   try{wp?.destroy?.()}catch(_){}
@@ -570,7 +595,6 @@ async function removeBlueFilledGroup(){
   blueCloudDeleting=false;setButtons();
  }
 }
-
 function blueFilledCloudHit(x,y,scale){
  const family=blueFilledCloudLoad();
  if(family.length<150)return null;
