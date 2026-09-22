@@ -318,7 +318,7 @@ async function mapBlueResponsive(vs,blocked=[]){
  }
  return{items:[],alternatives:[],mode:'sin asignación global 1:1 completa'}
 }
-function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||!visualSelected.length||(blueCloudPreviewSelection?!(blueFilledCloudCache?.length>=150):(!analysisReady||!!model?.incomplete));$('#save').disabled=!handle||!pending}
+function setButtons(){const has=!!doc;$('#select').disabled=!has||!analysisReady;$('#delete').disabled=!has||blueCloudDeleting||!visualSelected.length||(blueCloudPreviewSelection?!(blueFilledCloudCache?.length>=150):(!analysisReady||!!model?.incomplete));$('#save').disabled=!handle||!pending}
 function scheduleSharp(delay=180){clearTimeout(sharpTimer);if(!doc)return;sharpQueued=true;sharpTimer=setTimeout(()=>{sharpTimer=null;if(!doc)return;if(rendering){sharpQueued=true;return}sharpQueued=false;renderVisibleSharp()},delay)}
 function clearDetail(){sharpEpoch++;detail.removeAttribute('src');detail.style.display='none';if(detailUrl){URL.revokeObjectURL(detailUrl);detailUrl=null}}
 function sizeOverlay(){const dpr=Math.min(2,window.devicePixelRatio||1);overlay.width=Math.max(1,Math.round(viewport.clientWidth*dpr));overlay.height=Math.max(1,Math.round(viewport.clientHeight*dpr));overlay.style.width=viewport.clientWidth+'px';overlay.style.height=viewport.clientHeight+'px';overlay.dataset.dpr=String(dpr);drawSelection()}
@@ -358,7 +358,7 @@ async function removeGroup(){
 // LAB UI phase 1: read-only state bridge + explicit selection reset.
 // Does not change mapping, deletion, verification, saving, or indexing algorithms.
 function clearVisualSelectionUI(){
- visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];
+ blueCloudPreviewSelection=false;visualSelected=[];structSelected=[];selectionMapSafe=false;selectionFamilies=0;selectionAlternatives=[];
  drawSelection();setButtons();
  if(doc)status.textContent=indexReady?'Selección limpiada · índice estructural listo.':'Selección limpiada · preparando índice estructural…';
 }
