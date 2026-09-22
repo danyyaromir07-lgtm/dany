@@ -382,7 +382,7 @@ async function renderPage(){
  status.textContent='Abriendo vista previa…';
  const dpr=Math.min(2,window.devicePixelRatio||1),maxDim=1900,maxPixels=2_000_000,base=Math.min(1.20*dpr,maxDim/Math.max(pageW,pageH),Math.sqrt(maxPixels/Math.max(1,pageW*pageH)));baseRs=Math.max(.30,base);
  const pm=p.toPixmap(mupdf.Matrix.scale(baseRs,baseRs),mupdf.ColorSpace.DeviceRGB,false,true);const png=pm.asPNG();baseW=pm.getWidth?.()||Math.round(pageW*baseRs);baseH=pm.getHeight?.()||Math.round(pageH*baseRs);try{pm.destroy?.()}catch(_){}
- if(baseUrl)URL.revokeObjectURL(baseUrl);baseUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));img.src=baseUrl;await img.decode();img.style.width=baseW+'px';img.style.height=baseH+'px';stage.style.width=baseW+'px';stage.style.height=baseH+'px';sizeOverlay();$('#mode').textContent='Modo normal · clásico';requestAnimationFrame(()=>fit());
+ if(baseUrl)URL.revokeObjectURL(baseUrl);baseUrl=URL.createObjectURL(new Blob([png],{type:'image/png'}));img.src=baseUrl;await img.decode();img.style.width=baseW+'px';img.style.height=baseH+'px';stage.style.width=baseW+'px';stage.style.height=baseH+'px';sizeOverlay();$('#mode').textContent='Modo normal · clásico';requestAnimationFrame(()=>fit());blueFilledPreviewAuto();
  status.textContent='Vista previa lista · preparando selección de arcos…';
  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(r,40))));
  try{
