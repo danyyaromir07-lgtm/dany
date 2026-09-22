@@ -393,7 +393,7 @@ async function renderPage(){
  indexPromise=startCompactIndex();
  if('requestIdleCallback'in window)requestIdleCallback(()=>scheduleSharp(80),{timeout:4500});else scheduleSharp(2500)
 }
-async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile();const bytes=new Uint8Array(await f.arrayBuffer());try{doc?.destroy?.()}catch(_){}activeBytes=bytes;const mupdfOpenBytes=bytes.slice();doc=mupdf.PDFDocument.openDocument(mupdfOpenBytes,'application/pdf');handle=h;pending=false;await renderPage();}
+async function openPdf(){if(!('showOpenFilePicker'in window))throw new Error('Usa Chrome o Edge.');const[h]=await showOpenFilePicker({multiple:false,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]});const f=await h.getFile();const bytes=new Uint8Array(await f.arrayBuffer());try{doc?.destroy?.()}catch(_){}activeBytes=bytes;const mupdfOpenBytes=bytes.slice();doc=mupdf.PDFDocument.openDocument(mupdfOpenBytes,'application/pdf');handle=h;pending=false;await renderPage();blueFilledPreviewAuto();}
 function seedCompat(x,s){if(colorDist(x.rgb,s.rgb)>.035)return false;const wt=Math.max(.06,Math.abs(s.width)*.22);if(Math.abs(x.width-s.width)>wt)return false;if((x.curves>0)!==(s.curves>0)||(x.lines>0)!==(s.lines>0))return false;if(!!x.closed!==!!s.closed)return false;const ds=Math.max(.001,diag(s.bbox)),dx=Math.max(.001,diag(x.bbox));if(dx/ds<.5||dx/ds>2)return false;const tol=Math.max(2,Math.ceil(s.segs*.45));return Math.abs(x.segs-s.segs)<=tol}
 function seedComponentGroups(items){if(!items.length)return[];const md=med(items.map(x=>diag(x.bbox)).filter(Boolean)),tol=Math.max(.45,md*.24),p=items.map((_,i)=>i),f=i=>p[i]===i?i:(p[i]=f(p[i])),u=(i,j)=>{i=f(i);j=f(j);if(i!==j)p[j]=i};for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const A=[items[i].first,items[i].last].filter(Boolean),B=[items[j].first,items[j].last].filter(Boolean);if(A.some(a=>B.some(b=>Math.hypot(a[0]-b[0],a[1]-b[1])<=tol)))u(i,j)}const m=new Map();for(let i=0;i<items.length;i++){const k=f(i);if(!m.has(k))m.set(k,[]);m.get(k).push(items[i])}return[...m.values()]}
 function componentBox(a){return[Math.min(...a.map(x=>x.bbox[0])),Math.min(...a.map(x=>x.bbox[1])),Math.max(...a.map(x=>x.bbox[2])),Math.max(...a.map(x=>x.bbox[3]))]}
@@ -408,77 +408,96 @@ function blackCloudLike(a,b){if(!blackCloudSafe(a)||!blackCloudSafe(b))return fa
 /* BCNUBE_PREVIEW_20260922: experimental and isolated from normal selector. */
 let blueCloudPreviewSelection=false;
 
-/* BCNUBE_FILLED_20260922. Additive preview of BLUE FILLED revision clouds.
-   Never merges its geometry into the editable stroke map. */
+/* BCNUBE_FILL_V3: isolated detection of the blue filled, triangulated revision clouds.
+   Diagnostic preview only. Existing stroke selection and PDF surgery remain untouched. */
 let blueFilledCloudCache=null;
 function blueFilledCloudParts(page){
- const roots=refs(page),candidates=[];
- let base=[1,0,0,1,0,0];try{base=mupdf.Matrix.invert(page.getTransform())}catch(_){}
+ const roots=refs(page),parts=[];
+ let pageBase=[1,0,0,1,0,0];
+ try{pageBase=mupdf.Matrix.invert(page.getTransform())}catch(_){}
  let initial=[1,0,0,1,0,0];
  try{
-  const head=latin(roots[0].readStream()).slice(0,500);
-  const m=head.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+cm\b/);
+  const first=latin(roots[0].readStream()).slice(0,600);
+  const m=first.match(/([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+cm\b/);
   if(m)initial=m.slice(1).map(Number);
  }catch(_){}
- const matrix=mul(base,initial);
- const position=(x,y)=>tf(matrix,x,y);
- const colorStart='0.12941 0.15294 0.87059 RG';
- const bluePath=/q\s+0\s+j\s+10\s+M\s+0\s+w\s+([\s\S]*?)\s+b\s+Q/g;
+ const transform=mul(pageBase,initial),P=(x,y)=>tf(transform,x,y);
+ const blueColor='0.12941 0.15294 0.87059 RG';
+ const colorChange=/[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+RG\b/g;
+ const filledPath=/q\s+0\s+j\s+10\s+M\s+0\s+w\s+([\s\S]*?)\s+b\s+Q/g;
  const point=/([-\d.]+)\s+([-\d.]+)\s+([ml])\b|\bh\b/g;
  for(const ref of roots){
-  let compressed=NaN;try{compressed=deepNum(deepObj(ref)?.get?.('Length'))}catch(_){}
-  if(!Number.isFinite(compressed)||compressed>800000)continue;
-  let source='';try{source=latin(ref.readStream())}catch(_){continue}
-  if(source.length>2000000||!source.includes(colorStart))continue;
-  let offset=0;
-  while((offset=source.indexOf(colorStart,offset))>=0){
-   const from=offset+colorStart.length;
-   const next=/[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+RG\b/g;
-   next.lastIndex=from;
-   const later=next.exec(source);
-   const region=source.slice(from,later?later.index:source.length);
-   bluePath.lastIndex=0;
+  let n=NaN;
+  try{n=deepNum(deepObj(ref)?.get?.('Length'))}catch(_){}
+  if(!Number.isFinite(n)||n>750000)continue;
+  let content='';
+  try{content=latin(ref.readStream())}catch(_){continue}
+  if(content.length>1800000||!content.includes(blueColor))continue;
+  let cursor=0;
+  while((cursor=content.indexOf(blueColor,cursor))>=0){
+   const start=cursor+blueColor.length;
+   colorChange.lastIndex=start;
+   const next=colorChange.exec(content);
+   const region=content.slice(start,next?next.index:content.length);
+   filledPath.lastIndex=0;
    let match;
-   while((match=bluePath.exec(region))){
-    const cmds=[];let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,points=0;
+   while((match=filledPath.exec(region))){
+    const cmds=[];let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,npts=0;
     point.lastIndex=0;
-    let v;
-    while((v=point.exec(match[1]))){
-     if(v[0]==='h'){cmds.push(['Z']);continue}
-     const x=Number(v[1]),y=Number(v[2]);if(!Number.isFinite(x)||!Number.isFinite(y))continue;
-     const p=position(x,y);if(!p.every(Number.isFinite))continue;
-     cmds.push([v[3]==='m'?'M':'L',p[0],p[1]]);
-     x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);points++;
+    let q;
+    while((q=point.exec(match[1]))){
+     if(q[0]==='h'){cmds.push(['Z']);continue}
+     const p=P(Number(q[1]),Number(q[2]));
+     if(!p.every(Number.isFinite)){npts=0;break}
+     cmds.push([q[3]==='m'?'M':'L',p[0],p[1]]);
+     x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);
+     x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);npts++;
     }
-    if(points<20||x1-x0>32||y1-y0>20||y0>pageBounds[1]+pageH*.48)continue;
-    candidates.push({cmds,bbox:[x0,y0,x1,y1],first:[x0,y0],last:[x1,y1],lines:points,curves:0,segs:points,width:0,rgb:[.12941,.15294,.87059],closed:true,_ordinal:candidates.length});
+    if(npts<20||npts>90||x1-x0>32||y1-y0>20)continue;
+    if(x0<pageBounds[0]-10||x0>pageBounds[0]+pageW*.94)continue;
+    if(y0<pageBounds[1]-10||y0>pageBounds[1]+pageH+10)continue;
+    parts.push({cmds,bbox:[x0,y0,x1,y1],first:[x0,y0],last:[x1,y1],lines:npts,curves:0,segs:npts,width:0,rgb:[.12941,.15294,.87059],closed:true,_ordinal:parts.length});
    }
-   offset=from;
+   cursor=start;
   }
  }
- if(candidates.length<30)return[];
- const minY=new Map(),bin=v=>Math.floor((v.bbox[0]+v.bbox[2])*.5/40);
- for(const v of candidates){const k=bin(v);minY.set(k,Math.min(minY.get(k)??Infinity,v.bbox[1]))}
- const upper=candidates.filter(v=>v.bbox[1]<=(minY.get(bin(v))??-Infinity)+17);
- if(upper.length<20)return[];
- return upper;
+ if(parts.length<150||parts.length>2000)return[];
+ const minX=Math.min(...parts.map(p=>p.bbox[0])),maxX=Math.max(...parts.map(p=>p.bbox[2]));
+ if(maxX-minX<700)return[];
+ return parts;
+}
+function blueFilledCloudLoad(){
+ if(blueFilledCloudCache!==null)return blueFilledCloudCache;
+ if(!doc)return[];
+ let p=null;
+ try{p=doc.loadPage(0);blueFilledCloudCache=blueFilledCloudParts(p)}
+ catch(err){console.warn('blue fill preview unable to read PDF:',err);blueFilledCloudCache=[]}
+ finally{try{p?.destroy?.()}catch(_){}}
+ return blueFilledCloudCache;
+}
+function blueFilledSelect(family,mode){
+ if(!family||family.length<150)return false;
+ blueCloudPreviewSelection=true;
+ visualSelected=family.slice();
+ selectionFamilies=1;structSelected=[];selectionAlternatives=[];selectionMapSafe=false;
+ drawSelection();setButtons();
+ status.textContent='NUBE AZUL V3 · '+family.length+' polígonos detectados · '+mode+' · vista previa sin borrado; comprueba que el contorno coincide con la marca fucsia.';
+ return true;
 }
 function blueFilledCloudHit(x,y,scale){
- if(y>pageBounds[1]+pageH*.48||!doc)return null;
- if(blueFilledCloudCache===null){
-  let p=null;
-  try{p=doc.loadPage(0);blueFilledCloudCache=blueFilledCloudParts(p)}
-  catch(err){console.warn('blue filled cloud preview skipped',err);blueFilledCloudCache=[]}
-  finally{try{p?.destroy?.()}catch(_){}}
- }
- const family=blueFilledCloudCache;
- if(!family||family.length<20)return null;
- const tol=Math.min(8,Math.max(2.5,6/Math.max(.1,scale)));
+ const family=blueFilledCloudLoad();
+ if(family.length<150)return null;
+ const tol=Math.min(25,Math.max(8,14/Math.max(.1,scale)));
  for(const p of family){
   const b=p.bbox;
   if(x>=b[0]-tol&&x<=b[2]+tol&&y>=b[1]-tol&&y<=b[3]+tol)return family;
  }
  return null;
+}
+function blueFilledPreviewAuto(){
+ const family=blueFilledCloudLoad();
+ if(family.length>=150)blueFilledSelect(family,'detección automática');
+ else status.textContent='NUBE AZUL V3 · no se encontró familia rellena compatible en este PDF; el motor clásico no ha sido alterado.';
 }
 
 function blueCloudOuterContour(seed,items){
@@ -707,5 +726,12 @@ async function attempt(selectedIdx,number,saveMode){let work=null,wp=null,check=
  }
  let instancePlan=null,hybridPlan=null;try{status.textContent='La vía rápida no coincidió exactamente · iniciando resolución causal de respaldo…';await uiYield();const causal=await buildCausalRoute();if(Array.isArray(causal)){const ck=causal.join(',');if(!keys.has(ck)){keys.add(ck);routes.unshift(causal)}causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'RUTA CAUSAL COMPLETA'}else if(causal?.kind==='instance'){instancePlan=causal;causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'INSTANCIA AISLADA LISTA'}else if(causal?.kind==='hybrid'){hybridPlan=causal;causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'RUTA HÍBRIDA OPERADORES+FUENTE EXTERNA LISTA'}}catch(e){causalDiagnostic=(causalDiagnostic?causalDiagnostic+' · ':'')+'causal no completa: '+e.message}if(hybridPlan)for(let sm=0;sm<saveModes.length;sm++){const saveMode=saveModes[sm],label=saveMode||'reescritura mínima';status.textContent='Verificando azul exacto · operadores + fuente externa · guardado '+label+'…';try{const ok=await attemptHybrid(hybridPlan,1,saveMode);if(ok){activeBytes=ok.out;doc.destroy();doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+selectedVisual+' trazos azules · ruta causal híbrida · guardado '+ok.saveMode+'. Puedes continuar o guardar.';return}}catch(e){errors.push('ruta híbrida · guardado '+label+' · '+e.message)}}if(instancePlan)for(let sm=0;sm<saveModes.length;sm++){const saveMode=saveModes[sm],label=saveMode||'reescritura mínima';status.textContent='Verificando aislamiento exacto · guardado '+label+' · '+selectedVisual+' trazos azules…';try{const ok=await attemptInstance(instancePlan,1,saveMode);if(ok){activeBytes=ok.out;doc.destroy();doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+selectedVisual+' trazos azules · aislamiento de instancia · guardado '+ok.saveMode+'. Puedes continuar o guardar.';return}}catch(e){errors.push('aislamiento de instancia · guardado '+label+' · '+e.message)}}for(let i=0;i<routes.length;i++)for(let sm=0;sm<saveModes.length;sm++){const saveMode=saveModes[sm],label=saveMode||'reescritura mínima';if(sm===0&&errors.some(x=>x.startsWith('vía rápida correspondencia '+(i+1)+' · guardado incremental')))continue;status.textContent='Verificando eliminación exacta · correspondencia '+(i+1)+'/'+routes.length+' · guardado '+label+' · '+selectedVisual+' trazos azules…';try{const ok=await attempt(routes[i],i+1,saveMode);if(ok){activeBytes=ok.out;doc.destroy();doc=mupdf.PDFDocument.openDocument(activeBytes,'application/pdf');pending=true;await renderPage();status.textContent='Selección eliminada y verificada: '+selectedVisual+' trazos azules · correspondencia '+ok.number+'/'+routes.length+' · guardado '+ok.saveMode+' · '+ok.touched+' stream(s). Puedes continuar o guardar.';return}}catch(e){errors.push('correspondencia '+(i+1)+' · guardado '+label+' · '+e.message);await uiYield()}}
  status.textContent='Borrado cancelado sin modificar el PDF activo: se probaron '+routes.length+' correspondencia(s) con '+saveModes.length+' estrategias de guardado y ninguna pasó la verificación exacta · '+errors.join(' | ')+(causalDiagnostic?' · CAUSAL: '+causalDiagnostic:'')+(firstMismatchDiagnostic?' · DIAGNÓSTICO: '+firstMismatchDiagnostic:'')}
-$('#open').addEventListener('click',async()=>{try{await openPdf()}catch(e){if(e?.name!=='AbortError')status.textContent='Error: '+e.message}});$('#select').addEventListener('click',()=>status.textContent='Haz clic para reemplazar la selección. Ctrl+clic o Shift+clic añade otra familia.');$('#delete').addEventListener('click',removeGroup);$('#save').addEventListener('click',async()=>{if(!handle||!pending||!doc)return;let w=null;try{w=await handle.createWritable();if(!activeBytes)throw new Error('No hay una copia activa del PDF para guardar.');await w.write(activeBytes);await w.close();w=null;pending=false;setButtons();status.textContent='Cambios guardados sobre el archivo original.'}catch(e){try{await w?.abort?.()}catch(_){}status.textContent='Error al guardar: '+e.message}});overlay.addEventListener('click',chooseClassic);$('#zoom').addEventListener('input',e=>{setZoomAt(Number(e.target.value)/100);scheduleSharp()});$('#plus').addEventListener('click',()=>{setZoomAt(zoom*1.25);scheduleSharp()});$('#minus').addEventListener('click',()=>{setZoomAt(zoom/1.25);scheduleSharp()});$('#fit').addEventListener('click',()=>{fit();scheduleSharp(220)});$('#z100').addEventListener('click',()=>{setZoomAt(1);scheduleSharp()});viewport.addEventListener('wheel',e=>{if(!doc)return;e.preventDefault();const r=viewport.getBoundingClientRect();setZoomAt(zoom*Math.exp(-e.deltaY*.0017),e.clientX-r.left,e.clientY-r.top);scheduleSharp()},{passive:false});let dragging=false,lastX=0,lastY=0;viewport.addEventListener('mousedown',e=>{if(e.button!==1)return;e.preventDefault();clearDetail();dragging=true;lastX=e.clientX;lastY=e.clientY;viewport.classList.add('pan')});window.addEventListener('mousemove',e=>{if(!dragging)return;panX+=e.clientX-lastX;panY+=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;applyTransform()});window.addEventListener('mouseup',e=>{if(e.button===1){dragging=false;viewport.classList.remove('pan');scheduleSharp(120)}});viewport.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});window.addEventListener('resize',()=>{sizeOverlay();if(doc&&zoom<1.05)fit()});sizeOverlay();
+$('#open').addEventListener('click',async()=>{try{await openPdf()}catch(e){if(e?.name!=='AbortError')status.textContent='Error: '+e.message}});$('#select').addEventListener('click',()=>status.textContent='Haz clic para reemplazar la selección. Ctrl+clic o Shift+clic añade otra familia.');$('#delete').addEventListener('click',removeGroup);$('#save').addEventListener('click',async()=>{if(!handle||!pending||!doc)return;let w=null;try{w=await handle.createWritable();if(!activeBytes)throw new Error('No hay una copia activa del PDF para guardar.');await w.write(activeBytes);await w.close();w=null;pending=false;setButtons();status.textContent='Cambios guardados sobre el archivo original.'}catch(e){try{await w?.abort?.()}catch(_){}status.textContent='Error al guardar: '+e.message}});overlay.addEventListener('click',e=>{
+ if(!doc)return;
+ const r=viewport.getBoundingClientRect(),bx=(e.clientX-r.left-panX)/zoom,by=(e.clientY-r.top-panY)/zoom;
+ const x=pageBounds[0]+bx/baseRs,y=pageBounds[1]+by/baseRs;
+ const family=blueFilledCloudHit(x,y,baseRs*zoom);
+ if(family){e.preventDefault();e.stopImmediatePropagation();blueFilledSelect(family,'clic en contorno azul')}
+},true);
+overlay.addEventListener('click',chooseClassic);$('#zoom').addEventListener('input',e=>{setZoomAt(Number(e.target.value)/100);scheduleSharp()});$('#plus').addEventListener('click',()=>{setZoomAt(zoom*1.25);scheduleSharp()});$('#minus').addEventListener('click',()=>{setZoomAt(zoom/1.25);scheduleSharp()});$('#fit').addEventListener('click',()=>{fit();scheduleSharp(220)});$('#z100').addEventListener('click',()=>{setZoomAt(1);scheduleSharp()});viewport.addEventListener('wheel',e=>{if(!doc)return;e.preventDefault();const r=viewport.getBoundingClientRect();setZoomAt(zoom*Math.exp(-e.deltaY*.0017),e.clientX-r.left,e.clientY-r.top);scheduleSharp()},{passive:false});let dragging=false,lastX=0,lastY=0;viewport.addEventListener('mousedown',e=>{if(e.button!==1)return;e.preventDefault();clearDetail();dragging=true;lastX=e.clientX;lastY=e.clientY;viewport.classList.add('pan')});window.addEventListener('mousemove',e=>{if(!dragging)return;panX+=e.clientX-lastX;panY+=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;applyTransform()});window.addEventListener('mouseup',e=>{if(e.button===1){dragging=false;viewport.classList.remove('pan');scheduleSharp(120)}});viewport.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});window.addEventListener('resize',()=>{sizeOverlay();if(doc&&zoom<1.05)fit()});sizeOverlay();
 </script><script id="v63-premium-ui">(function(){const main=document.querySelector('.main'),st=document.getElementById('status'),vp=document.getElementById('viewport');if(!main||!st||!vp)return;const dock=document.createElement('div');dock.className='bottomDock';const card=document.createElement('section');card.className='selectionCard';const glyph=document.createElement('div');glyph.className='selectionGlyph';glyph.textContent='◫';const text=document.createElement('div');const title=document.createElement('div');title.className='selectionTitle';title.textContent='Selección acumulada';text.append(title,st);const badge=document.createElement('div');badge.id='readyBadge';badge.className='readyBadge';badge.textContent='SIN SELECCIÓN';card.append(glyph,text,badge);const help=document.createElement('aside');help.className='helpCard';help.innerHTML='<div class="helpTitle">Ayuda y seguridad</div><div class="helpRow"><span class="key">Ctrl / Shift</span> + clic añade otra familia</div><div class="helpRow">Clic normal reemplaza la selección actual</div><div class="security"><span>Seguridad del borrado</span><strong id="safetyText">Bloqueado</strong></div>';dock.append(card,help);main.append(dock);const safe=document.getElementById('safetyText'),sync=()=>{const t=st.textContent||'';if(t.includes('LISTO PARA ELIMINAR')){badge.textContent='✓ LISTO PARA ELIMINAR';badge.className='readyBadge ok';if(safe){safe.textContent='Alta';safe.style.color='#35dc78'}}else if(t.includes('borrado bloqueado')||t.includes('Borrado bloqueado')||t.includes('Borrado cancelado')){badge.textContent='BORRADO BLOQUEADO';badge.className='readyBadge bad';if(safe){safe.textContent='Bloqueado';safe.style.color='#ff8c92'}}else{badge.textContent='SIN SELECCIÓN';badge.className='readyBadge';if(safe){safe.textContent='Bloqueado';safe.style.color='#93a7bc'}}};new MutationObserver(sync).observe(st,{childList:true,subtree:true,characterData:true});sync()})();</script></body></html>
